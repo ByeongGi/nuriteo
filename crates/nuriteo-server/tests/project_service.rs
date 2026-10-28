@@ -1,9 +1,12 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::audit::AuditEventId;
 
@@ -26,7 +29,6 @@ use nuriteo_server::project::{
 use sqlx::{Acquire, Executor, Postgres, Transaction};
 
 use tokio::time as tokio_time;
-
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 

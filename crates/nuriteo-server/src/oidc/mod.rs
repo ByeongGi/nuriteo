@@ -9,7 +9,6 @@ use std::str::FromStr;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use sqlx::{Acquire, Postgres, Row, Transaction};
@@ -18,12 +17,10 @@ use tokio::time;
 
 use uuid::Uuid;
 
-
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
 };
-
 
 mod http_routes;
 
@@ -49,7 +46,6 @@ pub use protocol::OidcEndpointValidator;
 
 use protocol::{OidcValidationProof, trust_fingerprint};
 
-
 const INSTANCE_ID: &str = "instance";
 
 const INTEGRATION_TYPE: &str = "oidc";
@@ -64,7 +60,6 @@ const MIN_TIMEOUT: Duration = Duration::from_millis(100);
 
 const MAX_TIMEOUT: Duration = Duration::from_secs(30);
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OidcProviderInput {
     display_name: String,
@@ -72,20 +67,17 @@ pub struct OidcProviderInput {
     client_id: String,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OidcProviderUpdate {
     display_name: String,
     client_id: String,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OidcProviderState {
     Active,
     Disabled,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OidcProviderMetadata {
@@ -101,7 +93,6 @@ pub struct OidcProviderMetadata {
     pub updated_at: OffsetDateTime,
 }
 
-
 #[derive(Clone)]
 #[allow(dead_code, reason = "crate-private OIDC-002 protocol adapter handoff")]
 pub(crate) struct OidcRuntimeProvider {
@@ -114,15 +105,13 @@ pub(crate) struct OidcRuntimeProvider {
     pub(crate) ca: Option<ValidatedCaBundle>,
 }
 
-
 #[derive(Clone)]
 pub struct OidcProviderService {
     integrations: IntegrationRepository,
     timeout: Duration,
 }
 
-
-struct ActivationAttestationInput<'a> {
+pub(crate) struct ActivationAttestationInput<'a> {
     provider_id: Uuid,
     proof_id: Uuid,
     config_version: u64,
@@ -132,7 +121,6 @@ struct ActivationAttestationInput<'a> {
     proof: &'a OidcValidationProof,
     expires_at: OffsetDateTime,
 }
-
 
 const fn map_integration_error(error: IntegrationError) -> OidcProviderError {
     match error {
@@ -147,7 +135,6 @@ const fn map_integration_error(error: IntegrationError) -> OidcProviderError {
         | IntegrationError::Unavailable => OidcProviderError::Unavailable,
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OidcProviderError {
@@ -166,10 +153,8 @@ pub enum OidcProviderError {
     Unavailable,
 }
 
-
 #[cfg(test)]
 mod tests;
-
 
 mod provider_model;
 pub(crate) use provider_model::*;

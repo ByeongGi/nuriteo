@@ -14,7 +14,6 @@ use std::str::FromStr;
 
 use std::time::Duration;
 
-
 use aws_sdk_s3::Client;
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
@@ -49,11 +48,9 @@ use uuid::Uuid;
 
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-
 use crate::config::{Environment, FileReader, SecretString, load_secret};
 
 use crate::integration::{CredentialIdentity, IntegrationError, SecretValue};
-
 
 const PROBE_BODY: &[u8] = b"nuriteo-backup-destination-preflight-v1";
 
@@ -97,7 +94,6 @@ const BACKUP_CA_FILE: &str = "NURITEO_BACKUP_S3_CA_FILE";
 
 const BACKUP_TIMEOUT_MS: &str = "NURITEO_BACKUP_S3_TIMEOUT_MS";
 
-
 const BACKUP_VARIABLES: &[&str] = &[
     BACKUP_ENDPOINT,
     BACKUP_REGION,
@@ -116,12 +112,10 @@ const BACKUP_VARIABLES: &[&str] = &[
     BACKUP_TIMEOUT_MS,
 ];
 
-
 pub struct BackupDestinationRuntime {
     pub config: BackupDestinationConfig,
     pub credential: BackupWriterCredential,
 }
-
 
 #[derive(Debug)]
 pub enum BackupDestinationRuntimeError {
@@ -134,7 +128,6 @@ pub enum BackupDestinationRuntimeError {
     Config(BackupDestinationConfigError),
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub enum BackupSse {
     S3,
@@ -142,14 +135,12 @@ pub enum BackupSse {
     ProviderDefault,
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct BackupWriterCredential {
     access_key_id: SecretString,
     secret_access_key: SecretString,
     session_token: Option<SecretString>,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BackupDestinationConfig {
@@ -163,7 +154,6 @@ pub struct BackupDestinationConfig {
     timeout: Duration,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackupDestinationConfigError {
     Endpoint,
@@ -176,13 +166,11 @@ pub enum BackupDestinationConfigError {
     Timeout,
 }
 
-
 #[derive(Clone)]
 pub struct BackupDestination {
     client: Client,
     config: BackupDestinationConfig,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BackupStoredObject {
@@ -191,7 +179,6 @@ pub struct BackupStoredObject {
     pub bytes: u64,
     pub sha256: [u8; 32],
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BackupDestinationPreflight {
@@ -204,7 +191,6 @@ pub struct BackupDestinationPreflight {
     pub delete_denied: bool,
     pub external_lifecycle_cleanup_required: bool,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackupDestinationError {
@@ -220,7 +206,6 @@ pub enum BackupDestinationError {
     LocalInput,
     InvalidObject,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -376,7 +361,6 @@ mod tests {
         }
     }
 }
-
 
 mod credential;
 pub(crate) use credential::*;

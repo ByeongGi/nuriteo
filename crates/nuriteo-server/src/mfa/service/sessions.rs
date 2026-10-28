@@ -1,15 +1,14 @@
 #![allow(unused_imports)]
-use super::*;
-use super::secrets::*;
-use super::enrollment::*;
 use super::challenge::*;
+use super::enrollment::*;
+use super::secrets::*;
+use super::*;
 
 use std::future::Future;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -31,7 +30,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -42,17 +40,25 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::super::{
     DEFAULT_TIMEOUT, ENVELOPE_ALGORITHM, ENVELOPE_DOMAIN, MfaCredentialMetadata,
     MfaCredentialState, MfaRepository, MfaStorageError, RecoveryCode, TotpSecret, append_audit,
     insert_recovery_hashes, lock_local_user, validate_correlation, verify_recovery_code,
 };
-use super::{TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW, DEFAULT_FAILURE_THRESHOLD, DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, MIN_FAILURE_THRESHOLD, MAX_FAILURE_THRESHOLD, MIN_FAILURE_DURATION, MAX_FAILURE_DURATION, RECOVERY_CODE_COUNT, RECOVERY_CODE_BYTES, RECOVERY_CODE_ENCODED_BYTES, ARGON2_CONCURRENCY, RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, MAX_RECEIPTS_PER_USER, MfaIdempotencyKey, SecretBytes, SecretToken, EnrollmentStartReceipt, SessionReceipt, EnrollmentCompleteReceipt, TotpCode, MfaChallengePolicy, EnrollmentStart, EnrollmentComplete, MfaService, ReceiptBindingAuthority, ChallengeState, ChallengeAttempt, MfaPasswordExecutor, MfaPasswordAdmission, MfaServiceError};
+use super::{
+    ARGON2_CONCURRENCY, ChallengeAttempt, ChallengeState, DEFAULT_FAILURE_THRESHOLD,
+    DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, EnrollmentComplete, EnrollmentCompleteReceipt,
+    EnrollmentStart, EnrollmentStartReceipt, MAX_FAILURE_DURATION, MAX_FAILURE_THRESHOLD,
+    MAX_RECEIPTS_PER_USER, MIN_FAILURE_DURATION, MIN_FAILURE_THRESHOLD, MfaChallengePolicy,
+    MfaIdempotencyKey, MfaPasswordAdmission, MfaPasswordExecutor, MfaService, MfaServiceError,
+    RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, RECOVERY_CODE_BYTES,
+    RECOVERY_CODE_COUNT, RECOVERY_CODE_ENCODED_BYTES, ReceiptBindingAuthority, SecretBytes,
+    SecretToken, SessionReceipt, TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW,
+    TotpCode,
+};
 
-
-
-pub(crate) async fn revoke_other_sessions(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn revoke_other_sessions(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     keep: crate::identity::SessionId,
 ) -> Result<(), MfaServiceError> {
@@ -69,8 +75,8 @@ pub(crate) async fn revoke_other_sessions(    tx: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn revoke_all_sessions(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn revoke_all_sessions(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     reason: &str,
 ) -> Result<(), MfaServiceError> {
@@ -86,8 +92,8 @@ pub(crate) async fn revoke_all_sessions(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn lock_admin_and_target(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_admin_and_target(
+    tx: &mut Transaction<'_, Postgres>,
     actor: UserId,
     target: UserId,
 ) -> Result<(), MfaServiceError> {
@@ -121,8 +127,8 @@ pub(crate) async fn lock_admin_and_target(    tx: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn append_attempt_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_attempt_audit(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     action: &str,
     correlation_id: &str,
@@ -143,12 +149,12 @@ pub(crate) async fn append_attempt_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn database_unavailable<E>(_: E) -> MfaServiceError {    MfaServiceError::Unavailable
+pub(crate) fn database_unavailable<E>(_: E) -> MfaServiceError {
+    MfaServiceError::Unavailable
 }
 
-
-pub(crate) fn map_storage_error(error: MfaStorageError) -> MfaServiceError {    match error {
+pub(crate) fn map_storage_error(error: MfaStorageError) -> MfaServiceError {
+    match error {
         MfaStorageError::InvalidInput => MfaServiceError::InvalidInput,
         MfaStorageError::Unauthorized => MfaServiceError::Unauthorized,
         MfaStorageError::LocalAccountRequired | MfaStorageError::NotActive => {
@@ -161,8 +167,8 @@ pub(crate) fn map_storage_error(error: MfaStorageError) -> MfaServiceError {    
     }
 }
 
-
-pub(crate) fn map_session_error(error: SessionServiceError) -> MfaServiceError {    match error {
+pub(crate) fn map_session_error(error: SessionServiceError) -> MfaServiceError {
+    match error {
         SessionServiceError::InvalidToken | SessionServiceError::UserUnavailable => {
             MfaServiceError::AuthenticationFailed
         }
@@ -174,8 +180,8 @@ pub(crate) fn map_session_error(error: SessionServiceError) -> MfaServiceError {
     }
 }
 
-
-impl fmt::Display for MfaServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for MfaServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "MFA request is invalid",
             Self::AuthenticationFailed => "authentication failed",
@@ -188,6 +194,5 @@ impl fmt::Display for MfaServiceError { fn fmt(&self, formatter: &mut fmt::Forma
         })
     }
 }
-
 
 impl std::error::Error for MfaServiceError {}

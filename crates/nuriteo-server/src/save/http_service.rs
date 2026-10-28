@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use serde::Serialize;
@@ -16,7 +15,6 @@ use tokio::io::AsyncRead;
 use tokio::time;
 
 use utoipa::ToSchema;
-
 
 use crate::database::DatabasePool;
 
@@ -33,7 +31,6 @@ use crate::project::{
 
 use crate::quota::{EffectiveQuota, SaveSessionId};
 
-
 use super::http_config::SaveUploadTransport;
 
 use super::relay::{RelayUploadError, RelayUploadService};
@@ -47,11 +44,9 @@ use super::{
     VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitService,
 };
 
-
 const BUNDLE_CONTENT_TYPE: &str = "application/vnd.nuriteo.project-bundle";
 
 const RELAY_CHECKSUM_HEADER: &str = "X-Nuriteo-Content-SHA256";
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct SaveHttpPolicy {
@@ -64,7 +59,6 @@ pub struct SaveHttpPolicy {
     relay_idle_timeout: Duration,
     relay_total_timeout: Duration,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveHttpError {
@@ -83,13 +77,12 @@ pub enum SaveHttpError {
     Internal,
 }
 
-
 #[derive(Clone)]
 pub struct SaveHttpService {
     runtime: Option<Arc<Runtime>>,
 }
 
-struct Runtime {
+pub(crate) struct Runtime {
     pool: DatabasePool,
     operation_timeout: Duration,
     projects: ProjectHttpService,
@@ -103,7 +96,6 @@ struct Runtime {
     single_put_threshold_bytes: u64,
     upload_transport: SaveUploadTransport,
 }
-
 
 #[derive(Debug, Clone)]
 pub(crate) struct SaveCreateInput {
@@ -129,7 +121,6 @@ pub(crate) struct SaveReceiptInput {
     pub etag: String,
 }
 
-
 pub(crate) struct RelaySingleUploadInput<'a, R> {
     pub browser: BrowserRequestHeaders<'a>,
     pub owner: ProjectOwner,
@@ -139,7 +130,6 @@ pub(crate) struct RelaySingleUploadInput<'a, R> {
     pub checksum: Sha256Checksum,
     pub reader: R,
 }
-
 
 pub(crate) struct RelayPartUploadInput<'a, R> {
     pub browser: BrowserRequestHeaders<'a>,
@@ -151,7 +141,6 @@ pub(crate) struct RelayPartUploadInput<'a, R> {
     pub checksum: Sha256Checksum,
     pub reader: R,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(tag = "transport", rename_all = "snake_case")]
@@ -212,7 +201,6 @@ pub(crate) enum ReconcileView {
     NotCommitted,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,7 +232,6 @@ mod tests {
         ));
     }
 }
-
 
 mod session;
 pub(crate) use session::*;

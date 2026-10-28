@@ -1,8 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::publication::*;
+use super::*;
 use std::str::FromStr;
-
 
 use axum::{
     Json,
@@ -29,14 +28,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::{
     http::{FieldViolation, HttpError, RequestId},
     identity::{BrowserMethod, BrowserRequestHeaders, UserId},
     organization::OrganizationId,
     project::{ProjectId, ProjectOwner},
 };
-
 
 use super::super::{
     PublicPublishedExampleListView, PublicPublishedExampleView, PublishedExampleCreateView,
@@ -45,11 +42,18 @@ use super::super::{
     PublishedExamplePublicId, PublishedExampleVersionMutationView, PublishedExampleView,
     PublishedExampleVisibility,
 };
-use super::{COLLECTION, ITEM, VERSIONS, ACTIVE_VERSION, UNPUBLISH, REPUBLISH, PUBLIC_COLLECTION, PUBLIC_ITEM, PUBLIC_VERSION, PUBLIC_CONTENT, PUBLIC_VERSION_CONTENT, PUBLIC_FORKS, PUBLIC_VERSION_FORKS, MAX_BODY, DEFAULT_PUBLIC_LIMIT, ORIGIN, CSRF, IDEMPOTENCY_KEY, PREVIEW_ABUSE_KEY, PREVIEW_ABUSE_PROOF, CreateRequest, AddVersionRequest, SelectVersionRequest, VisibilityRequest, DeleteRequest, DestinationOwnerRequest, ForkRequest, PublicListQuery, ManagementPath, ManagementItemPath, PublishedExampleBundleBinary, BrowserHeaders};
+use super::{
+    ACTIVE_VERSION, AddVersionRequest, BrowserHeaders, COLLECTION, CSRF, CreateRequest,
+    DEFAULT_PUBLIC_LIMIT, DeleteRequest, DestinationOwnerRequest, ForkRequest, IDEMPOTENCY_KEY,
+    ITEM, MAX_BODY, ManagementItemPath, ManagementPath, ORIGIN, PREVIEW_ABUSE_KEY,
+    PREVIEW_ABUSE_PROOF, PUBLIC_COLLECTION, PUBLIC_CONTENT, PUBLIC_FORKS, PUBLIC_ITEM,
+    PUBLIC_VERSION, PUBLIC_VERSION_CONTENT, PUBLIC_VERSION_FORKS, PublicListQuery,
+    PublishedExampleBundleBinary, REPUBLISH, SelectVersionRequest, UNPUBLISH, VERSIONS,
+    VisibilityRequest,
+};
 
-
-
-pub(crate) fn parse_id<T: FromStr>(    value: &str,
+pub(crate) fn parse_id<T: FromStr>(
+    value: &str,
     field: &str,
     request_id: &RequestId,
     path: &str,
@@ -59,8 +63,8 @@ pub(crate) fn parse_id<T: FromStr>(    value: &str,
         .map_err(|_| validation(request_id, path, field))
 }
 
-
-pub(crate) fn parse_visibility(    value: &str,
+pub(crate) fn parse_visibility(
+    value: &str,
     request_id: &RequestId,
     path: &str,
 ) -> Result<PublishedExampleVisibility, HttpError> {
@@ -71,8 +75,8 @@ pub(crate) fn parse_visibility(    value: &str,
     }
 }
 
-
-pub(crate) fn parse_if_match(    headers: &HeaderMap,
+pub(crate) fn parse_if_match(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<i64, HttpError> {
@@ -98,8 +102,8 @@ pub(crate) fn parse_if_match(    headers: &HeaderMap,
     Ok(generation)
 }
 
-
-pub(crate) fn parse_idempotency_key(    headers: &HeaderMap,
+pub(crate) fn parse_idempotency_key(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<PublishedExampleForkKey, HttpError> {
@@ -116,8 +120,8 @@ pub(crate) fn parse_idempotency_key(    headers: &HeaderMap,
     .map_err(|_| validation(request_id, path, "Idempotency-Key"))
 }
 
-
-pub(crate) fn example_response(    view: PublishedExampleView,
+pub(crate) fn example_response(
+    view: PublishedExampleView,
     request_id: RequestId,
     path: &str,
 ) -> Result<Response, HttpError> {
@@ -127,8 +131,8 @@ pub(crate) fn example_response(    view: PublishedExampleView,
     Ok(response)
 }
 
-
-pub(crate) fn insert_generation_headers(    response: &mut Response,
+pub(crate) fn insert_generation_headers(
+    response: &mut Response,
     generation: i64,
     request_id: &RequestId,
     path: &str,
@@ -144,23 +148,23 @@ pub(crate) fn insert_generation_headers(    response: &mut Response,
     Ok(())
 }
 
-
-pub(crate) fn private_no_store(mut response: Response) -> Response {    response
+pub(crate) fn private_no_store(mut response: Response) -> Response {
+    response
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     response
 }
 
-
-pub(crate) fn public_cache(mut response: Response) -> Response {    response.headers_mut().insert(
+pub(crate) fn public_cache(mut response: Response) -> Response {
+    response.headers_mut().insert(
         CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=60"),
     );
     response
 }
 
-
-pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {    HttpError::validation(
+pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
+    HttpError::validation(
         request_id.clone(),
         path,
         [FieldViolation::new(
@@ -171,8 +175,12 @@ pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> Htt
     )
 }
 
-
-pub(crate) fn map_error(error: PublishedExampleHttpError, request_id: RequestId, path: &str) -> HttpError {    match error {
+pub(crate) fn map_error(
+    error: PublishedExampleHttpError,
+    request_id: RequestId,
+    path: &str,
+) -> HttpError {
+    match error {
         PublishedExampleHttpError::AuthenticationFailed => {
             HttpError::authentication(request_id, path)
         }

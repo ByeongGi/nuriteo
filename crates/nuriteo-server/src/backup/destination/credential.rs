@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
-use super::verified_objects::*;
 use super::s3_client::*;
+use super::verified_objects::*;
+use super::*;
 use std::collections::BTreeMap;
 
 use std::ffi::OsString;
@@ -17,7 +17,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::Client;
 
@@ -53,13 +52,19 @@ use uuid::Uuid;
 
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-
 use crate::config::{Environment, FileReader, SecretString, load_secret};
 
+use super::{
+    BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_ADDRESSING_STYLE, BACKUP_BUCKET,
+    BACKUP_CA_FILE, BACKUP_ENDPOINT, BACKUP_KMS_KEY_ID, BACKUP_PREFIX, BACKUP_REGION,
+    BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN,
+    BACKUP_SESSION_TOKEN_FILE, BACKUP_SSE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestination,
+    BackupDestinationConfig, BackupDestinationConfigError, BackupDestinationError,
+    BackupDestinationPreflight, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse,
+    BackupStoredObject, BackupWriterCredential, MAX_BUFFERED_BACKUP_OBJECT_BYTES, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_TIMEOUT, MIN_TIMEOUT, PROBE_BODY,
+};
 use crate::integration::{CredentialIdentity, IntegrationError, SecretValue};
-use super::{PROBE_BODY, MIN_TIMEOUT, MAX_TIMEOUT, MAX_CA_BYTES, MAX_CA_CERTIFICATES, MAX_BUFFERED_BACKUP_OBJECT_BYTES, BACKUP_ENDPOINT, BACKUP_REGION, BACKUP_BUCKET, BACKUP_PREFIX, BACKUP_ADDRESSING_STYLE, BACKUP_SSE, BACKUP_KMS_KEY_ID, BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN, BACKUP_SESSION_TOKEN_FILE, BACKUP_CA_FILE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse, BackupWriterCredential, BackupDestinationConfig, BackupDestinationConfigError, BackupDestination, BackupStoredObject, BackupDestinationPreflight, BackupDestinationError};
-
-
 
 impl super::BackupDestinationRuntime {
     pub fn load(
@@ -143,23 +148,22 @@ impl super::BackupDestinationRuntime {
     }
 }
 
-
-impl From<BackupDestinationConfigError> for BackupDestinationRuntimeError { fn from(value: BackupDestinationConfigError) -> Self {
+impl From<BackupDestinationConfigError> for BackupDestinationRuntimeError {
+    fn from(value: BackupDestinationConfigError) -> Self {
         Self::Config(value)
     }
 }
 
-
-impl fmt::Display for BackupDestinationRuntimeError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for BackupDestinationRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("backup destination runtime configuration is invalid")
     }
 }
 
-
 impl std::error::Error for BackupDestinationRuntimeError {}
 
-
-pub(crate) fn backup_values(    environment: &impl Environment,
+pub(crate) fn backup_values(
+    environment: &impl Environment,
 ) -> Result<BTreeMap<&'static str, String>, BackupDestinationRuntimeError> {
     let mut values = BTreeMap::new();
     for (name, value) in environment.entries() {
@@ -182,15 +186,15 @@ pub(crate) fn backup_values(    environment: &impl Environment,
     Ok(values)
 }
 
-
-pub(crate) fn backup_name(value: &OsString) -> Option<&'static str> {    BACKUP_VARIABLES
+pub(crate) fn backup_name(value: &OsString) -> Option<&'static str> {
+    BACKUP_VARIABLES
         .iter()
         .copied()
         .find(|name| value == &OsString::from(name))
 }
 
-
-impl fmt::Debug for BackupSse { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupSse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::S3 => formatter.write_str("S3"),
             Self::Kms { .. } => formatter.write_str("Kms { key_id: [REDACTED] }"),
@@ -198,7 +202,6 @@ impl fmt::Debug for BackupSse { fn fmt(&self, formatter: &mut fmt::Formatter<'_>
         }
     }
 }
-
 
 impl BackupWriterCredential {
     pub fn new(
@@ -255,7 +258,8 @@ impl BackupWriterCredential {
             secret_access_key: String,
             session_token: Option<String>,
         }
-        impl Drop for StoredCredential { fn drop(&mut self) {
+        impl Drop for StoredCredential {
+            fn drop(&mut self) {
                 use zeroize::Zeroize;
                 self.access_key_id.zeroize();
                 self.secret_access_key.zeroize();
@@ -289,8 +293,8 @@ impl BackupWriterCredential {
     }
 }
 
-
-impl fmt::Debug for BackupWriterCredential { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupWriterCredential {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BackupWriterCredential")
             .field("access_key_id", &"[REDACTED]")
@@ -299,7 +303,6 @@ impl fmt::Debug for BackupWriterCredential { fn fmt(&self, formatter: &mut fmt::
             .finish()
     }
 }
-
 
 impl BackupDestinationConfig {
     #[allow(clippy::too_many_arguments)]
@@ -368,8 +371,8 @@ impl BackupDestinationConfig {
     }
 }
 
-
-impl fmt::Debug for BackupDestinationConfig { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupDestinationConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BackupDestinationConfig")
             .field("endpoint_configured", &true)
@@ -384,8 +387,8 @@ impl fmt::Debug for BackupDestinationConfig { fn fmt(&self, formatter: &mut fmt:
     }
 }
 
-
-impl fmt::Display for BackupDestinationConfigError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for BackupDestinationConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Endpoint => "backup endpoint must be an HTTPS origin",
             Self::Region => "backup region is invalid",
@@ -399,11 +402,10 @@ impl fmt::Display for BackupDestinationConfigError { fn fmt(&self, formatter: &m
     }
 }
 
-
 impl std::error::Error for BackupDestinationConfigError {}
 
-
-impl fmt::Debug for BackupDestination { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupDestination {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BackupDestination")
             .field("config", &self.config)

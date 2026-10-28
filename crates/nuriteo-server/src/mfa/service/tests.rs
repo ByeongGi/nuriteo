@@ -1,6 +1,5 @@
 use super::*;
 
-
 use std::env;
 
 use std::ffi::OsString;
@@ -13,11 +12,9 @@ use std::path::Path;
 
 use std::time::Instant;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -31,10 +28,8 @@ use crate::instance_settings::InstanceSettingsRepository;
 
 use crate::mfa::MfaHttpService;
 
-
 #[derive(Clone)]
 struct TestEnvironment(Vec<(OsString, OsString)>);
-
 
 struct NoFiles;
 

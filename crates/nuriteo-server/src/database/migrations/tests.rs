@@ -6,11 +6,9 @@ use std::fs;
 
 use std::str::FromStr;
 
-
 use sqlx::migrate::{Migration, MigrationType};
 
 use sqlx::{Acquire, SqlSafeStr};
-
 
 use super::*;
 
@@ -27,7 +25,6 @@ use crate::published_example::{
 };
 
 use crate::save::ProjectVersionId;
-
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 

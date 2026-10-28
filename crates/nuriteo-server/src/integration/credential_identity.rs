@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::keyring::*;
 use super::ca::*;
 use super::error::*;
-
+use super::keyring::*;
+use super::*;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -18,7 +17,6 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 
@@ -48,7 +46,6 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use zeroize::{Zeroize, Zeroizing};
 
-
 use crate::config::{Environment, FileReader, load_secret};
 
 use crate::database::DatabasePool;
@@ -57,12 +54,20 @@ use crate::identity::{SessionId, UserId};
 
 use crate::instance_settings::EffectiveInstanceSettings;
 
+use super::{
+    ALGORITHM, CaBundleMetadata, CaCandidatePreflight, CaEndpointBinding, CaPreflightProof,
+    CredentialIdentity, CredentialMetadata, DEFAULT_OPERATION_TIMEOUT, EncryptedSecretEnvelope,
+    IntegrationAdminActor, IntegrationAdminService, IntegrationAudit, IntegrationError,
+    IntegrationRepository, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_OPERATION_TIMEOUT, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH,
+    MAX_SECRET_BYTES, MIN_OPERATION_TIMEOUT, MasterKey, MasterKeyring, NONCE_BYTES,
+    PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, PreviousKeyInput, RotationReport, Sealed,
+    SecretValue, StoredCa, ValidatedCaBundle,
+};
 use crate::smtp::{SmtpConfig, SmtpPublicSettings, SmtpSecurity};
-use super::{ALGORITHM, NONCE_BYTES, MAX_SECRET_BYTES, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH, MAX_CA_BYTES, MAX_CA_CERTIFICATES, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, SecretValue, MasterKey, MasterKeyring, EncryptedSecretEnvelope, PreviousKeyInput, CredentialIdentity, CredentialMetadata, RotationReport, IntegrationRepository, Sealed, ValidatedCaBundle, CaBundleMetadata, CaEndpointBinding, IntegrationAdminActor, IntegrationAdminService, CaPreflightProof, CaCandidatePreflight, StoredCa, IntegrationAudit, IntegrationError};
 
-
-
-pub(crate) fn open_row(    ring: &MasterKeyring,
+pub(crate) fn open_row(
+    ring: &MasterKeyring,
     identity: &CredentialIdentity,
     row: &sqlx::postgres::PgRow,
 ) -> Result<SecretValue, IntegrationError> {
@@ -103,8 +108,13 @@ pub(crate) fn open_row(    ring: &MasterKeyring,
     Ok(SecretValue(plaintext))
 }
 
-
-pub(crate) fn aad(identity: &CredentialIdentity, id: Uuid, logical_version: u64, key_version: u32) -> Vec<u8> {    let fields: [&[u8]; 8] = [
+pub(crate) fn aad(
+    identity: &CredentialIdentity,
+    id: Uuid,
+    logical_version: u64,
+    key_version: u32,
+) -> Vec<u8> {
+    let fields: [&[u8]; 8] = [
         b"nuriteo.integration-credential.v1",
         identity.instance_id.as_bytes(),
         identity.integration_type.as_bytes(),
@@ -124,8 +134,10 @@ pub(crate) fn aad(identity: &CredentialIdentity, id: Uuid, logical_version: u64,
     out
 }
 
-
-pub(crate) fn identity_from_row(row: &sqlx::postgres::PgRow) -> Result<CredentialIdentity, IntegrationError> {    CredentialIdentity::new(
+pub(crate) fn identity_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<CredentialIdentity, IntegrationError> {
+    CredentialIdentity::new(
         row.get::<String, _>("instance_id"),
         row.get::<String, _>("integration_type"),
         row.get::<String, _>("integration_id"),
@@ -134,17 +146,17 @@ pub(crate) fn identity_from_row(row: &sqlx::postgres::PgRow) -> Result<Credentia
     .map_err(|_| IntegrationError::CredentialUnavailable)
 }
 
-
-pub(crate) fn parse_id(row: &sqlx::postgres::PgRow) -> Result<Uuid, IntegrationError> {    Uuid::from_str(&row.get::<String, _>("id")).map_err(|_| IntegrationError::CredentialUnavailable)
+pub(crate) fn parse_id(row: &sqlx::postgres::PgRow) -> Result<Uuid, IntegrationError> {
+    Uuid::from_str(&row.get::<String, _>("id")).map_err(|_| IntegrationError::CredentialUnavailable)
 }
 
-
-pub(crate) fn read_logical_version(row: &sqlx::postgres::PgRow) -> Result<u64, IntegrationError> {    u64::try_from(row.get::<i64, _>("credential_version"))
+pub(crate) fn read_logical_version(row: &sqlx::postgres::PgRow) -> Result<u64, IntegrationError> {
+    u64::try_from(row.get::<i64, _>("credential_version"))
         .map_err(|_| IntegrationError::CredentialUnavailable)
 }
 
-
-impl fmt::Debug for ValidatedCaBundle { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for ValidatedCaBundle {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ValidatedCaBundle")
             .field("certificate_count", &self.fingerprints.len())
@@ -154,7 +166,6 @@ impl fmt::Debug for ValidatedCaBundle { fn fmt(&self, formatter: &mut fmt::Forma
             .finish()
     }
 }
-
 
 impl ValidatedCaBundle {
     pub fn parse(pem: Vec<u8>) -> Result<Self, IntegrationError> {
@@ -210,7 +221,6 @@ impl ValidatedCaBundle {
         &self.fingerprints
     }
 }
-
 
 impl CaEndpointBinding {
     pub fn new(
@@ -283,14 +293,13 @@ impl CaEndpointBinding {
     }
 }
 
-
-impl fmt::Debug for IntegrationAdminService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for IntegrationAdminService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("IntegrationAdminService")
             .finish_non_exhaustive()
     }
 }
-
 
 impl IntegrationAdminService {
     #[must_use]

@@ -1,13 +1,12 @@
 #![allow(unused_imports)]
-use super::*;
 use super::upload_commands::*;
 use super::upload_session::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
 
 use std::time::Duration;
-
 
 use hmac::{Hmac, KeyInit, Mac};
 
@@ -18,7 +17,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time::{self as tokio_time, Instant};
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -41,14 +39,16 @@ use crate::quota::{
 
 use crate::workspace::StorageScopeId;
 
-
 use super::super::{
     CreateMultipartSession, IdempotencySecret, MultipartCompleteResult, MultipartPartCapability,
     MultipartPartPlan, MultipartPartReceipt, MultipartSession, MultipartSessionContext,
 };
-use super::{MAX_MULTIPART_BYTES, MAX_LOGICAL_BYTES, MAX_FILES, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, SQL_TIMEOUT_MARGIN, MAX_ISSUE_BATCH, MultipartServicePolicy, MultipartServiceError, MultipartStore, MultipartService, PersistedMultipart, ExistingMultipart, SessionRow, LoadedPart, PartRow, LoadedMultipart, PreparedComplete, Deadline};
-
-
+use super::{
+    Deadline, ExistingMultipart, LoadedMultipart, LoadedPart, MAX_FILES, MAX_ISSUE_BATCH,
+    MAX_LOGICAL_BYTES, MAX_MULTIPART_BYTES, MAX_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT,
+    MultipartService, MultipartServiceError, MultipartServicePolicy, MultipartStore, PartRow,
+    PersistedMultipart, PreparedComplete, SQL_TIMEOUT_MARGIN, SessionRow,
+};
 
 impl super::PersistedMultipart {
     pub(crate) fn is_expired(&self) -> bool {
@@ -76,7 +76,6 @@ impl super::PersistedMultipart {
     }
 }
 
-
 impl ExistingMultipart {
     pub(crate) fn into_persisted(
         self,
@@ -101,7 +100,6 @@ impl ExistingMultipart {
     }
 }
 
-
 impl SessionRow {
     pub(crate) fn upload(&self) -> Result<MultipartUpload, MultipartServiceError> {
         Ok(MultipartUpload {
@@ -115,7 +113,6 @@ impl SessionRow {
     }
 }
 
-
 impl LoadedMultipart {
     pub(crate) fn upload(&self) -> Result<MultipartUpload, MultipartServiceError> {
         Ok(MultipartUpload {
@@ -128,7 +125,10 @@ impl LoadedMultipart {
         })
     }
 
-    pub(crate) fn presign_expiry(&self, configured: u16) -> Result<PresignExpiry, MultipartServiceError> {
+    pub(crate) fn presign_expiry(
+        &self,
+        configured: u16,
+    ) -> Result<PresignExpiry, MultipartServiceError> {
         let remaining = self
             .remaining
             .saturating_sub(self.remaining_captured_at.elapsed());
@@ -138,7 +138,6 @@ impl LoadedMultipart {
         PresignExpiry::minutes(minutes).map_err(|_| MultipartServiceError::SessionNearExpiry)
     }
 }
-
 
 impl Deadline {
     pub(crate) fn new(timeout: Duration) -> Self {
@@ -154,15 +153,18 @@ impl Deadline {
         }
     }
 
-    pub(crate) async fn run<T>(self, future: impl Future<Output = T>) -> Result<T, MultipartServiceError> {
+    pub(crate) async fn run<T>(
+        self,
+        future: impl Future<Output = T>,
+    ) -> Result<T, MultipartServiceError> {
         tokio_time::timeout_at(self.0, future)
             .await
             .map_err(|_| MultipartServiceError::OperationTimeout)
     }
 }
 
-
-pub(crate) fn validate_create(    request: &CreateMultipartSession,
+pub(crate) fn validate_create(
+    request: &CreateMultipartSession,
     policy: MultipartServicePolicy,
 ) -> Result<(), MultipartServiceError> {
     if request.expected_physical_bytes <= policy.single_put_threshold_bytes
@@ -209,8 +211,8 @@ pub(crate) fn validate_create(    request: &CreateMultipartSession,
     Ok(())
 }
 
-
-pub(crate) fn validate_part_batch(    parts: &[MultipartPartPlan],
+pub(crate) fn validate_part_batch(
+    parts: &[MultipartPartPlan],
     limit: u16,
 ) -> Result<(), MultipartServiceError> {
     if parts.is_empty() || parts.len() > usize::from(limit) {
@@ -224,8 +226,8 @@ pub(crate) fn validate_part_batch(    parts: &[MultipartPartPlan],
     Ok(())
 }
 
-
-pub(crate) fn validate_receipt_batch(    receipts: &[MultipartPartReceipt],
+pub(crate) fn validate_receipt_batch(
+    receipts: &[MultipartPartReceipt],
     limit: u16,
 ) -> Result<(), MultipartServiceError> {
     if receipts.is_empty() || receipts.len() > usize::from(limit) {
@@ -239,8 +241,11 @@ pub(crate) fn validate_receipt_batch(    receipts: &[MultipartPartReceipt],
     Ok(())
 }
 
-
-pub(crate) fn idempotency_digest(secret: &IdempotencySecret, request: &CreateMultipartSession) -> [u8; 32] {    let mut mac = Hmac::<Sha256>::new_from_slice(secret.expose_for_hmac())
+pub(crate) fn idempotency_digest(
+    secret: &IdempotencySecret,
+    request: &CreateMultipartSession,
+) -> [u8; 32] {
+    let mut mac = Hmac::<Sha256>::new_from_slice(secret.expose_for_hmac())
         .unwrap_or_else(|_| unreachable!("HMAC-SHA-256 accepts a 32-byte key"));
     mac.update(b"nuriteo-save-multipart-v1\0");
     mac.update(request.actor_user_id.to_string().as_bytes());
@@ -251,8 +256,8 @@ pub(crate) fn idempotency_digest(secret: &IdempotencySecret, request: &CreateMul
     mac.finalize().into_bytes().into()
 }
 
-
-pub(crate) async fn ensure_idempotency_configuration(    connection: &mut PgConnection,
+pub(crate) async fn ensure_idempotency_configuration(
+    connection: &mut PgConnection,
     secret: &IdempotencySecret,
     deadline: Deadline,
 ) -> Result<(), MultipartServiceError> {
@@ -289,8 +294,8 @@ pub(crate) async fn ensure_idempotency_configuration(    connection: &mut PgConn
     }
 }
 
-
-pub(crate) async fn lock_scope_and_authorize(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_scope_and_authorize(
+    transaction: &mut Transaction<'_, Postgres>,
     context: MultipartSessionContext,
     deadline: Deadline,
 ) -> Result<i64, MultipartServiceError> {
@@ -334,8 +339,8 @@ pub(crate) async fn lock_scope_and_authorize(    transaction: &mut Transaction<'
     Ok(row.1)
 }
 
-
-pub(crate) async fn load_idempotent(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_idempotent(
+    tx: &mut Transaction<'_, Postgres>,
     request: &CreateMultipartSession,
     digest: &[u8; 32],
     deadline: Deadline,
@@ -393,8 +398,8 @@ pub(crate) async fn load_idempotent(    tx: &mut Transaction<'_, Postgres>,
     }))
 }
 
-
-pub(crate) fn validate_existing(    existing: &ExistingMultipart,
+pub(crate) fn validate_existing(
+    existing: &ExistingMultipart,
     request: &CreateMultipartSession,
     policy: MultipartServicePolicy,
 ) -> Result<(), MultipartServiceError> {
@@ -413,8 +418,8 @@ pub(crate) fn validate_existing(    existing: &ExistingMultipart,
     Ok(())
 }
 
-
-pub(crate) async fn validate_existing_parts(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn validate_existing_parts(
+    tx: &mut Transaction<'_, Postgres>,
     session_id: &str,
     requested: &[MultipartPartPlan],
     deadline: Deadline,
@@ -444,8 +449,8 @@ pub(crate) async fn validate_existing_parts(    tx: &mut Transaction<'_, Postgre
     Ok(())
 }
 
-
-pub(crate) async fn load_session_for_update(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_session_for_update(
+    tx: &mut Transaction<'_, Postgres>,
     context: MultipartSessionContext,
     deadline: Deadline,
 ) -> Result<SessionRow, MultipartServiceError> {
@@ -474,8 +479,8 @@ pub(crate) async fn load_session_for_update(    tx: &mut Transaction<'_, Postgre
     .ok_or(MultipartServiceError::SessionNotFound)
 }
 
-
-pub(crate) fn ensure_uploading(session: &SessionRow) -> Result<(), MultipartServiceError> {    if session.remaining.is_zero() {
+pub(crate) fn ensure_uploading(session: &SessionRow) -> Result<(), MultipartServiceError> {
+    if session.remaining.is_zero() {
         return Err(MultipartServiceError::SessionExpired);
     }
     match session.state.as_str() {
@@ -488,8 +493,8 @@ pub(crate) fn ensure_uploading(session: &SessionRow) -> Result<(), MultipartServ
     }
 }
 
-
-pub(crate) fn decode_parts(rows: Vec<PartRow>) -> Result<Vec<LoadedPart>, MultipartServiceError> {    rows.into_iter()
+pub(crate) fn decode_parts(rows: Vec<PartRow>) -> Result<Vec<LoadedPart>, MultipartServiceError> {
+    rows.into_iter()
         .map(|row| {
             let digest: [u8; 32] = row
                 .2
@@ -508,8 +513,8 @@ pub(crate) fn decode_parts(rows: Vec<PartRow>) -> Result<Vec<LoadedPart>, Multip
         .collect()
 }
 
-
-pub(crate) async fn marker_update(    pool: &DatabasePool,
+pub(crate) async fn marker_update(
+    pool: &DatabasePool,
     context: MultipartSessionContext,
     sql: &'static str,
     deadline: Deadline,
@@ -560,8 +565,8 @@ pub(crate) async fn marker_update(    pool: &DatabasePool,
     commit(tx, deadline).await
 }
 
-
-pub(crate) async fn configure_transaction(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn configure_transaction(
+    tx: &mut Transaction<'_, Postgres>,
     deadline: Deadline,
 ) -> Result<(), MultipartServiceError> {
     let timeout = deadline
@@ -582,8 +587,8 @@ pub(crate) async fn configure_transaction(    tx: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn commit(    tx: Transaction<'_, Postgres>,
+pub(crate) async fn commit(
+    tx: Transaction<'_, Postgres>,
     deadline: Deadline,
 ) -> Result<(), MultipartServiceError> {
     match tokio_time::timeout_at(deadline.0, tx.commit()).await {
@@ -596,27 +601,27 @@ pub(crate) async fn commit(    tx: Transaction<'_, Postgres>,
     }
 }
 
-
-pub(crate) fn duration_from_seconds(seconds: i64) -> Result<Duration, MultipartServiceError> {    u64::try_from(seconds)
+pub(crate) fn duration_from_seconds(seconds: i64) -> Result<Duration, MultipartServiceError> {
+    u64::try_from(seconds)
         .map(Duration::from_secs)
         .map_err(|_| MultipartServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_session_id(value: &str) -> Result<SaveSessionId, MultipartServiceError> {    let uuid =
+pub(crate) fn parse_session_id(value: &str) -> Result<SaveSessionId, MultipartServiceError> {
+    let uuid =
         uuid::Uuid::parse_str(value).map_err(|_| MultipartServiceError::InvariantViolation)?;
     SaveSessionId::from_uuid(uuid).map_err(|_| MultipartServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn map_database_error(error: DatabaseError) -> MultipartServiceError {    match error {
+pub(crate) fn map_database_error(error: DatabaseError) -> MultipartServiceError {
+    match error {
         DatabaseError::AcquireTimeout => MultipartServiceError::OperationTimeout,
         _ => MultipartServiceError::DatabaseUnavailable,
     }
 }
 
-
-pub(crate) fn map_sql_error(error: sqlx::Error) -> MultipartServiceError {    match error
+pub(crate) fn map_sql_error(error: sqlx::Error) -> MultipartServiceError {
+    match error
         .as_database_error()
         .and_then(|error| error.code())
         .as_deref()
@@ -628,8 +633,8 @@ pub(crate) fn map_sql_error(error: sqlx::Error) -> MultipartServiceError {    ma
     }
 }
 
-
-pub(crate) fn map_quota_error(error: QuotaServiceError) -> MultipartServiceError {    match error {
+pub(crate) fn map_quota_error(error: QuotaServiceError) -> MultipartServiceError {
+    match error {
         QuotaServiceError::QuotaExceeded => MultipartServiceError::QuotaExceeded,
         QuotaServiceError::OperationTimeout => MultipartServiceError::OperationTimeout,
         QuotaServiceError::CommitOutcomeUnknown => MultipartServiceError::CommitOutcomeUnknown,
@@ -645,8 +650,8 @@ pub(crate) fn map_quota_error(error: QuotaServiceError) -> MultipartServiceError
     }
 }
 
-
-pub(crate) fn map_project_access_error(error: ProjectAccessError) -> MultipartServiceError {    match error {
+pub(crate) fn map_project_access_error(error: ProjectAccessError) -> MultipartServiceError {
+    match error {
         ProjectAccessError::OperationTimeout => MultipartServiceError::OperationTimeout,
         ProjectAccessError::PersistenceUnavailable => MultipartServiceError::DatabaseUnavailable,
         ProjectAccessError::InvalidPersistedState => MultipartServiceError::InvariantViolation,

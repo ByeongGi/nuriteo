@@ -12,60 +12,95 @@ use crate::{
     },
 };
 
+/// Identifier of one virtual terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PtyId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Master and slave descriptors of a new PTY.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PtyPair {
+    /// Identifier used for later terminal control.
     pub id: PtyId,
+    /// Descriptor installed in the master process.
     pub master_fd: Fd,
+    /// Descriptor installed in the slave process.
     pub slave_fd: Fd,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Bytes read from a descriptor, plus an EOF flag.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IoRead {
+    /// Bytes copied out of the file or PTY.
     pub bytes: Vec<u8>,
+    /// No further bytes will arrive on this descriptor.
     pub eof: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Readiness bits for one file descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PollState {
+    /// A read would return bytes or EOF.
     pub readable: bool,
+    /// A write would accept bytes.
     pub writable: bool,
+    /// The peer side of a PTY is closed.
     pub hangup: bool,
+    /// A PTY interrupt or resize is waiting.
     pub priority: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Session and foreground group attached to a PTY.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TerminalControl {
+    /// Session that owns the controlling terminal.
     pub session: SessionId,
+    /// Group that receives interrupt and resize signals.
     pub foreground_process_group: ProcessGroupId,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Terminal control operation applied to a descriptor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IoctlRequest {
+    /// Read the current terminal settings.
     GetTermios,
+    /// Replace the terminal settings.
     SetTermios(Termios),
+    /// Read the current character dimensions.
     GetTerminalSize,
+    /// Replace the character dimensions.
     SetTerminalSize(TerminalSize),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Result of a terminal control operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IoctlResponse {
+    /// The request changed state and has no payload.
     None,
+    /// Current terminal settings.
     Termios(Termios),
+    /// Current character dimensions.
     TerminalSize(TerminalSize),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Descriptor, filesystem, process, or PTY failure.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IoError {
+    /// No free descriptor number remains for the process.
     DescriptorExhausted,
+    /// A filesystem operation failed.
     Fs(FsError),
+    /// The descriptor is not open for this process.
     InvalidFd,
+    /// The PTY has no controlling session.
     NoControllingTerminal,
+    /// The descriptor is not a terminal.
     NotTerminal,
+    /// A process-table operation failed.
     Process(ProcessError),
+    /// A virtual-terminal operation failed.
     Pty(PtyError),
+    /// No free PTY identifier remains.
     PtyExhausted,
 }
 
@@ -73,18 +108,50 @@ impl Display for IoError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::DescriptorExhausted => formatter.write_str("file descriptor space exhausted"),
-            Self::Fs(error) => write!(formatter, "filesystem error: {error:?}"),
+            Self::Fs(error) => write!(formatter, "filesystem error: {error}"),
             Self::InvalidFd => formatter.write_str("invalid file descriptor"),
             Self::NoControllingTerminal => formatter.write_str("PTY has no controlling session"),
             Self::NotTerminal => formatter.write_str("file descriptor is not a terminal"),
-            Self::Process(error) => write!(formatter, "process error: {error:?}"),
+            Self::Process(error) => write!(formatter, "process error: {error}"),
             Self::Pty(error) => write!(formatter, "PTY error: {error}"),
             Self::PtyExhausted => formatter.write_str("PTY identifier space exhausted"),
         }
     }
 }
 
-impl Error for IoError {}
+impl IoError {
+    /// Guest-visible sentence for this failure.
+    ///
+    /// Wrapped filesystem, process, and PTY errors contribute their own sentence.
+    #[must_use]
+    pub const fn reason(&self) -> &'static str {
+        match self {
+            Self::DescriptorExhausted => "file descriptor space exhausted",
+            Self::Fs(error) => error.reason(),
+            Self::InvalidFd => "invalid file descriptor",
+            Self::NoControllingTerminal => "PTY has no controlling session",
+            Self::NotTerminal => "file descriptor is not a terminal",
+            Self::Process(error) => error.reason(),
+            Self::Pty(error) => error.reason(),
+            Self::PtyExhausted => "PTY identifier space exhausted",
+        }
+    }
+}
+
+impl Error for IoError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Fs(error) => Some(error),
+            Self::Process(error) => Some(error),
+            Self::Pty(error) => Some(error),
+            Self::DescriptorExhausted
+            | Self::InvalidFd
+            | Self::NoControllingTerminal
+            | Self::NotTerminal
+            | Self::PtyExhausted => None,
+        }
+    }
+}
 
 impl From<FsError> for IoError {
     fn from(error: FsError) -> Self {
@@ -104,15 +171,16 @@ impl From<ProcessError> for IoError {
     }
 }
 
+/// Descriptor I/O result alias.
 pub type IoResult<T> = Result<T, IoError>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum PtySide {
     Master,
     Slave,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Descriptor {
     File {
         fd: Fd,
@@ -125,7 +193,7 @@ enum Descriptor {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct DescriptorTable {
     next_fd: u32,
     entries: BTreeMap<Fd, Descriptor>,
@@ -133,14 +201,18 @@ struct DescriptorTable {
 
 impl Default for DescriptorTable {
     fn default() -> Self {
-        Self {
-            next_fd: 3,
-            entries: BTreeMap::new(),
-        }
+        Self::new()
     }
 }
 
 impl DescriptorTable {
+    fn new() -> Self {
+        Self {
+            next_fd: Fd::FIRST_ISSUED,
+            entries: BTreeMap::new(),
+        }
+    }
+
     fn insert(&mut self, descriptor: Descriptor) -> IoResult<Fd> {
         let fd = Fd(self.next_fd);
         self.next_fd = self
@@ -160,7 +232,8 @@ impl DescriptorTable {
     }
 }
 
-#[derive(Debug)]
+/// Per-process descriptors over the shared filesystem and PTYs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KernelIo {
     fs: SystemFs,
     descriptors: BTreeMap<Pid, DescriptorTable>,
@@ -182,18 +255,32 @@ impl Default for KernelIo {
 }
 
 impl KernelIo {
+    /// Creates an empty instance with its default root state.
+    ///
+    /// # Panics
+    /// Panics if the embedded filesystem cannot create `/workspace`.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Borrows the shared filesystem.
+    #[must_use]
     pub fn filesystem(&self) -> &SystemFs {
         &self.fs
     }
 
+    /// Borrows the shared filesystem for modification.
+    #[must_use]
     pub fn filesystem_mut(&mut self) -> &mut SystemFs {
         &mut self.fs
     }
 
+    /// Opens a path and installs a descriptor for `pid`.
+    ///
+    /// # Errors
+    /// Returns [`IoError::Fs`] for the filesystem open failure and
+    /// [`IoError::DescriptorExhausted`] when the process has no free descriptor.
     pub fn open_file(&mut self, pid: Pid, path: &str, options: OpenOptions) -> IoResult<Fd> {
         let internal_fd = self.fs.open(pid, path, options)?;
         match self.descriptor_table(pid).insert(Descriptor::File {
@@ -209,6 +296,12 @@ impl KernelIo {
         }
     }
 
+    /// Allocates a PTY and returns its master and slave descriptors.
+    ///
+    /// # Errors
+    /// Returns [`IoError::PtyExhausted`] when the PTY id space is full,
+    /// [`IoError::Pty`] when the limits are zero, and
+    /// [`IoError::DescriptorExhausted`] when either process has no free descriptor.
     pub fn open_pty(
         &mut self,
         master_pid: Pid,
@@ -244,6 +337,12 @@ impl KernelIo {
         })
     }
 
+    /// Reads up to `max_bytes` from a file or PTY descriptor.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when `pid` has no such descriptor,
+    /// [`IoError::Fs`] when a file read is not allowed, and [`IoError::Pty`]
+    /// when the PTY side is closed.
     pub fn read(&mut self, pid: Pid, fd: Fd, max_bytes: usize) -> IoResult<IoRead> {
         match self.descriptor(pid, fd)? {
             Descriptor::File { fd, readable, .. } => {
@@ -268,6 +367,12 @@ impl KernelIo {
         }
     }
 
+    /// Writes bytes to a file or PTY descriptor.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when `pid` has no such descriptor,
+    /// [`IoError::Fs`] when a file write is not allowed, and [`IoError::Pty`]
+    /// when the PTY cannot accept the write.
     pub fn write(&mut self, pid: Pid, fd: Fd, bytes: &[u8]) -> IoResult<usize> {
         match self.descriptor(pid, fd)? {
             Descriptor::File { fd, writable, .. } => {
@@ -286,6 +391,12 @@ impl KernelIo {
         }
     }
 
+    /// Applies a terminal control request to a descriptor.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when the descriptor is missing,
+    /// [`IoError::NotTerminal`] when it is a regular file, and [`IoError::Pty`]
+    /// when the PTY rejects the new settings or size.
     pub fn ioctl(&mut self, pid: Pid, fd: Fd, request: IoctlRequest) -> IoResult<IoctlResponse> {
         let Descriptor::Pty { id, .. } = self.descriptor(pid, fd)? else {
             return Err(IoError::NotTerminal);
@@ -305,6 +416,10 @@ impl KernelIo {
         }
     }
 
+    /// Returns readiness for a descriptor.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when `pid` has no such descriptor.
     pub fn poll(&self, pid: Pid, fd: Fd) -> IoResult<PollState> {
         match self.descriptor(pid, fd)? {
             Descriptor::File {
@@ -331,10 +446,19 @@ impl KernelIo {
         }
     }
 
+    /// Pops the next recorded terminal event.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when `id` is not an open PTY.
     pub fn next_pty_event(&mut self, id: PtyId) -> IoResult<Option<PtyEvent>> {
         Ok(self.pty_mut(id)?.next_event())
     }
 
+    /// Attaches a PTY as the controlling terminal of `pid`.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when the PTY is missing,
+    /// [`IoError::Process`] when it already has a session or `pid` is unknown.
     pub fn attach_controlling_terminal(
         &mut self,
         processes: &ProcessTable,
@@ -356,6 +480,10 @@ impl KernelIo {
         Ok(control)
     }
 
+    /// Returns the session and foreground group of a PTY.
+    ///
+    /// # Errors
+    /// Returns [`IoError::NoControllingTerminal`] when `id` has not been attached.
     pub fn terminal_control(&self, id: PtyId) -> IoResult<TerminalControl> {
         self.terminal_controls
             .get(&id)
@@ -363,6 +491,11 @@ impl KernelIo {
             .ok_or(IoError::NoControllingTerminal)
     }
 
+    /// Sets the foreground process group of a controlling terminal.
+    ///
+    /// # Errors
+    /// Returns [`IoError::NoControllingTerminal`] when the PTY is not attached
+    /// and [`IoError::Process`] when `pid` or the group is outside that session.
     pub fn set_foreground_process_group(
         &mut self,
         processes: &ProcessTable,
@@ -383,6 +516,12 @@ impl KernelIo {
         Ok(control)
     }
 
+    /// Turns a pending terminal event into process signals.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when the PTY is missing,
+    /// [`IoError::NoControllingTerminal`] when it has no session, and
+    /// [`IoError::Process`] when the foreground group cannot take the signal.
     pub fn dispatch_terminal_event(
         &mut self,
         processes: &mut ProcessTable,
@@ -399,6 +538,11 @@ impl KernelIo {
         Ok(processes.signal_process_group(control.foreground_process_group, signal)?)
     }
 
+    /// Closes one descriptor owned by `pid`.
+    ///
+    /// # Errors
+    /// Returns [`IoError::InvalidFd`] when `pid` has no such descriptor, and
+    /// [`IoError::Fs`] or [`IoError::Pty`] when the underlying close fails.
     pub fn close(&mut self, pid: Pid, fd: Fd) -> IoResult<()> {
         let descriptor = self
             .descriptors
@@ -432,6 +576,11 @@ impl KernelIo {
         Ok(())
     }
 
+    /// Closes every descriptor owned by `pid`.
+    ///
+    /// # Errors
+    /// Returns the same errors as [`Self::close`] for the first descriptor that fails.
+    /// A process with no descriptors succeeds.
     pub fn close_process(&mut self, pid: Pid) -> IoResult<()> {
         let Some(table) = self.descriptors.get(&pid) else {
             return Ok(());
@@ -461,13 +610,23 @@ impl KernelIo {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, error::Error};
 
     use super::*;
 
     const HOST: Pid = Pid(1);
     const GUEST: Pid = Pid(2);
     const OUTSIDER: Pid = Pid(3);
+
+    #[test]
+    fn nested_io_errors_keep_their_source() {
+        let error = IoError::Fs(FsError::NotFound);
+        assert_eq!(error.to_string(), "filesystem error: path was not found");
+        assert_eq!(
+            error.source().map(ToString::to_string).as_deref(),
+            Some("path was not found")
+        );
+    }
 
     #[test]
     fn files_and_ptys_share_each_process_descriptor_namespace() {

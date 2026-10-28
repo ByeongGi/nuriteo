@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::project_api::*;
+use super::*;
 use std::fmt;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use base64::Engine;
 
@@ -29,7 +28,6 @@ use tokio::time as tokio_time;
 use url::Url;
 
 use utoipa::ToSchema;
-
 
 use crate::access_token::{
     AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenScope,
@@ -60,7 +58,6 @@ use crate::save::{
     PromoteHistoricalReference, RecoveryCheckpoint,
 };
 
-
 use super::super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
     ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRole,
@@ -68,9 +65,14 @@ use super::super::{
     ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectTemplate,
     ProjectVersion,
 };
-use super::{CURSOR_PREFIX, CURSOR_TTL_SECONDS, CURSOR_KEY_BYTES, MAX_CURSOR_BYTES, ProjectHttpPolicy, ProjectHttpError, ProjectHttpService, Runtime, RoleOperation, SaveProjectContext, BrowserIdentity, ProjectAccessTokenIdentity, ProjectView, ProjectListView, ProjectRoleView, ProjectRoleListView, ProjectRoleMutationView, ProjectVersionView, ProjectVersionCreateView, ProjectVersionListView, RecoveryCheckpointView, RecoveryCheckpointListView, HistoricalPromotionView, CursorSigner, CursorClaims, CursorBinding, CursorPosition};
-
-
+use super::{
+    BrowserIdentity, CURSOR_KEY_BYTES, CURSOR_PREFIX, CURSOR_TTL_SECONDS, CursorBinding,
+    CursorClaims, CursorPosition, CursorSigner, HistoricalPromotionView, MAX_CURSOR_BYTES,
+    ProjectAccessTokenIdentity, ProjectHttpError, ProjectHttpPolicy, ProjectHttpService,
+    ProjectListView, ProjectRoleListView, ProjectRoleMutationView, ProjectRoleView,
+    ProjectVersionCreateView, ProjectVersionListView, ProjectVersionView, ProjectView,
+    RecoveryCheckpointListView, RecoveryCheckpointView, RoleOperation, Runtime, SaveProjectContext,
+};
 
 impl super::BrowserIdentity {
     pub(crate) fn audit(&self, correlation_id: &str) -> ProjectAuditContext {
@@ -83,7 +85,6 @@ impl super::BrowserIdentity {
         )
     }
 }
-
 
 impl Runtime {
     pub(crate) async fn authenticate(
@@ -123,8 +124,8 @@ impl Runtime {
     }
 }
 
-
-impl From<Project> for ProjectView { fn from(project: Project) -> Self {
+impl From<Project> for ProjectView {
+    fn from(project: Project) -> Self {
         let (owner_type, owner_id) = match project.owner() {
             ProjectOwner::User(id) => ("user", id.to_string()),
             ProjectOwner::Organization(id) => ("organization", id.to_string()),
@@ -149,8 +150,8 @@ impl From<Project> for ProjectView { fn from(project: Project) -> Self {
     }
 }
 
-
-impl From<DirectProjectRoleGrant> for ProjectRoleView { fn from(grant: DirectProjectRoleGrant) -> Self {
+impl From<DirectProjectRoleGrant> for ProjectRoleView {
+    fn from(grant: DirectProjectRoleGrant) -> Self {
         Self {
             project_id: grant.project_id().to_string(),
             organization_id: grant.organization_id().to_string(),
@@ -163,8 +164,8 @@ impl From<DirectProjectRoleGrant> for ProjectRoleView { fn from(grant: DirectPro
     }
 }
 
-
-impl From<&ExplicitProjectVersion> for ProjectVersionView { fn from(version: &ExplicitProjectVersion) -> Self {
+impl From<&ExplicitProjectVersion> for ProjectVersionView {
+    fn from(version: &ExplicitProjectVersion) -> Self {
         Self {
             id: version.id().to_string(),
             project_id: version.project_id().to_string(),
@@ -182,8 +183,8 @@ impl From<&ExplicitProjectVersion> for ProjectVersionView { fn from(version: &Ex
     }
 }
 
-
-impl From<&RecoveryCheckpoint> for RecoveryCheckpointView { fn from(checkpoint: &RecoveryCheckpoint) -> Self {
+impl From<&RecoveryCheckpoint> for RecoveryCheckpointView {
+    fn from(checkpoint: &RecoveryCheckpoint) -> Self {
         Self {
             id: checkpoint.id().to_string(),
             project_id: checkpoint.project_id().to_string(),
@@ -200,8 +201,8 @@ impl From<&RecoveryCheckpoint> for RecoveryCheckpointView { fn from(checkpoint: 
     }
 }
 
-
-impl From<HistoricalPromotionOutcome> for HistoricalPromotionView { fn from(outcome: HistoricalPromotionOutcome) -> Self {
+impl From<HistoricalPromotionOutcome> for HistoricalPromotionView {
+    fn from(outcome: HistoricalPromotionOutcome) -> Self {
         Self {
             operation_id: outcome.operation_id().to_string(),
             reference_kind: outcome.reference_kind().as_str().to_owned(),
@@ -213,7 +214,6 @@ impl From<HistoricalPromotionOutcome> for HistoricalPromotionView { fn from(outc
         }
     }
 }
-
 
 impl CursorBinding {
     pub(crate) fn projects(
@@ -237,7 +237,12 @@ impl CursorBinding {
             page_size,
         }
     }
-    pub(crate) fn roles(actor: UserId, owner: ProjectOwner, project: ProjectId, page_size: u16) -> Self {
+    pub(crate) fn roles(
+        actor: UserId,
+        owner: ProjectOwner,
+        project: ProjectId,
+        page_size: u16,
+    ) -> Self {
         let (owner_type, owner_id) = owner_parts(owner);
         Self {
             kind: "roles",
@@ -249,7 +254,12 @@ impl CursorBinding {
             page_size,
         }
     }
-    pub(crate) fn versions(actor: UserId, owner: ProjectOwner, project: ProjectId, page_size: u16) -> Self {
+    pub(crate) fn versions(
+        actor: UserId,
+        owner: ProjectOwner,
+        project: ProjectId,
+        page_size: u16,
+    ) -> Self {
         let (owner_type, owner_id) = owner_parts(owner);
         Self {
             kind: "versions",
@@ -263,13 +273,12 @@ impl CursorBinding {
     }
 }
 
-
-pub(crate) fn owner_parts(owner: ProjectOwner) -> (&'static str, String) {    match owner {
+pub(crate) fn owner_parts(owner: ProjectOwner) -> (&'static str, String) {
+    match owner {
         ProjectOwner::User(id) => ("user", id.to_string()),
         ProjectOwner::Organization(id) => ("organization", id.to_string()),
     }
 }
-
 
 impl CursorSigner {
     pub(crate) const fn new(key: [u8; CURSOR_KEY_BYTES]) -> Self {
@@ -468,15 +477,15 @@ impl CursorSigner {
     }
 }
 
-
-pub(crate) fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {    let mut mac = Hmac::<Sha256>::new_from_slice(key)
+pub(crate) fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key)
         .expect("HMAC-SHA256 accepts a key of any bounded length");
     mac.update(message);
     mac.finalize().into_bytes().into()
 }
 
-
-pub(crate) fn hex_lower(bytes: &[u8]) -> String {    use std::fmt::Write as _;
+pub(crate) fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
 
     let mut output = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
@@ -485,8 +494,8 @@ pub(crate) fn hex_lower(bytes: &[u8]) -> String {    use std::fmt::Write as _;
     output
 }
 
-
-pub(crate) async fn configure_save_authorization_deadline(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn configure_save_authorization_deadline(
+    transaction: &mut Transaction<'_, Postgres>,
     operation_timeout: Duration,
 ) -> Result<(), ProjectHttpError> {
     let millis = operation_timeout
@@ -505,8 +514,8 @@ pub(crate) async fn configure_save_authorization_deadline(    transaction: &mut 
     Ok(())
 }
 
-
-pub(crate) fn map_save_authorization_query(error: sqlx::Error) -> ProjectHttpError {    if error
+pub(crate) fn map_save_authorization_query(error: sqlx::Error) -> ProjectHttpError {
+    if error
         .as_database_error()
         .and_then(sqlx::error::DatabaseError::code)
         .is_some_and(|code| matches!(code.as_ref(), "57014" | "55P03"))
@@ -517,8 +526,8 @@ pub(crate) fn map_save_authorization_query(error: sqlx::Error) -> ProjectHttpErr
     }
 }
 
-
-pub(crate) fn map_version_error(error: ProjectVersionError) -> ProjectHttpError {    match error {
+pub(crate) fn map_version_error(error: ProjectVersionError) -> ProjectHttpError {
+    match error {
         ProjectVersionError::InvalidInput => ProjectHttpError::InvalidInput,
         ProjectVersionError::NotFound => ProjectHttpError::NotFound,
         ProjectVersionError::Forbidden => ProjectHttpError::Forbidden,
@@ -534,8 +543,8 @@ pub(crate) fn map_version_error(error: ProjectVersionError) -> ProjectHttpError 
     }
 }
 
-
-pub(crate) fn map_history_error(error: ProjectHistoryError) -> ProjectHttpError {    match error {
+pub(crate) fn map_history_error(error: ProjectHistoryError) -> ProjectHttpError {
+    match error {
         ProjectHistoryError::InvalidInput => ProjectHttpError::InvalidInput,
         ProjectHistoryError::NotFound => ProjectHttpError::NotFound,
         ProjectHistoryError::Forbidden => ProjectHttpError::Forbidden,
@@ -551,8 +560,8 @@ pub(crate) fn map_history_error(error: ProjectHistoryError) -> ProjectHttpError 
     }
 }
 
-
-pub(crate) fn map_session_error(error: SessionServiceError) -> ProjectHttpError {    match error {
+pub(crate) fn map_session_error(error: SessionServiceError) -> ProjectHttpError {
+    match error {
         SessionServiceError::InvalidToken | SessionServiceError::UserUnavailable => {
             ProjectHttpError::AuthenticationFailed
         }
@@ -562,8 +571,8 @@ pub(crate) fn map_session_error(error: SessionServiceError) -> ProjectHttpError 
     }
 }
 
-
-pub(crate) fn map_access_token_error(error: AccessTokenServiceError) -> ProjectHttpError {    match error {
+pub(crate) fn map_access_token_error(error: AccessTokenServiceError) -> ProjectHttpError {
+    match error {
         AccessTokenServiceError::AuthenticationFailed => ProjectHttpError::AuthenticationFailed,
         AccessTokenServiceError::Forbidden => ProjectHttpError::Forbidden,
         AccessTokenServiceError::RateLimited => ProjectHttpError::RateLimited,
@@ -573,8 +582,8 @@ pub(crate) fn map_access_token_error(error: AccessTokenServiceError) -> ProjectH
     }
 }
 
-
-pub(crate) fn map_browser_error(error: BrowserCookieError) -> ProjectHttpError {    match error {
+pub(crate) fn map_browser_error(error: BrowserCookieError) -> ProjectHttpError {
+    match error {
         BrowserCookieError::MissingSessionCookie | BrowserCookieError::InvalidSessionCookie => {
             ProjectHttpError::AuthenticationFailed
         }
@@ -582,7 +591,8 @@ pub(crate) fn map_browser_error(error: BrowserCookieError) -> ProjectHttpError {
     }
 }
 
-pub(crate) fn map_project_error(error: ProjectServiceError) -> ProjectHttpError {    match error {
+pub(crate) fn map_project_error(error: ProjectServiceError) -> ProjectHttpError {
+    match error {
         ProjectServiceError::InvalidInput => ProjectHttpError::InvalidInput,
         ProjectServiceError::NotFound => ProjectHttpError::NotFound,
         ProjectServiceError::Unauthorized
@@ -602,8 +612,8 @@ pub(crate) fn map_project_error(error: ProjectServiceError) -> ProjectHttpError 
     }
 }
 
-
-pub(crate) fn map_content_error(error: ContentError) -> ProjectHttpError {    match error {
+pub(crate) fn map_content_error(error: ContentError) -> ProjectHttpError {
+    match error {
         ContentError::InvalidInput => ProjectHttpError::InvalidInput,
         // Read endpoints preserve the Project GET enumeration boundary: an
         // authenticated non-member cannot distinguish a private Project from

@@ -1,5 +1,8 @@
+/// Per-process resource ownership.
 pub mod resources;
+/// Process identifiers and lifecycle states.
 pub mod state;
+/// Process table that owns lifecycle transitions.
 pub mod table;
 
 pub use state::{

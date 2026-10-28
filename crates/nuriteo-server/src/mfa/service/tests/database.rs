@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::rfc6238::*;
-use super::challenge_replay::*;
 use super::super::*;
-
+use super::challenge_replay::*;
+use super::rfc6238::*;
+use super::*;
 
 use std::env;
 
@@ -17,11 +16,9 @@ use std::path::Path;
 
 use std::time::Instant;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -33,12 +30,11 @@ use crate::identity::{BrowserMethod, BrowserRequestHeaders, acquire_mfa_populati
 
 use crate::instance_settings::InstanceSettingsRepository;
 
+use super::{NoFiles, TestEnvironment};
 use crate::mfa::MfaHttpService;
-use super::{TestEnvironment, NoFiles};
 
-
-
-pub(crate) async fn assert_population_lock_fences_phantoms(    pool: &DatabasePool,
+pub(crate) async fn assert_population_lock_fences_phantoms(
+    pool: &DatabasePool,
     http: &MfaHttpService,
     token: &str,
 ) {
@@ -139,8 +135,8 @@ pub(crate) async fn assert_population_lock_fences_phantoms(    pool: &DatabasePo
     }
 }
 
-
-pub(crate) async fn apply_policy_for_test(    http: MfaHttpService,
+pub(crate) async fn apply_policy_for_test(
+    http: MfaHttpService,
     token: String,
     population_proof: String,
     correlation_id: &'static str,
@@ -166,12 +162,12 @@ pub(crate) async fn apply_policy_for_test(    http: MfaHttpService,
     .await
 }
 
-
-pub(crate) async fn wait_until_blocked(pool: &DatabasePool, blocker_pid: i32) {    wait_until_blocked_count(pool, blocker_pid, 1).await;
+pub(crate) async fn wait_until_blocked(pool: &DatabasePool, blocker_pid: i32) {
+    wait_until_blocked_count(pool, blocker_pid, 1).await;
 }
 
-
-pub(crate) async fn wait_until_blocked_count(pool: &DatabasePool, blocker_pid: i32, expected: i64) {    tokio::time::timeout(Duration::from_secs(3), async {
+pub(crate) async fn wait_until_blocked_count(pool: &DatabasePool, blocker_pid: i32, expected: i64) {
+    tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let blocked: i64 = sqlx::query_scalar(
                 "SELECT count(*) FROM pg_stat_activity activity
@@ -193,30 +189,30 @@ pub(crate) async fn wait_until_blocked_count(pool: &DatabasePool, blocker_pid: i
     .expect("MFA contender must block on the canonical population/User lock");
 }
 
-
-pub(crate) async fn restore_local_user(pool: &DatabasePool, user_id: UserId) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn restore_local_user(pool: &DatabasePool, user_id: UserId) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut tx = connection.begin().await.unwrap();
     restore_local_user_status_in(&mut tx, user_id).await;
     insert_local_credential_in(&mut tx, user_id).await;
     tx.commit().await.unwrap();
 }
 
-
-pub(crate) async fn restore_local_user_status(pool: &DatabasePool, user_id: UserId) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn restore_local_user_status(pool: &DatabasePool, user_id: UserId) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut tx = connection.begin().await.unwrap();
     restore_local_user_status_in(&mut tx, user_id).await;
     tx.commit().await.unwrap();
 }
 
-
-pub(crate) async fn restore_local_credential(pool: &DatabasePool, user_id: UserId) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn restore_local_credential(pool: &DatabasePool, user_id: UserId) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut tx = connection.begin().await.unwrap();
     insert_local_credential_in(&mut tx, user_id).await;
     tx.commit().await.unwrap();
 }
 
-
-pub(crate) async fn restore_local_user_status_in(    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+pub(crate) async fn restore_local_user_status_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: UserId,
 ) {
     sqlx::query(
@@ -229,8 +225,8 @@ pub(crate) async fn restore_local_user_status_in(    tx: &mut sqlx::Transaction<
     .unwrap();
 }
 
-
-pub(crate) async fn insert_local_credential_in(    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+pub(crate) async fn insert_local_credential_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     user_id: UserId,
 ) {
     sqlx::query(
@@ -243,8 +239,8 @@ pub(crate) async fn insert_local_credential_in(    tx: &mut sqlx::Transaction<'_
     .unwrap();
 }
 
-
-pub(crate) async fn install_rejecting_audit_trigger(pool: &DatabasePool) {    sqlx::raw_sql(
+pub(crate) async fn install_rejecting_audit_trigger(pool: &DatabasePool) {
+    sqlx::raw_sql(
         "CREATE FUNCTION reject_mfa_reset_audit() RETURNS trigger LANGUAGE plpgsql AS $$
          BEGIN IF NEW.action_code='mfa.admin_reset' THEN RAISE EXCEPTION 'fixture audit failure';
          END IF; RETURN NEW; END $$;
@@ -256,8 +252,8 @@ pub(crate) async fn install_rejecting_audit_trigger(pool: &DatabasePool) {    sq
     .unwrap();
 }
 
-
-pub(crate) async fn remove_rejecting_audit_trigger(pool: &DatabasePool) {    sqlx::raw_sql(
+pub(crate) async fn remove_rejecting_audit_trigger(pool: &DatabasePool) {
+    sqlx::raw_sql(
         "DROP TRIGGER reject_mfa_reset_audit ON audit_events;
          DROP FUNCTION reject_mfa_reset_audit();",
     )
@@ -266,15 +262,15 @@ pub(crate) async fn remove_rejecting_audit_trigger(pool: &DatabasePool) {    sql
     .unwrap();
 }
 
-
-pub(crate) async fn database_time(pool: &DatabasePool) -> OffsetDateTime {    sqlx::query_scalar("SELECT CURRENT_TIMESTAMP")
+pub(crate) async fn database_time(pool: &DatabasePool) -> OffsetDateTime {
+    sqlx::query_scalar("SELECT CURRENT_TIMESTAMP")
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) fn keyring(key: [u8; 32]) -> MasterKeyring {    MasterKeyring::load(
+pub(crate) fn keyring(key: [u8; 32]) -> MasterKeyring {
+    MasterKeyring::load(
         &TestEnvironment(vec![
             (
                 "NURITEO_MASTER_KEY".into(),
@@ -287,20 +283,20 @@ pub(crate) fn keyring(key: [u8; 32]) -> MasterKeyring {    MasterKeyring::load(
     .unwrap()
 }
 
-
-impl Environment for TestEnvironment { fn entries(&self) -> Vec<(OsString, OsString)> {
+impl Environment for TestEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
         self.0.clone()
     }
 }
 
-
-impl FileReader for NoFiles { fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+impl FileReader for NoFiles {
+    fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
         Err(io::ErrorKind::NotFound.into())
     }
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let tls = DatabaseTlsConfig::verify_full(
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let tls = DatabaseTlsConfig::verify_full(
         None,
         Some(fs::read(env::var("NURITEO_TEST_DATABASE_CA").unwrap()).unwrap()),
         None,
@@ -321,16 +317,16 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let tls = DatabaseTlsCon
     .unwrap()
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
         .execute(&mut *connection)
         .await
         .unwrap();
 }
 
-
-pub(crate) async fn prepare_fixture(pool: &DatabasePool) {    reset_fixture(pool).await;
+pub(crate) async fn prepare_fixture(pool: &DatabasePool) {
+    reset_fixture(pool).await;
     let report = run_embedded_migrations(
         pool,
         MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
@@ -345,4 +341,3 @@ pub(crate) async fn prepare_fixture(pool: &DatabasePool) {    reset_fixture(pool
         .unwrap();
     seed_users(pool).await;
 }
-

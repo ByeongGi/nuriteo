@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::console_requests::*;
+use super::*;
 use axum::Json;
 
 use axum::body::{Body, to_bytes};
@@ -27,7 +27,6 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::audit::AuditEventId;
 
 use crate::http::{FieldViolation, HttpError, RequestId};
@@ -35,7 +34,6 @@ use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 
 use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
-
 
 use super::super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
@@ -46,9 +44,15 @@ use super::super::{
     AdminStatusView, AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
     AdminUpdateReadinessView,
 };
-use super::{SETTINGS, SETTING, SETTING_IMPACT, POLICY_CLEANUP_PREVIEW, STATUS, OPERATIONS, SUPPORT_BUNDLE, AUDIT_EVENTS, AUDIT_EVENT, AUDIT_EXPORT, AUDIT_RETENTION_PREVIEW, AUDIT_RETENTION_PRUNE, UPDATE_READINESS, UPDATE_HISTORY, UPDATE_APPROVAL, MAINTENANCE, BACKUPS, BACKUP_POLICY, BACKUP_OPERATIONS, MAX_BODY_BYTES, ORIGIN, CSRF, BackupOperationsQuery, UpdateSettingRequest, PolicyImpactRequest, PolicyCleanupPreviewQuery, UpdateHistoryQuery, AuditFilterRequest, AuditExportRequest, AuditRetentionPreviewQuery, AuditRetentionPruneRequest, UpdateApprovalRequest, MaintenanceRequest, BrowserHeaders};
-
-
+use super::{
+    AUDIT_EVENT, AUDIT_EVENTS, AUDIT_EXPORT, AUDIT_RETENTION_PREVIEW, AUDIT_RETENTION_PRUNE,
+    AuditExportRequest, AuditFilterRequest, AuditRetentionPreviewQuery, AuditRetentionPruneRequest,
+    BACKUP_OPERATIONS, BACKUP_POLICY, BACKUPS, BackupOperationsQuery, BrowserHeaders, CSRF,
+    MAINTENANCE, MAX_BODY_BYTES, MaintenanceRequest, OPERATIONS, ORIGIN, POLICY_CLEANUP_PREVIEW,
+    PolicyCleanupPreviewQuery, PolicyImpactRequest, SETTING, SETTING_IMPACT, SETTINGS, STATUS,
+    SUPPORT_BUNDLE, UPDATE_APPROVAL, UPDATE_HISTORY, UPDATE_READINESS, UpdateApprovalRequest,
+    UpdateHistoryQuery, UpdateSettingRequest,
+};
 
 pub(crate) fn openapi_router(
     document: utoipa::openapi::OpenApi,
@@ -75,7 +79,6 @@ pub(crate) fn openapi_router(
         .routes(routes!(list_backup_operations, enqueue_backup_operation))
 }
 
-
 #[utoipa::path(
     get,
     path = BACKUPS,
@@ -88,7 +91,8 @@ pub(crate) fn openapi_router(
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn backup_console(    State(service): State<AdminHttpService>,
+pub(crate) async fn backup_console(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -99,7 +103,6 @@ pub(crate) async fn backup_console(    State(service): State<AdminHttpService>,
         .map_err(|error| map_error(error, request_id.clone(), BACKUPS))?;
     backup_response(view, request_id, BACKUPS)
 }
-
 
 #[utoipa::path(
     put,
@@ -117,7 +120,8 @@ pub(crate) async fn backup_console(    State(service): State<AdminHttpService>,
         (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn update_backup_policy(    State(service): State<AdminHttpService>,
+pub(crate) async fn update_backup_policy(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -143,7 +147,6 @@ pub(crate) async fn update_backup_policy(    State(service): State<AdminHttpServ
     backup_response(view, request_id, BACKUP_POLICY)
 }
 
-
 #[utoipa::path(
     post,
     path = BACKUP_OPERATIONS,
@@ -160,7 +163,8 @@ pub(crate) async fn update_backup_policy(    State(service): State<AdminHttpServ
         (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn enqueue_backup_operation(    State(service): State<AdminHttpService>,
+pub(crate) async fn enqueue_backup_operation(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -181,7 +185,6 @@ pub(crate) async fn enqueue_backup_operation(    State(service): State<AdminHttp
     Ok(response)
 }
 
-
 #[utoipa::path(
     get,
     path = BACKUP_OPERATIONS,
@@ -196,7 +199,8 @@ pub(crate) async fn enqueue_backup_operation(    State(service): State<AdminHttp
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn list_backup_operations(    State(service): State<AdminHttpService>,
+pub(crate) async fn list_backup_operations(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     Query(query): Query<BackupOperationsQuery>,
     request: Request,
@@ -220,7 +224,6 @@ pub(crate) async fn list_backup_operations(    State(service): State<AdminHttpSe
     Ok(private_no_store(Json(view).into_response()))
 }
 
-
 #[utoipa::path(
     get,
     path = MAINTENANCE,
@@ -233,7 +236,8 @@ pub(crate) async fn list_backup_operations(    State(service): State<AdminHttpSe
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn maintenance_status(    State(service): State<AdminHttpService>,
+pub(crate) async fn maintenance_status(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -244,7 +248,6 @@ pub(crate) async fn maintenance_status(    State(service): State<AdminHttpServic
         .map_err(|error| map_error(error, request_id, MAINTENANCE))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     put,
@@ -263,7 +266,8 @@ pub(crate) async fn maintenance_status(    State(service): State<AdminHttpServic
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn set_maintenance(    State(service): State<AdminHttpService>,
+pub(crate) async fn set_maintenance(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -282,7 +286,6 @@ pub(crate) async fn set_maintenance(    State(service): State<AdminHttpService>,
     Ok(private_no_store(Json(view).into_response()))
 }
 
-
 #[utoipa::path(
     get,
     path = UPDATE_READINESS,
@@ -296,7 +299,8 @@ pub(crate) async fn set_maintenance(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn update_readiness(    State(service): State<AdminHttpService>,
+pub(crate) async fn update_readiness(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -307,7 +311,6 @@ pub(crate) async fn update_readiness(    State(service): State<AdminHttpService>
         .map_err(|error| map_error(error, request_id, UPDATE_READINESS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -323,7 +326,8 @@ pub(crate) async fn update_readiness(    State(service): State<AdminHttpService>
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn update_history(    State(service): State<AdminHttpService>,
+pub(crate) async fn update_history(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -345,7 +349,6 @@ pub(crate) async fn update_history(    State(service): State<AdminHttpService>,
     Ok(private_no_store(Json(view).into_response()))
 }
 
-
 #[utoipa::path(
     post,
     path = UPDATE_APPROVAL,
@@ -364,7 +367,8 @@ pub(crate) async fn update_history(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn approve_update(    State(service): State<AdminHttpService>,
+pub(crate) async fn approve_update(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -386,7 +390,6 @@ pub(crate) async fn approve_update(    State(service): State<AdminHttpService>,
     Ok(response)
 }
 
-
 #[utoipa::path(
     get,
     path = SETTINGS,
@@ -400,7 +403,8 @@ pub(crate) async fn approve_update(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn list_settings(    State(service): State<AdminHttpService>,
+pub(crate) async fn list_settings(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -411,7 +415,6 @@ pub(crate) async fn list_settings(    State(service): State<AdminHttpService>,
         .map_err(|error| map_error(error, request_id, SETTINGS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     patch,
@@ -438,7 +441,8 @@ pub(crate) async fn list_settings(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn update_setting(    State(service): State<AdminHttpService>,
+pub(crate) async fn update_setting(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(key): Path<String>,
     request: Request,
@@ -460,7 +464,6 @@ pub(crate) async fn update_setting(    State(service): State<AdminHttpService>,
     setting_response(view, request_id, SETTING)
 }
 
-
 #[utoipa::path(
     post,
     path = SETTING_IMPACT,
@@ -478,7 +481,8 @@ pub(crate) async fn update_setting(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn preview_policy_change(    State(service): State<AdminHttpService>,
+pub(crate) async fn preview_policy_change(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(key): Path<String>,
     request: Request,
@@ -493,7 +497,6 @@ pub(crate) async fn preview_policy_change(    State(service): State<AdminHttpSer
         .map_err(|error| map_error(error, request_id, SETTING_IMPACT))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -510,7 +513,8 @@ pub(crate) async fn preview_policy_change(    State(service): State<AdminHttpSer
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn preview_policy_cleanup(    State(service): State<AdminHttpService>,
+pub(crate) async fn preview_policy_cleanup(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     Query(query): Query<PolicyCleanupPreviewQuery>,
     request: Request,
@@ -526,7 +530,6 @@ pub(crate) async fn preview_policy_cleanup(    State(service): State<AdminHttpSe
     Ok(private_no_store(Json(view).into_response()))
 }
 
-
 #[utoipa::path(
     get,
     path = STATUS,
@@ -540,7 +543,8 @@ pub(crate) async fn preview_policy_cleanup(    State(service): State<AdminHttpSe
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn admin_status(    State(service): State<AdminHttpService>,
+pub(crate) async fn admin_status(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -551,7 +555,6 @@ pub(crate) async fn admin_status(    State(service): State<AdminHttpService>,
         .map_err(|error| map_error(error, request_id, STATUS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -566,7 +569,8 @@ pub(crate) async fn admin_status(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn admin_operations(    State(service): State<AdminHttpService>,
+pub(crate) async fn admin_operations(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -577,7 +581,6 @@ pub(crate) async fn admin_operations(    State(service): State<AdminHttpService>
         .map_err(|error| map_error(error, request_id, OPERATIONS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -592,7 +595,8 @@ pub(crate) async fn admin_operations(    State(service): State<AdminHttpService>
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn support_bundle(    State(service): State<AdminHttpService>,
+pub(crate) async fn support_bundle(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -603,7 +607,6 @@ pub(crate) async fn support_bundle(    State(service): State<AdminHttpService>,
         .map_err(|error| map_error(error, request_id, SUPPORT_BUNDLE))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -633,7 +636,8 @@ pub(crate) async fn support_bundle(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn list_audit_events(    State(service): State<AdminHttpService>,
+pub(crate) async fn list_audit_events(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -646,7 +650,6 @@ pub(crate) async fn list_audit_events(    State(service): State<AdminHttpService
         .map_err(|error| map_error(error, request_id, AUDIT_EVENTS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get,
@@ -663,7 +666,8 @@ pub(crate) async fn list_audit_events(    State(service): State<AdminHttpService
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn get_audit_event(    State(service): State<AdminHttpService>,
+pub(crate) async fn get_audit_event(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(event_id): Path<String>,
     request: Request,
@@ -678,7 +682,6 @@ pub(crate) async fn get_audit_event(    State(service): State<AdminHttpService>,
         .map_err(|error| map_error(error, request_id, AUDIT_EVENT))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     post,
@@ -704,7 +707,8 @@ pub(crate) async fn get_audit_event(    State(service): State<AdminHttpService>,
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn export_audit_events(    State(service): State<AdminHttpService>,
+pub(crate) async fn export_audit_events(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -727,7 +731,6 @@ pub(crate) async fn export_audit_events(    State(service): State<AdminHttpServi
     export_response(export, request_id)
 }
 
-
 #[utoipa::path(
     get,
     path = AUDIT_RETENTION_PREVIEW,
@@ -743,7 +746,8 @@ pub(crate) async fn export_audit_events(    State(service): State<AdminHttpServi
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn preview_audit_retention(    State(service): State<AdminHttpService>,
+pub(crate) async fn preview_audit_retention(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {
@@ -770,7 +774,6 @@ pub(crate) async fn preview_audit_retention(    State(service): State<AdminHttpS
     Ok(private_no_store(Json(view).into_response()))
 }
 
-
 #[utoipa::path(
     post,
     path = AUDIT_RETENTION_PRUNE,
@@ -788,7 +791,8 @@ pub(crate) async fn preview_audit_retention(    State(service): State<AdminHttpS
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn prune_audit_retention(    State(service): State<AdminHttpService>,
+pub(crate) async fn prune_audit_retention(
+    State(service): State<AdminHttpService>,
     Extension(request_id): Extension<RequestId>,
     request: Request,
 ) -> Result<Response, HttpError> {

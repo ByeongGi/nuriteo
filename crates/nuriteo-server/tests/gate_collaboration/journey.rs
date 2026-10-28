@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::stack::*;
+use super::*;
 
 use std::ffi::OsString;
 
@@ -15,7 +15,6 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread::{self, JoinHandle};
 
 use std::time::{Duration, Instant};
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -40,14 +39,19 @@ use reqwest::{Client, Method, Response, StatusCode};
 
 use serde_json::{Value, json};
 
+use super::{
+    ACCESS_KEY, BOOTSTRAP_PASSWORD, BOOTSTRAP_PASSWORD_FILE_ENV, BUCKET, Browser,
+    CapturedProcessOutput, CapturedStream, ChildGuard, DATABASE_CA_ENV, DATABASE_URL_ENV,
+    GATE_PROJECT_RUNTIME_BROWSER_ENV, INVITEE_PASSWORD, MAX_PROCESS_OUTPUT_BYTES,
+    NODE_EXECUTABLE_ENV, S3_CA_ENV, S3_ENDPOINT_ENV, SAVE_IDEMPOTENCY_SECRET_FILE_ENV, SECRET_KEY,
+    StorageEnvironment,
+};
 use url::Url;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BOOTSTRAP_PASSWORD_FILE_ENV, SAVE_IDEMPOTENCY_SECRET_FILE_ENV, GATE_PROJECT_RUNTIME_BROWSER_ENV, NODE_EXECUTABLE_ENV, BOOTSTRAP_PASSWORD, INVITEE_PASSWORD, ACCESS_KEY, SECRET_KEY, BUCKET, MAX_PROCESS_OUTPUT_BYTES, Browser, CapturedProcessOutput, CapturedStream, ChildGuard, StorageEnvironment};
-
-
 
 #[tokio::test]
 #[ignore = "requires the GATE-002 custom-CA PostgreSQL and HTTPS RustFS fixture"]
-pub(crate) async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {    let database_url = required_env(DATABASE_URL_ENV);
+pub(crate) async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_journey() {
+    let database_url = required_env(DATABASE_URL_ENV);
     let database_ca_path = required_env(DATABASE_CA_ENV);
     let s3_endpoint = required_env(S3_ENDPOINT_ENV);
     let s3_ca_path = required_env(S3_CA_ENV);
@@ -449,10 +453,10 @@ pub(crate) async fn collaboration_gate_runs_actual_core_postgres_and_rustfs_jour
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
 #[tokio::test]
 #[ignore = "requires the GATE-003 custom-CA PostgreSQL, HTTPS RustFS, production Web build and Chromium fixture"]
-pub(crate) async fn project_runtime_gate_runs_actual_core_and_browser_journey() {    let database_url = required_env(DATABASE_URL_ENV);
+pub(crate) async fn project_runtime_gate_runs_actual_core_and_browser_journey() {
+    let database_url = required_env(DATABASE_URL_ENV);
     let database_ca_path = required_env(DATABASE_CA_ENV);
     let s3_endpoint = required_env(S3_ENDPOINT_ENV);
     let s3_ca_path = required_env(S3_CA_ENV);
@@ -557,8 +561,8 @@ pub(crate) async fn project_runtime_gate_runs_actual_core_and_browser_journey() 
     );
 }
 
-
-pub(crate) async fn login(client: &Client, base: &str, email: &str, password: &str) -> Browser {    let response = client
+pub(crate) async fn login(client: &Client, base: &str, email: &str, password: &str) -> Browser {
+    let response = client
         .post(format!("{base}/api/v1/auth/sessions"))
         .header(CONTENT_TYPE, "application/json")
         .header(ORIGIN, base)
@@ -593,8 +597,8 @@ pub(crate) async fn login(client: &Client, base: &str, email: &str, password: &s
     }
 }
 
-
-pub(crate) async fn get_json(client: &Client, base: &str, path: &str, browser: &Browser) -> Value {    let response = client
+pub(crate) async fn get_json(client: &Client, base: &str, path: &str, browser: &Browser) -> Value {
+    let response = client
         .get(format!("{base}{path}"))
         .header(COOKIE, &browser.cookie)
         .send()
@@ -604,19 +608,19 @@ pub(crate) async fn get_json(client: &Client, base: &str, path: &str, browser: &
     response_json(response).await
 }
 
-
-pub(crate) async fn workspaces(client: &Client, base: &str, browser: &Browser) -> Value {    get_json(client, base, "/api/v1/me/workspaces", browser).await
+pub(crate) async fn workspaces(client: &Client, base: &str, browser: &Browser) -> Value {
+    get_json(client, base, "/api/v1/me/workspaces", browser).await
 }
 
-
-pub(crate) fn assert_personal_only(workspaces: &Value, user_id: &str) {    let workspaces = workspaces["workspaces"].as_array().unwrap();
+pub(crate) fn assert_personal_only(workspaces: &Value, user_id: &str) {
+    let workspaces = workspaces["workspaces"].as_array().unwrap();
     assert_eq!(workspaces.len(), 1);
     assert_eq!(workspaces[0]["ownerType"], "user");
     assert_eq!(workspaces[0]["ownerId"], user_id);
 }
 
-
-pub(crate) async fn public_json(client: &Client, base: &str, path: &str, body: Value) -> Response {    client
+pub(crate) async fn public_json(client: &Client, base: &str, path: &str, body: Value) -> Response {
+    client
         .post(format!("{base}{path}"))
         .header(CONTENT_TYPE, "application/json")
         .header(ORIGIN, base)
@@ -626,8 +630,8 @@ pub(crate) async fn public_json(client: &Client, base: &str, path: &str, body: V
         .unwrap()
 }
 
-
-pub(crate) async fn browser_json(    client: &Client,
+pub(crate) async fn browser_json(
+    client: &Client,
     base: &str,
     method: Method,
     path: &str,
@@ -651,20 +655,20 @@ pub(crate) async fn browser_json(    client: &Client,
     request.send().await.unwrap()
 }
 
-
-pub(crate) async fn response_json(response: Response) -> Value {    let bytes = response.bytes().await.unwrap();
+pub(crate) async fn response_json(response: Response) -> Value {
+    let bytes = response.bytes().await.unwrap();
     assert!(bytes.len() <= 1024 * 1024);
     serde_json::from_slice(&bytes).unwrap()
 }
 
-
-pub(crate) async fn assert_status(response: Response, expected: StatusCode) {    assert_eq!(response.status(), expected);
+pub(crate) async fn assert_status(response: Response, expected: StatusCode) {
+    assert_eq!(response.status(), expected);
     let bytes = response.bytes().await.unwrap();
     assert!(bytes.len() <= 1024 * 1024);
 }
 
-
-pub(crate) async fn assert_safe_problem(response: Response, expected: StatusCode) {    assert_eq!(response.status(), expected);
+pub(crate) async fn assert_safe_problem(response: Response, expected: StatusCode) {
+    assert_eq!(response.status(), expected);
     assert_eq!(
         response.headers()[CONTENT_TYPE]
             .to_str()
@@ -689,16 +693,16 @@ pub(crate) async fn assert_safe_problem(response: Response, expected: StatusCode
     }
 }
 
-
-pub(crate) fn query_token(url: &str) -> String {    Url::parse(url)
+pub(crate) fn query_token(url: &str) -> String {
+    Url::parse(url)
         .unwrap()
         .query_pairs()
         .find_map(|(key, value)| (key == "token").then(|| value.into_owned()))
         .unwrap()
 }
 
-
-pub(crate) fn bootstrap_admin(    database_url: &str,
+pub(crate) fn bootstrap_admin(
+    database_url: &str,
     database_ca: &str,
     password_file: &str,
     external_url: &str,
@@ -720,8 +724,8 @@ pub(crate) fn bootstrap_admin(    database_url: &str,
         .unwrap()
 }
 
-
-pub(crate) fn assert_safe_bootstrap(output: &Output, expected: &[u8]) {    assert!(
+pub(crate) fn assert_safe_bootstrap(output: &Output, expected: &[u8]) {
+    assert!(
         output.status.success(),
         "bootstrap-admin failed with {}: {}",
         output.status,
@@ -732,8 +736,8 @@ pub(crate) fn assert_safe_bootstrap(output: &Output, expected: &[u8]) {    asser
     assert_process_output_secret_free(output, &[BOOTSTRAP_PASSWORD, "postgres://", SECRET_KEY]);
 }
 
-
-pub(crate) fn spawn_server(    address: SocketAddr,
+pub(crate) fn spawn_server(
+    address: SocketAddr,
     database_url: &str,
     database_ca: &str,
     s3_endpoint: &str,
@@ -751,8 +755,8 @@ pub(crate) fn spawn_server(    address: SocketAddr,
     )
 }
 
-
-pub(crate) fn spawn_server_with_external_url(    address: SocketAddr,
+pub(crate) fn spawn_server_with_external_url(
+    address: SocketAddr,
     external_url: &str,
     database_url: &str,
     database_ca: &str,

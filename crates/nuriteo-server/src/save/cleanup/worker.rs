@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::backend::*;
 use super::jobs::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::future::Future;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use sqlx::{Acquire, Postgres, Transaction};
 
@@ -20,7 +19,6 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{self, Instant};
 
 use uuid::Uuid;
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -37,12 +35,17 @@ use crate::project::{
 
 use crate::quota::{QuotaRepository, SaveSessionId};
 
+use super::{
+    AbortSaveSession, AbortSaveSessionResult, CanonicalMaterializationDisposition, ClaimedJob,
+    CleanupBackend, CleanupBackendOutcome, CleanupError, CleanupKind, CleanupService,
+    CleanupTarget, CleanupWorker, CleanupWorkerPolicy, Deadline, ExpirySweepReport, MAX_ATTEMPTS,
+    MAX_BATCH_SIZE, MAX_CONCURRENCY, ReconcilePreparation, SQL_TIMEOUT_MARGIN, WorkerShutdown,
+    canonical_materialization_disposition,
+};
 use crate::workspace::StorageScopeId;
-use super::{MAX_BATCH_SIZE, MAX_CONCURRENCY, MAX_ATTEMPTS, SQL_TIMEOUT_MARGIN, CleanupWorkerPolicy, CleanupError, AbortSaveSession, AbortSaveSessionResult, ExpirySweepReport, WorkerShutdown, CleanupService, CleanupBackend, CleanupTarget, CleanupKind, CleanupBackendOutcome, CanonicalMaterializationDisposition, canonical_materialization_disposition, CleanupWorker, ClaimedJob, ReconcilePreparation, Deadline};
 
-
-
-impl<B: CleanupBackend> super::CleanupService<B> {    #[must_use]
+impl<B: CleanupBackend> super::CleanupService<B> {
+    #[must_use]
     pub const fn new(pool: DatabasePool, backend: B, policy: CleanupWorkerPolicy) -> Self {
         Self {
             pool,
@@ -231,7 +234,10 @@ impl<B: CleanupBackend> super::CleanupService<B> {    #[must_use]
         let join = tokio::spawn(async move { service.worker_loop(receiver).await });
         CleanupWorker { cancel, join }
     }
-    pub(crate) async fn worker_loop(&self, mut cancel: watch::Receiver<bool>) -> Result<(), CleanupError> {
+    pub(crate) async fn worker_loop(
+        &self,
+        mut cancel: watch::Receiver<bool>,
+    ) -> Result<(), CleanupError> {
         let owner = Uuid::now_v7();
         loop {
             if *cancel.borrow() {
@@ -429,7 +435,11 @@ impl<B: CleanupBackend> super::CleanupService<B> {    #[must_use]
         }
         Ok(())
     }
-    pub(crate) async fn process_job(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+    pub(crate) async fn process_job(
+        &self,
+        owner: Uuid,
+        job: ClaimedJob,
+    ) -> Result<(), CleanupError> {
         if job.target.kind == CleanupKind::MultipartReconcile
             && self.prepare_reconcile(owner, &job).await? == ReconcilePreparation::StaleReady
         {

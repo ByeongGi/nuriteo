@@ -1,15 +1,15 @@
 #![allow(unused_imports)]
-use super::*;
-use super::verifier::*;
-use super::working_head::*;
-use super::save_http::*;
-use super::relay_multipart::*;
-use super::relay_streams::*;
-use super::versions::*;
-use super::history::*;
 use super::admission::*;
 use super::fake_store::*;
+use super::history::*;
 use super::postgres_bucket::*;
+use super::relay_multipart::*;
+use super::relay_streams::*;
+use super::save_http::*;
+use super::verifier::*;
+use super::versions::*;
+use super::working_head::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -23,7 +23,6 @@ use std::str::FromStr;
 use std::task::Poll;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -120,12 +119,22 @@ use tower::ServiceExt as _;
 
 use url::Url;
 
+use super::{
+    ACCESS_KEY, AbortBehavior, AttachFailureStore, BUCKET, BoundedFrameBody, CapturedLogWriter,
+    DATABASE_CA_ENV, DATABASE_URL_ENV, FailingPresigner, FixtureEnvironment, GatedFrameBody,
+    HangingPresigner, LostCompleteStore, NeverReadBody, ORG, ORG_MEMBER, ORG_OWNER,
+    ORG_PROJECT_MEMBER, ORG_PROJECT_MULTI_ARCHIVE, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_OUTSIDER,
+    ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_READ, ORG_SCOPE, ORG_WRITE,
+    OUTSIDER, ObservedFrameBody, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_HISTORY_LEFT,
+    PROJECT_HISTORY_RIGHT, PROJECT_LEASE_ABORT, PROJECT_LEASE_CLOCK, PROJECT_LEASE_COMPLETE,
+    PROJECT_LEASE_EXPIRE, PROJECT_MULTI_EXPIRY, PROJECT_TIMEOUT, PersistedRelaySecretRow,
+    RelayMultipartFixture, S3_CA_ENV, S3_ENDPOINT_ENV, SCOPE, SECRET_KEY, TEST_PASSWORD,
+    TEST_PASSWORD_HASH, USER, VersionBrowser, WEB_ORIGIN,
+};
 use uuid::Uuid;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BUCKET, ACCESS_KEY, SECRET_KEY, WEB_ORIGIN, TEST_PASSWORD, TEST_PASSWORD_HASH, USER, SCOPE, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_TIMEOUT, PROJECT_LEASE_ABORT, PROJECT_LEASE_EXPIRE, PROJECT_LEASE_COMPLETE, PROJECT_MULTI_EXPIRY, PROJECT_LEASE_CLOCK, PROJECT_HISTORY_LEFT, PROJECT_HISTORY_RIGHT, OUTSIDER, ORG_OWNER, ORG_READ, ORG_WRITE, ORG_MEMBER, ORG_SCOPE, ORG, ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_PROJECT_MEMBER, ORG_PROJECT_OUTSIDER, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_MULTI_ARCHIVE, PersistedRelaySecretRow, FixtureEnvironment, AbortBehavior, AttachFailureStore, LostCompleteStore, FailingPresigner, HangingPresigner, VersionBrowser, RelayMultipartFixture, CapturedLogWriter, NeverReadBody, BoundedFrameBody, ObservedFrameBody, GatedFrameBody};
 
-
-
-pub(crate) async fn version_login(router: &Router, email: &str) -> VersionBrowser {    let response = router
+pub(crate) async fn version_login(router: &Router, email: &str) -> VersionBrowser {
+    let response = router
         .clone()
         .oneshot(
             Request::builder()
@@ -170,8 +179,8 @@ pub(crate) async fn version_login(router: &Router, email: &str) -> VersionBrowse
     }
 }
 
-
-pub(crate) async fn version_json_request(    router: &Router,
+pub(crate) async fn version_json_request(
+    router: &Router,
     browser: &VersionBrowser,
     method: Method,
     uri: &str,
@@ -203,8 +212,8 @@ pub(crate) async fn version_json_request(    router: &Router,
         .unwrap()
 }
 
-
-pub(crate) async fn version_empty_request(    router: &Router,
+pub(crate) async fn version_empty_request(
+    router: &Router,
     browser: &VersionBrowser,
     uri: &str,
 ) -> Response<Body> {
@@ -224,8 +233,8 @@ pub(crate) async fn version_empty_request(    router: &Router,
         .unwrap()
 }
 
-
-pub(crate) async fn version_empty_mutation(    router: &Router,
+pub(crate) async fn version_empty_mutation(
+    router: &Router,
     browser: &VersionBrowser,
     method: Method,
     uri: &str,
@@ -246,8 +255,8 @@ pub(crate) async fn version_empty_mutation(    router: &Router,
         .unwrap()
 }
 
-
-pub(crate) async fn create_relay_single_session(    router: &Router,
+pub(crate) async fn create_relay_single_session(
+    router: &Router,
     browser: &VersionBrowser,
     project_id: &str,
     idempotency_key: &str,
@@ -276,8 +285,8 @@ pub(crate) async fn create_relay_single_session(    router: &Router,
     (version_response_json(response).await, bundle, collection)
 }
 
-
-pub(crate) async fn create_organization_relay_session(    router: &Router,
+pub(crate) async fn create_organization_relay_session(
+    router: &Router,
     browser: &VersionBrowser,
     project_id: &str,
     idempotency_key: &str,
@@ -306,8 +315,8 @@ pub(crate) async fn create_organization_relay_session(    router: &Router,
     version_response_json(response).await
 }
 
-
-pub(crate) async fn create_relay_multipart_session(    router: &Router,
+pub(crate) async fn create_relay_multipart_session(
+    router: &Router,
     browser: &VersionBrowser,
     owner_type: &str,
     owner_id: &str,
@@ -386,12 +395,12 @@ pub(crate) async fn create_relay_multipart_session(    router: &Router,
     }
 }
 
-
-pub(crate) async fn version_response_json(response: Response<Body>) -> Value {    serde_json::from_slice(&to_bytes(response.into_body(), 256 * 1024).await.unwrap()).unwrap()
+pub(crate) async fn version_response_json(response: Response<Body>) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), 256 * 1024).await.unwrap()).unwrap()
 }
 
-
-pub(crate) fn relay_put_request(    capability: &Value,
+pub(crate) fn relay_put_request(
+    capability: &Value,
     browser: &VersionBrowser,
     body: Body,
     length_override: Option<u64>,
@@ -421,8 +430,8 @@ pub(crate) fn relay_put_request(    capability: &Value,
     builder.body(body).unwrap()
 }
 
-
-pub(crate) async fn relay_put_over_http(    address: std::net::SocketAddr,
+pub(crate) async fn relay_put_over_http(
+    address: std::net::SocketAddr,
     capability: &Value,
     browser: &VersionBrowser,
     body: &[u8],
@@ -450,8 +459,8 @@ pub(crate) async fn relay_put_over_http(    address: std::net::SocketAddr,
     StatusCode::from_u16(response.status().as_u16()).unwrap()
 }
 
-
-pub(crate) async fn download_current_content(    router: &Router,
+pub(crate) async fn download_current_content(
+    router: &Router,
     browser: &VersionBrowser,
     project_id: &str,
     maximum: usize,
@@ -484,8 +493,8 @@ pub(crate) async fn download_current_content(    router: &Router,
         .to_vec()
 }
 
-
-pub(crate) fn assert_relay_projection_is_private(value: &Value, prohibited: &[&str]) {    let serialized = value.to_string();
+pub(crate) fn assert_relay_projection_is_private(value: &Value, prohibited: &[&str]) {
+    let serialized = value.to_string();
     for prohibited in prohibited {
         assert!(
             !serialized.contains(prohibited),
@@ -494,8 +503,8 @@ pub(crate) fn assert_relay_projection_is_private(value: &Value, prohibited: &[&s
     }
 }
 
-
-pub(crate) async fn capture_private_problem(    response: Response<Body>,
+pub(crate) async fn capture_private_problem(
+    response: Response<Body>,
     expected_status: StatusCode,
     captured: &mut Vec<String>,
 ) {
@@ -515,8 +524,8 @@ pub(crate) async fn capture_private_problem(    response: Response<Body>,
     );
 }
 
-
-impl std::io::Write for CapturedLogWriter { fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+impl std::io::Write for CapturedLogWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
         self.0.lock().unwrap().extend_from_slice(buffer);
         Ok(buffer.len())
     }
@@ -526,7 +535,6 @@ impl std::io::Write for CapturedLogWriter { fn write(&mut self, buffer: &[u8]) -
     }
 }
 
-
 impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for CapturedLogWriter {
     type Writer = Self;
 
@@ -535,16 +543,16 @@ impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for CapturedLogWriter
     }
 }
 
-
-pub(crate) fn normalized_for_leak_scan(value: &str) -> String {    value
+pub(crate) fn normalized_for_leak_scan(value: &str) -> String {
+    value
         .chars()
         .filter(|character| character.is_ascii_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
 }
 
-
-pub(crate) fn assert_no_normalized_sensitive_leak(rendered: &str, sensitive: &[String]) {    let normalized = normalized_for_leak_scan(rendered);
+pub(crate) fn assert_no_normalized_sensitive_leak(rendered: &str, sensitive: &[String]) {
+    let normalized = normalized_for_leak_scan(rendered);
     for secret in sensitive {
         let candidate = normalized_for_leak_scan(secret);
         assert!(candidate.len() >= 12);
@@ -555,8 +563,8 @@ pub(crate) fn assert_no_normalized_sensitive_leak(rendered: &str, sensitive: &[S
     }
 }
 
-
-pub(crate) fn append_digest_renderings(sensitive: &mut Vec<String>, digest: &[u8]) {    sensitive.push(
+pub(crate) fn append_digest_renderings(sensitive: &mut Vec<String>, digest: &[u8]) {
+    sensitive.push(
         digest
             .iter()
             .map(|byte| format!("{byte:02x}"))
@@ -566,8 +574,8 @@ pub(crate) fn append_digest_renderings(sensitive: &mut Vec<String>, digest: &[u8
     sensitive.push(format!("{digest:?}"));
 }
 
-
-pub(crate) fn append_capability_checksums(checksums: &mut Vec<String>, capability: &Value) {    for header in capability["headers"].as_array().unwrap() {
+pub(crate) fn append_capability_checksums(checksums: &mut Vec<String>, capability: &Value) {
+    for header in capability["headers"].as_array().unwrap() {
         if header["name"]
             .as_str()
             .is_some_and(|name| name.eq_ignore_ascii_case("x-nuriteo-content-sha256"))
@@ -576,7 +584,6 @@ pub(crate) fn append_capability_checksums(checksums: &mut Vec<String>, capabilit
         }
     }
 }
-
 
 impl http_body::Body for NeverReadBody {
     type Data = Bytes;
@@ -590,8 +597,8 @@ impl http_body::Body for NeverReadBody {
     }
 }
 
-
-pub(crate) fn gated_frame_body(expected_bytes: usize) -> (tokio::sync::mpsc::Sender<Bytes>, Body) {    let (sender, receiver) = tokio::sync::mpsc::channel(1);
+pub(crate) fn gated_frame_body(expected_bytes: usize) -> (tokio::sync::mpsc::Sender<Bytes>, Body) {
+    let (sender, receiver) = tokio::sync::mpsc::channel(1);
     (
         sender,
         Body::new(GatedFrameBody {
@@ -600,7 +607,6 @@ pub(crate) fn gated_frame_body(expected_bytes: usize) -> (tokio::sync::mpsc::Sen
         }),
     )
 }
-
 
 impl http_body::Body for GatedFrameBody {
     type Data = Bytes;
@@ -625,14 +631,18 @@ impl http_body::Body for GatedFrameBody {
     }
 }
 
-
-pub(crate) async fn send_bounded_frames(sender: tokio::sync::mpsc::Sender<Bytes>, content: &[u8]) {    for frame in content.chunks(64 * 1024) {
+pub(crate) async fn send_bounded_frames(sender: tokio::sync::mpsc::Sender<Bytes>, content: &[u8]) {
+    for frame in content.chunks(64 * 1024) {
         sender.send(Bytes::copy_from_slice(frame)).await.unwrap();
     }
 }
 
-
-pub(crate) async fn wait_for_active_relay_lease(pool: &DatabasePool, session_id: &str, part_number: i16) {    tokio::time::timeout(Duration::from_secs(2), async {
+pub(crate) async fn wait_for_active_relay_lease(
+    pool: &DatabasePool,
+    session_id: &str,
+    part_number: i16,
+) {
+    tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             let active: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM save_upload_leases \
@@ -654,8 +664,8 @@ pub(crate) async fn wait_for_active_relay_lease(pool: &DatabasePool, session_id:
     .unwrap();
 }
 
-
-pub(crate) async fn assert_released_relay_generation(    pool: &DatabasePool,
+pub(crate) async fn assert_released_relay_generation(
+    pool: &DatabasePool,
     session_id: &str,
     part_number: i16,
     expected_generation: i64,
@@ -672,8 +682,8 @@ pub(crate) async fn assert_released_relay_generation(    pool: &DatabasePool,
     assert_eq!(persisted, (expected_generation, true));
 }
 
-
-pub(crate) async fn wait_for_relay_scope_lock_wait(pool: &DatabasePool) {    tokio::time::timeout(Duration::from_secs(2), async {
+pub(crate) async fn wait_for_relay_scope_lock_wait(pool: &DatabasePool) {
+    tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             let waiting: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM pg_stat_activity \
@@ -693,7 +703,6 @@ pub(crate) async fn wait_for_relay_scope_lock_wait(pool: &DatabasePool) {    tok
     .unwrap();
 }
 
-
 impl BoundedFrameBody {
     pub(crate) fn new(content: &[u8]) -> Self {
         Self {
@@ -703,16 +712,17 @@ impl BoundedFrameBody {
     }
 }
 
-
 impl ObservedFrameBody {
-    pub(crate) fn new(content: &[u8], polled: std::sync::Arc<std::sync::atomic::AtomicBool>) -> Self {
+    pub(crate) fn new(
+        content: &[u8],
+        polled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
         Self {
             body: BoundedFrameBody::new(content),
             polled,
         }
     }
 }
-
 
 impl http_body::Body for ObservedFrameBody {
     type Data = Bytes;
@@ -730,7 +740,6 @@ impl http_body::Body for ObservedFrameBody {
         self.body.size_hint()
     }
 }
-
 
 impl http_body::Body for BoundedFrameBody {
     type Data = Bytes;
@@ -758,8 +767,8 @@ impl http_body::Body for BoundedFrameBody {
     }
 }
 
-
-pub(crate) async fn reset_and_seed(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_and_seed(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("DROP SCHEMA public CASCADE")
         .await
@@ -833,16 +842,19 @@ pub(crate) async fn reset_and_seed(pool: &DatabasePool) {    let mut connection 
         ('0199ee6c-c777-7000-8000-000000008045','0199ee6c-c777-7000-8000-000000008030','0199ee6c-c777-7000-8000-000000008005','write')").await.unwrap();
 }
 
-
-pub(crate) async fn reservation_count(pool: &DatabasePool, session: String) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM storage_reservations WHERE save_session_id=$1::uuid")
+pub(crate) async fn reservation_count(pool: &DatabasePool, session: String) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM storage_reservations WHERE save_session_id=$1::uuid")
         .bind(session)
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn terminal_cleanup_state(pool: &DatabasePool, session: String) -> (String, i64, i64) {    sqlx::query_as(
+pub(crate) async fn terminal_cleanup_state(
+    pool: &DatabasePool,
+    session: String,
+) -> (String, i64, i64) {
+    sqlx::query_as(
         "SELECT state,(SELECT COUNT(*) FROM storage_reservations WHERE save_session_id=save.id),\
          (SELECT COUNT(*) FROM save_cleanup_jobs WHERE save_session_id=save.id) \
          FROM save_sessions save WHERE id=$1::uuid",
@@ -853,8 +865,12 @@ pub(crate) async fn terminal_cleanup_state(pool: &DatabasePool, session: String)
     .unwrap()
 }
 
-
-pub(crate) async fn force_session_expiry(pool: &DatabasePool, session: &str, expression: &'static str) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn force_session_expiry(
+    pool: &DatabasePool,
+    session: &str,
+    expression: &'static str,
+) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("ALTER TABLE save_sessions DISABLE TRIGGER save_sessions_update_invariants")
         .await

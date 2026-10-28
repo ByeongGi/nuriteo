@@ -1,3 +1,7 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use std::env;
 
 use std::ffi::OsString;
@@ -11,7 +15,6 @@ use std::str::FromStr;
 use std::task::Poll;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -110,7 +113,6 @@ use url::Url;
 
 use uuid::Uuid;
 
-
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -185,15 +187,12 @@ const ORG_PROJECT_MULTI_REVOKE: &str = "0199ee6c-c777-7000-8000-000000008045";
 
 const ORG_PROJECT_MULTI_ARCHIVE: &str = "0199ee6c-c777-7000-8000-000000008046";
 
-
 type PersistedRelaySecretRow = (String, Vec<u8>, Vec<u8>, Option<String>);
-
 
 struct FixtureEnvironment {
     endpoint: String,
     ca_file: String,
 }
-
 
 #[derive(Clone, Copy)]
 enum AbortBehavior {
@@ -201,7 +200,6 @@ enum AbortBehavior {
     Failed,
     Hanging,
 }
-
 
 #[derive(Clone)]
 struct AttachFailureStore {
@@ -211,18 +209,14 @@ struct AttachFailureStore {
     abort_behavior: AbortBehavior,
 }
 
-
 #[derive(Clone)]
 struct LostCompleteStore(S3ObjectStore);
-
 
 #[derive(Clone)]
 struct FailingPresigner;
 
-
 #[derive(Clone)]
 struct HangingPresigner;
-
 
 #[derive(Clone)]
 struct VersionBrowser {
@@ -230,32 +224,26 @@ struct VersionBrowser {
     csrf: String,
 }
 
-
 struct RelayMultipartFixture {
     session_id: String,
     capabilities: Vec<Value>,
     bodies: Vec<Bytes>,
 }
 
-
 #[derive(Clone)]
 struct CapturedLogWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
 
-
 struct NeverReadBody;
-
 
 struct BoundedFrameBody {
     content: Bytes,
     offset: usize,
 }
 
-
 struct ObservedFrameBody {
     body: BoundedFrameBody,
     polled: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
-
 
 struct GatedFrameBody {
     receiver: tokio::sync::mpsc::Receiver<Bytes>,

@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
-use super::remotes::*;
 use super::connection_rows::*;
+use super::remotes::*;
+use super::*;
 
 use std::any::Any;
 
@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
@@ -25,7 +24,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::database::DatabasePool;
 
@@ -47,19 +45,24 @@ use crate::quota::EffectiveQuota;
 
 use crate::workspace::StorageScopeId;
 
-
 pub(crate) use http_routes::openapi_router;
 
+use super::{
+    CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, GitCredential, GitCredentialConnection,
+    GitExecution, GitExecutionFuture, GitExecutorError, GitOperationError, GitOperationOutcome,
+    GitOperationService, GitPushExecution, GitRemoteBinding, GitRemoteExecutor, GitUpdateExecution,
+    GitWorkingHeadFuture, GitWorkingHeadPreparation, GitWorkingHeadPrepare, GitWorkingHeadStore,
+    INSTANCE_ID, INTEGRATION_TYPE, MAX_BRANCH_BYTES, MAX_CHANGED_OBJECTS, MAX_COMMIT_MESSAGE_BYTES,
+    MAX_OPERATION_TIMEOUT, MAX_TRANSFER_BYTES, MIN_OPERATION_TIMEOUT, UnavailableGitExecutor,
+    UnavailableGitWorkingHeadStore, map_executor_error, map_integration_error, map_provider_error,
+};
 pub use http_service::{GitHttpError, GitHttpService};
-use super::{INSTANCE_ID, INTEGRATION_TYPE, CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MAX_BRANCH_BYTES, MAX_COMMIT_MESSAGE_BYTES, MAX_CHANGED_OBJECTS, MAX_TRANSFER_BYTES, GitCredentialConnection, GitCredential, GitRemoteBinding, GitOperationOutcome, GitExecution, GitUpdateExecution, GitPushExecution, GitExecutionFuture, GitRemoteExecutor, GitWorkingHeadFuture, GitWorkingHeadPrepare, GitWorkingHeadPreparation, GitWorkingHeadStore, UnavailableGitWorkingHeadStore, UnavailableGitExecutor, GitExecutorError, GitOperationService, GitOperationError, map_integration_error, map_provider_error, map_executor_error};
 
-
-
-impl fmt::Debug for super::GitCredential { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for super::GitCredential {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("GitCredential([REDACTED])")
     }
 }
-
 
 impl GitCredential {
     /// Borrows the secret for the duration of one trusted transport call.
@@ -70,7 +73,6 @@ impl GitCredential {
         self.0.expose()
     }
 }
-
 
 impl GitOperationOutcome {
     pub fn new(
@@ -129,12 +131,11 @@ impl GitOperationOutcome {
     }
 }
 
-
-impl fmt::Debug for GitWorkingHeadPreparation { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for GitWorkingHeadPreparation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("GitWorkingHeadPreparation([OPAQUE])")
     }
 }
-
 
 impl GitWorkingHeadPreparation {
     pub(crate) fn new(value: impl Any + Send) -> Self {
@@ -149,8 +150,8 @@ impl GitWorkingHeadPreparation {
     }
 }
 
-
-impl GitWorkingHeadStore for UnavailableGitWorkingHeadStore { fn prepare<'a>(
+impl GitWorkingHeadStore for UnavailableGitWorkingHeadStore {
+    fn prepare<'a>(
         &'a self,
         _input: GitWorkingHeadPrepare<'a>,
     ) -> GitWorkingHeadFuture<'a, GitWorkingHeadPreparation> {
@@ -175,8 +176,8 @@ impl GitWorkingHeadStore for UnavailableGitWorkingHeadStore { fn prepare<'a>(
     }
 }
 
-
-impl GitRemoteExecutor for UnavailableGitExecutor { fn import<'a>(&'a self, _input: GitExecution<'a>) -> GitExecutionFuture<'a> {
+impl GitRemoteExecutor for UnavailableGitExecutor {
+    fn import<'a>(&'a self, _input: GitExecution<'a>) -> GitExecutionFuture<'a> {
         Box::pin(async { Err(GitExecutorError::Unavailable) })
     }
 
@@ -189,8 +190,8 @@ impl GitRemoteExecutor for UnavailableGitExecutor { fn import<'a>(&'a self, _inp
     }
 }
 
-
-impl fmt::Debug for GitOperationService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for GitOperationService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("GitOperationService")
             .field("operation_timeout", &self.operation_timeout)

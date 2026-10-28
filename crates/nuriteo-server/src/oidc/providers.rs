@@ -1,14 +1,13 @@
 #![allow(unused_imports)]
-use super::*;
 use super::provider_model::*;
 use super::provider_store::*;
+use super::*;
 
 use std::fmt;
 
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
@@ -38,10 +36,13 @@ pub(crate) use login::{OidcAuthorizationRequest, OidcCallbackInput, OidcLoginSer
 
 pub use protocol::OidcEndpointValidator;
 
+use super::{
+    ACTIVATION_ATTESTATION_DOMAIN, ActivationAttestationInput, CLIENT_SECRET_KIND, DEFAULT_TIMEOUT,
+    INSTANCE_ID, INTEGRATION_TYPE, MAX_TIMEOUT, MIN_TIMEOUT, OidcProviderError, OidcProviderInput,
+    OidcProviderMetadata, OidcProviderService, OidcProviderState, OidcProviderUpdate,
+    OidcRuntimeProvider, map_integration_error,
+};
 use protocol::{OidcValidationProof, trust_fingerprint};
-use super::{INSTANCE_ID, INTEGRATION_TYPE, CLIENT_SECRET_KIND, ACTIVATION_ATTESTATION_DOMAIN, DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT, OidcProviderInput, OidcProviderUpdate, OidcProviderState, OidcProviderMetadata, OidcRuntimeProvider, OidcProviderService, ActivationAttestationInput, map_integration_error, OidcProviderError};
-
-
 
 impl super::OidcProviderService {
     #[must_use]
@@ -797,8 +798,10 @@ impl super::OidcProviderService {
     }
 }
 
-
-pub(crate) fn activation_attestation_fields(input: &ActivationAttestationInput<'_>) -> Vec<Vec<u8>> {    vec![
+pub(crate) fn activation_attestation_fields(
+    input: &ActivationAttestationInput<'_>,
+) -> Vec<Vec<u8>> {
+    vec![
         input.provider_id.as_bytes().to_vec(),
         input.proof_id.as_bytes().to_vec(),
         input.config_version.to_be_bytes().to_vec(),

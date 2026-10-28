@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::provider_validation::*;
-use super::authorization_code::*;
 use super::super::*;
-
+use super::authorization_code::*;
+use super::provider_validation::*;
+use super::*;
 
 use std::env;
 
@@ -15,13 +14,11 @@ use std::io;
 
 use std::path::Path;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use sha2::{Digest, Sha256};
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -45,14 +42,13 @@ use std::future::Future;
 
 use std::pin::Pin;
 
+use super::{ExactPreflight, NoFiles, TestEnvironment};
 use url::Url;
-use super::{ExactPreflight, TestEnvironment, NoFiles};
-
-
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-oidc-protocol/run.sh"]
-pub(crate) async fn actual_invited_identity_linking_is_provisioned_and_atomic() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_invited_identity_linking_is_provisioned_and_atomic() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
         &pool,
@@ -535,8 +531,8 @@ pub(crate) async fn actual_invited_identity_linking_is_provisioned_and_atomic() 
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn oidc_callback_for_email(    login: &login::OidcLoginService,
+pub(crate) async fn oidc_callback_for_email(
+    login: &login::OidcLoginService,
     provider_id: Uuid,
     issuer: &str,
     control: &Path,
@@ -559,8 +555,8 @@ pub(crate) async fn oidc_callback_for_email(    login: &login::OidcLoginService,
         .await
 }
 
-
-pub(crate) async fn prepare_oidc_callback(    login: &login::OidcLoginService,
+pub(crate) async fn prepare_oidc_callback(
+    login: &login::OidcLoginService,
     provider_id: Uuid,
     control: &Path,
     subject: &str,
@@ -604,16 +600,16 @@ pub(crate) async fn prepare_oidc_callback(    login: &login::OidcLoginService,
     ))
 }
 
-
-pub(crate) fn token_request_count(control: &Path) -> usize {    fs::read_to_string(control.join("requests"))
+pub(crate) fn token_request_count(control: &Path) -> usize {
+    fs::read_to_string(control.join("requests"))
         .unwrap_or_default()
         .lines()
         .filter(|path| *path == "/token")
         .count()
 }
 
-
-impl CaCandidatePreflight for ExactPreflight { fn preflight<'a>(
+impl CaCandidatePreflight for ExactPreflight {
+    fn preflight<'a>(
         &'a self,
         _: &'a ValidatedCaBundle,
         endpoint: &'a CaEndpointBinding,
@@ -626,8 +622,8 @@ impl CaCandidatePreflight for ExactPreflight { fn preflight<'a>(
     }
 }
 
-
-pub(crate) fn actor() -> IntegrationAdminActor {    IntegrationAdminActor {
+pub(crate) fn actor() -> IntegrationAdminActor {
+    IntegrationAdminActor {
         user_id: "0199ee6c-c777-7000-8000-000000007001"
             .parse::<UserId>()
             .unwrap(),
@@ -637,8 +633,8 @@ pub(crate) fn actor() -> IntegrationAdminActor {    IntegrationAdminActor {
     }
 }
 
-
-pub(crate) async fn seed_admin(pool: &DatabasePool) {    sqlx::query("INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES('0199ee6c-c777-7000-8000-000000007001','runtime-admin@example.test','runtime-admin@example.test','Runtime Admin',TRUE)")
+pub(crate) async fn seed_admin(pool: &DatabasePool) {
+    sqlx::query("INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES('0199ee6c-c777-7000-8000-000000007001','runtime-admin@example.test','runtime-admin@example.test','Runtime Admin',TRUE)")
         .execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
     sqlx::query("INSERT INTO sessions(id,user_id,token_hash,created_at,last_seen_at,idle_expires_at,absolute_expires_at,last_reauthenticated_at) VALUES('0199ee6c-c777-7000-8000-000000007002','0199ee6c-c777-7000-8000-000000007001',decode(repeat('31',32),'hex'),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+INTERVAL '1 hour',CURRENT_TIMESTAMP+INTERVAL '2 hour',CURRENT_TIMESTAMP)")
         .execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
@@ -646,8 +642,8 @@ pub(crate) async fn seed_admin(pool: &DatabasePool) {    sqlx::query("INSERT INT
         .execute(&mut *pool.acquire().await.unwrap()).await.unwrap();
 }
 
-
-pub(crate) fn keyring(current: u32, key: [u8; 32], previous: &[(u32, [u8; 32])]) -> MasterKeyring {    let previous = serde_json::to_string(
+pub(crate) fn keyring(current: u32, key: [u8; 32], previous: &[(u32, [u8; 32])]) -> MasterKeyring {
+    let previous = serde_json::to_string(
         &previous
             .iter()
             .map(|(version, key)| {
@@ -673,28 +669,28 @@ pub(crate) fn keyring(current: u32, key: [u8; 32], previous: &[(u32, [u8; 32])])
     .unwrap()
 }
 
-
-impl Environment for TestEnvironment { fn entries(&self) -> Vec<(OsString, OsString)> {
+impl Environment for TestEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
         self.0.clone()
     }
 }
 
-
-impl FileReader for NoFiles { fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+impl FileReader for NoFiles {
+    fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
         Err(io::ErrorKind::NotFound.into())
     }
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
         .execute(&mut *connection)
         .await
         .unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let tls = DatabaseTlsConfig::verify_full(
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let tls = DatabaseTlsConfig::verify_full(
         None,
         Some(fs::read(env::var("NURITEO_TEST_DATABASE_CA").unwrap()).unwrap()),
         None,
@@ -714,4 +710,3 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let tls = DatabaseTlsCon
     .await
     .unwrap()
 }
-

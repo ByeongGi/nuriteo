@@ -1,7 +1,12 @@
+/// File descriptors that multiplex files and PTYs.
 pub mod kernel;
+/// Bounded byte pipes.
 pub mod pipe;
+/// Virtual terminals and their line discipline.
 pub mod pty;
+/// Bounded standard-stream buffers.
 pub mod stdio;
+/// Portable subset of terminal settings.
 pub mod termios;
 
 pub use kernel::{

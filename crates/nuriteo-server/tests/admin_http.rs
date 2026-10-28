@@ -1,3 +1,7 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use std::env;
 
 use std::ffi::OsString;
@@ -9,7 +13,6 @@ use std::io;
 use std::path::Path;
 
 use std::time::Duration;
-
 
 use axum::Router;
 
@@ -61,7 +64,6 @@ use tower::ServiceExt;
 
 use url::Url;
 
-
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -76,17 +78,14 @@ const PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$a25vd24tc2FsdC12YWx1
 
 const SETTING_PATH: &str = "/api/v1/admin/settings/invitations.default_expiry_hours";
 
-
 #[derive(Clone)]
 struct Browser {
     cookie: String,
     csrf: String,
 }
 
-
 #[derive(Clone)]
 struct TestEnvironment(Vec<(OsString, OsString)>);
-
 
 struct NoFiles;
 

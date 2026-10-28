@@ -11,7 +11,6 @@ use std::sync::Arc;
 
 use std::time::{Duration, Instant};
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -42,11 +41,9 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use super::{OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider};
 
 use crate::integration::{CaEndpointBinding, IntegrationAdminActor, ValidatedCaBundle};
-
 
 const DISCOVERY_LIMIT: usize = 64 * 1024;
 
@@ -76,18 +73,14 @@ const MAX_TOKEN_AGE_SECONDS: i64 = 10 * 60;
 
 const CLOCK_SKEW_SECONDS: i64 = 60;
 
-
-pub(super) struct RuntimeAccess(());
-
+pub(crate) struct RuntimeAccess(());
 
 const RUNTIME_ACCESS: RuntimeAccess = RuntimeAccess(());
-
 
 #[cfg(test)]
 pub(super) const fn runtime_access_for_test() -> &'static RuntimeAccess {
     &RUNTIME_ACCESS
 }
-
 
 /// Opaque, DNS-pinned OIDC-003 handoff. Protocol consumers must add their
 /// operations here so the secret and HTTP client cannot be separated.
@@ -103,11 +96,9 @@ pub(crate) struct OidcProtocolRuntime {
     jwks_uri: Url,
 }
 
-
 struct ZeroizingRequestBody(Zeroizing<Vec<u8>>);
 
-
-pub(super) struct AuthorizationRuntime {
+pub(crate) struct AuthorizationRuntime {
     pub url: String,
     pub provider_id: Uuid,
     pub config_version: u64,
@@ -115,13 +106,11 @@ pub(super) struct AuthorizationRuntime {
     pub redirect_uri: String,
 }
 
-
-pub(super) struct VerifiedIdToken {
+pub(crate) struct VerifiedIdToken {
     pub issuer: String,
     pub subject: String,
     pub verified_email: Option<String>,
 }
-
 
 #[derive(Clone)]
 pub struct OidcEndpointValidator {
@@ -130,9 +119,8 @@ pub struct OidcEndpointValidator {
     cache: Arc<Mutex<HashMap<CacheKey, CacheEntry>>>,
 }
 
-
 #[derive(Debug, Clone)]
-pub(super) struct OidcValidationProof {
+pub(crate) struct OidcValidationProof {
     pub id: Uuid,
     pub config_version: u64,
     pub secret_version: u64,
@@ -145,7 +133,6 @@ pub(super) struct OidcValidationProof {
     pub ca_fingerprint: [u8; 32],
 }
 
-
 #[derive(Deserialize)]
 struct DiscoveryDocument {
     issuer: String,
@@ -154,12 +141,10 @@ struct DiscoveryDocument {
     jwks_uri: String,
 }
 
-
 #[derive(Deserialize)]
 struct JwksDocument {
     keys: Vec<JwkShape>,
 }
-
 
 #[derive(Deserialize)]
 struct JwkShape {
@@ -167,18 +152,15 @@ struct JwkShape {
     kid: Option<String>,
 }
 
-
 #[derive(Deserialize)]
 struct TokenResponse {
     id_token: String,
 }
 
-
 #[derive(Deserialize)]
-struct VerificationJwks {
+pub(crate) struct VerificationJwks {
     keys: Vec<VerificationJwk>,
 }
-
 
 #[derive(Deserialize)]
 struct VerificationJwk {
@@ -191,13 +173,11 @@ struct VerificationJwk {
     e: String,
 }
 
-
 #[derive(Deserialize)]
 struct JwtHeader {
     alg: String,
     kid: String,
 }
-
 
 #[derive(Deserialize)]
 struct IdTokenClaims {
@@ -213,14 +193,12 @@ struct IdTokenClaims {
     email_verified: bool,
 }
 
-
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Audience {
     One(String),
     Many(Vec<String>),
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct CacheKey {
@@ -230,14 +208,12 @@ struct CacheKey {
     trust_fingerprint: [u8; 32],
 }
 
-
 struct CacheEntry {
     fingerprint: [u8; 32],
     expires_at: Instant,
 }
 
-
-struct ValidationMaterial {
+pub(crate) struct ValidationMaterial {
     authorization_endpoint: String,
     token_endpoint: String,
     jwks_uri: String,
@@ -246,7 +222,6 @@ struct ValidationMaterial {
     ca_fingerprint: [u8; 32],
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,15 +229,49 @@ mod tests {
     #[test]
     fn blocks_non_public_networks_and_ambiguous_redirects() {
         assert_eq!(
-            validate_endpoint("https://127.0.0.1/issuer", false).unwrap_err(),
+            validate_endpoint("https://127.0.0.1/issuer", EndpointMode::Production).unwrap_err(),
             OidcProviderError::NetworkDenied
+        );
+        assert!(
+            validate_endpoint("https://127.0.0.1/issuer", EndpointMode::AllowTestAddresses).is_ok()
         );
         assert_eq!(
-            validate_endpoint("https://169.254.169.254/latest/meta-data", false).unwrap_err(),
+            validate_endpoint(
+                "https://169.254.169.254/latest/meta-data",
+                EndpointMode::Production
+            )
+            .unwrap_err(),
             OidcProviderError::NetworkDenied
         );
-        assert!(validate_redirect_uri("https://app.example.test/callback?next=x", false).is_err());
-        assert!(validate_redirect_uri("https://app.example.test/callback", false).is_ok());
+        assert!(
+            validate_endpoint(
+                "https://169.254.169.254/latest/meta-data",
+                EndpointMode::AllowTestAddresses
+            )
+            .is_ok()
+        );
+        let overlong = format!("https://{}.example.test/issuer", "a".repeat(2048));
+        let padded = " https://app.example.test/callback";
+        for mode in [EndpointMode::Production, EndpointMode::AllowTestAddresses] {
+            assert_eq!(
+                validate_endpoint(&overlong, mode).unwrap_err(),
+                OidcProviderError::InvalidInput
+            );
+            assert_eq!(
+                validate_endpoint(padded, mode).unwrap_err(),
+                OidcProviderError::InvalidInput
+            );
+            assert!(
+                validate_redirect_uri("https://app.example.test/callback?next=x", mode).is_err()
+            );
+        }
+        assert!(
+            validate_redirect_uri(
+                "https://app.example.test/callback",
+                EndpointMode::Production
+            )
+            .is_ok()
+        );
         assert!(!is_public_ip("64:ff9b::7f00:1".parse().unwrap()));
         assert!(!is_public_ip("64:ff9b:1::1".parse().unwrap()));
         assert!(!is_public_ip("2002:7f00:1::".parse().unwrap()));
@@ -344,7 +353,6 @@ mod tests {
         );
     }
 }
-
 
 mod exchange;
 pub(crate) use exchange::*;

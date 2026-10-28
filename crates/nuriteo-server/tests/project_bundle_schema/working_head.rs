@@ -1,13 +1,12 @@
 #![allow(unused_imports)]
-use super::*;
 use super::constraints::*;
 use super::postgres::*;
+use super::*;
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
@@ -16,14 +15,13 @@ use nuriteo_server::database::{
 
 use sqlx::{Acquire, Executor};
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV};
 use tokio::time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV};
-
-
 
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-project-bundles/run.sh"]
-pub(crate) async fn project_bundle_schema_is_verified_scoped_bounded_and_gc_safe() {    let pool = fixture_pool().await;
+pub(crate) async fn project_bundle_schema_is_verified_scoped_bounded_and_gc_safe() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     assert_eq!(
         check_schema_readiness(&pool).await.unwrap(),
@@ -59,8 +57,8 @@ pub(crate) async fn project_bundle_schema_is_verified_scoped_bounded_and_gc_safe
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn seed_owners_scopes_and_projects(pool: &DatabasePool) {    execute(pool, "INSERT INTO users (id,email,normalized_email,display_name) VALUES \
+pub(crate) async fn seed_owners_scopes_and_projects(pool: &DatabasePool) {
+    execute(pool, "INSERT INTO users (id,email,normalized_email,display_name) VALUES \
         ('0199ee6c-c777-7000-8000-000000006001','owner@example.test','owner@example.test','Owner'), \
         ('0199ee6c-c777-7000-8000-000000006002','member@example.test','member@example.test','Member')").await;
     execute(
@@ -114,8 +112,8 @@ pub(crate) async fn seed_owners_scopes_and_projects(pool: &DatabasePool) {    ex
     .await;
 }
 
-
-pub(crate) async fn verify_initial_save_and_working_head(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_initial_save_and_working_head(pool: &DatabasePool) {
+    execute(
         pool,
         "INSERT INTO save_sessions \
         (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
@@ -260,8 +258,8 @@ pub(crate) async fn verify_initial_save_and_working_head(pool: &DatabasePool) { 
     .await;
 }
 
-
-pub(crate) async fn verify_atomic_head_replacement_and_gc_fence(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_atomic_head_replacement_and_gc_fence(pool: &DatabasePool) {
+    execute(
         pool,
         "INSERT INTO save_sessions \
         (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
@@ -461,8 +459,10 @@ pub(crate) async fn verify_atomic_head_replacement_and_gc_fence(pool: &DatabaseP
     .await;
 }
 
-
-pub(crate) async fn verify_completed_gc_metadata_cleanup_allows_verified_reupload(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_completed_gc_metadata_cleanup_allows_verified_reupload(
+    pool: &DatabasePool,
+) {
+    execute(
         pool,
         "DELETE FROM project_bundle_admissions \
         WHERE project_id='0199ee6c-c777-7000-8000-000000006030' \
@@ -574,8 +574,10 @@ pub(crate) async fn verify_completed_gc_metadata_cleanup_allows_verified_reuploa
     );
 }
 
-
-pub(crate) async fn verify_working_head_swap_uses_deterministic_object_lock_order(pool: &DatabasePool) {    for statement in [
+pub(crate) async fn verify_working_head_swap_uses_deterministic_object_lock_order(
+    pool: &DatabasePool,
+) {
+    for statement in [
         "INSERT INTO save_sessions \
          (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
           expected_bundle_sha256,expected_physical_bytes,expected_logical_bytes, \

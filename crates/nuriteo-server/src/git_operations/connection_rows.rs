@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::materialization::*;
 use super::remotes::*;
+use super::*;
 
 use std::any::Any;
 
@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
@@ -25,7 +24,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::database::DatabasePool;
 
@@ -47,15 +45,21 @@ use crate::quota::EffectiveQuota;
 
 use crate::workspace::StorageScopeId;
 
-
 pub(crate) use http_routes::openapi_router;
 
+use super::{
+    CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, GitCredential, GitCredentialConnection,
+    GitExecution, GitExecutionFuture, GitExecutorError, GitOperationError, GitOperationOutcome,
+    GitOperationService, GitPushExecution, GitRemoteBinding, GitRemoteExecutor, GitUpdateExecution,
+    GitWorkingHeadFuture, GitWorkingHeadPreparation, GitWorkingHeadPrepare, GitWorkingHeadStore,
+    INSTANCE_ID, INTEGRATION_TYPE, MAX_BRANCH_BYTES, MAX_CHANGED_OBJECTS, MAX_COMMIT_MESSAGE_BYTES,
+    MAX_OPERATION_TIMEOUT, MAX_TRANSFER_BYTES, MIN_OPERATION_TIMEOUT, UnavailableGitExecutor,
+    UnavailableGitWorkingHeadStore, map_executor_error, map_integration_error, map_provider_error,
+};
 pub use http_service::{GitHttpError, GitHttpService};
-use super::{INSTANCE_ID, INTEGRATION_TYPE, CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MAX_BRANCH_BYTES, MAX_COMMIT_MESSAGE_BYTES, MAX_CHANGED_OBJECTS, MAX_TRANSFER_BYTES, GitCredentialConnection, GitCredential, GitRemoteBinding, GitOperationOutcome, GitExecution, GitUpdateExecution, GitPushExecution, GitExecutionFuture, GitRemoteExecutor, GitWorkingHeadFuture, GitWorkingHeadPrepare, GitWorkingHeadPreparation, GitWorkingHeadStore, UnavailableGitWorkingHeadStore, UnavailableGitExecutor, GitExecutorError, GitOperationService, GitOperationError, map_integration_error, map_provider_error, map_executor_error};
 
-
-
-pub(crate) async fn project_storage_scope(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn project_storage_scope(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
 ) -> Result<StorageScopeId, GitOperationError> {
     let value: String = sqlx::query_scalar(
@@ -69,15 +73,15 @@ pub(crate) async fn project_storage_scope(    tx: &mut Transaction<'_, Postgres>
     StorageScopeId::from_str(&value).map_err(|_| GitOperationError::Unavailable)
 }
 
-
-pub(crate) async fn lock_provider(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_provider(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<GitProviderMetadata, GitOperationError> {
     lock_provider_by_id(tx, id).await
 }
 
-
-pub(crate) async fn lock_provider_by_id(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_provider_by_id(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<GitProviderMetadata, GitOperationError> {
     let row = sqlx::query(
@@ -94,8 +98,8 @@ pub(crate) async fn lock_provider_by_id(    tx: &mut Transaction<'_, Postgres>,
     decode_provider(&row)
 }
 
-
-pub(crate) async fn lock_provider_generation(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_provider_generation(
+    tx: &mut Transaction<'_, Postgres>,
     expected: &GitProviderMetadata,
     write: bool,
 ) -> Result<(), GitOperationError> {
@@ -110,8 +114,8 @@ pub(crate) async fn lock_provider_generation(    tx: &mut Transaction<'_, Postgr
     Ok(())
 }
 
-
-pub(crate) async fn load_user_credential(    integrations: &IntegrationRepository,
+pub(crate) async fn load_user_credential(
+    integrations: &IntegrationRepository,
     tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     provider_id: Uuid,
@@ -139,8 +143,8 @@ pub(crate) async fn load_user_credential(    integrations: &IntegrationRepositor
     Ok(GitCredential(secret))
 }
 
-
-pub(crate) async fn lock_connection(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_connection(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     id: Uuid,
     expected_version: u64,
@@ -157,8 +161,8 @@ pub(crate) async fn lock_connection(    tx: &mut Transaction<'_, Postgres>,
     Ok(current)
 }
 
-
-pub(crate) async fn remote_exists(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn remote_exists(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
 ) -> Result<bool, GitOperationError> {
     sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM project_git_remotes WHERE project_id=$1::uuid)")
@@ -168,8 +172,8 @@ pub(crate) async fn remote_exists(    tx: &mut Transaction<'_, Postgres>,
         .map_err(|_| GitOperationError::Unavailable)
 }
 
-
-pub(crate) async fn lock_remote(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_remote(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
 ) -> Result<GitRemoteBinding, GitOperationError> {
     let row = sqlx::query(
@@ -180,8 +184,8 @@ pub(crate) async fn lock_remote(    tx: &mut Transaction<'_, Postgres>,
     remote_from_row(&row)
 }
 
-
-pub(crate) async fn load_remote(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_remote(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
 ) -> Result<GitRemoteBinding, GitOperationError> {
     let row = sqlx::query(
@@ -196,8 +200,8 @@ pub(crate) async fn load_remote(    tx: &mut Transaction<'_, Postgres>,
     remote_from_row(&row)
 }
 
-
-pub(crate) fn connection_from_row(    row: &sqlx::postgres::PgRow,
+pub(crate) fn connection_from_row(
+    row: &sqlx::postgres::PgRow,
 ) -> Result<GitCredentialConnection, GitOperationError> {
     Ok(GitCredentialConnection {
         id: parse_uuid(row.get::<&str, _>("id"))?,
@@ -211,8 +215,10 @@ pub(crate) fn connection_from_row(    row: &sqlx::postgres::PgRow,
     })
 }
 
-
-pub(crate) fn remote_from_row(row: &sqlx::postgres::PgRow) -> Result<GitRemoteBinding, GitOperationError> {    let project_id = ProjectId::from_uuid(parse_uuid(row.get::<&str, _>("project_id"))?)
+pub(crate) fn remote_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<GitRemoteBinding, GitOperationError> {
+    let project_id = ProjectId::from_uuid(parse_uuid(row.get::<&str, _>("project_id"))?)
         .map_err(|_| GitOperationError::Unavailable)?;
     let value = GitRemoteBinding {
         project_id,
@@ -229,12 +235,14 @@ pub(crate) fn remote_from_row(row: &sqlx::postgres::PgRow) -> Result<GitRemoteBi
     Ok(value)
 }
 
-
-pub(crate) fn decode_provider(row: &sqlx::postgres::PgRow) -> Result<GitProviderMetadata, GitOperationError> {    crate::git_provider::metadata_from_database_row(row).map_err(map_provider_error)
+pub(crate) fn decode_provider(
+    row: &sqlx::postgres::PgRow,
+) -> Result<GitProviderMetadata, GitOperationError> {
+    crate::git_provider::metadata_from_database_row(row).map_err(map_provider_error)
 }
 
-
-pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, GitOperationError> {    CredentialIdentity::new(
+pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, GitOperationError> {
+    CredentialIdentity::new(
         INSTANCE_ID,
         INTEGRATION_TYPE,
         id.to_string(),
@@ -243,8 +251,10 @@ pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, GitOpe
     .map_err(map_integration_error)
 }
 
-
-pub(crate) fn validate_import_outcome(outcome: &GitOperationOutcome) -> Result<(), GitOperationError> {    if outcome.previous_head_sha.is_some()
+pub(crate) fn validate_import_outcome(
+    outcome: &GitOperationOutcome,
+) -> Result<(), GitOperationError> {
+    if outcome.previous_head_sha.is_some()
         || !valid_sha(&outcome.head_sha)
         || outcome.changed_objects > MAX_CHANGED_OBJECTS
         || outcome.transferred_bytes > MAX_TRANSFER_BYTES
@@ -255,8 +265,8 @@ pub(crate) fn validate_import_outcome(outcome: &GitOperationOutcome) -> Result<(
     }
 }
 
-
-pub(crate) fn validate_update_outcome(    outcome: &GitOperationOutcome,
+pub(crate) fn validate_update_outcome(
+    outcome: &GitOperationOutcome,
     expected_head: &str,
 ) -> Result<(), GitOperationError> {
     if outcome.previous_head_sha.as_deref() != Some(expected_head) {
@@ -271,23 +281,23 @@ pub(crate) fn validate_update_outcome(    outcome: &GitOperationOutcome,
     Ok(())
 }
 
-
-pub(crate) fn validate_expected_sha(value: &str) -> Result<(), GitOperationError> {    if valid_sha(value) {
+pub(crate) fn validate_expected_sha(value: &str) -> Result<(), GitOperationError> {
+    if valid_sha(value) {
         Ok(())
     } else {
         Err(GitOperationError::InvalidInput)
     }
 }
 
-
-pub(crate) fn valid_sha(value: &str) -> bool {    matches!(value.len(), 40 | 64)
+pub(crate) fn valid_sha(value: &str) -> bool {
+    matches!(value.len(), 40 | 64)
         && value
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
-
-pub(crate) fn validate_branch(value: &str) -> Result<(), GitOperationError> {    let invalid = value.is_empty()
+pub(crate) fn validate_branch(value: &str) -> Result<(), GitOperationError> {
+    let invalid = value.is_empty()
         || value.len() > MAX_BRANCH_BYTES
         || value.starts_with('/')
         || value.ends_with('/')
@@ -308,16 +318,16 @@ pub(crate) fn validate_branch(value: &str) -> Result<(), GitOperationError> {   
     }
 }
 
-
-pub(crate) fn validate_commit_message(value: &str) -> Result<(), GitOperationError> {    if value.is_empty() || value.len() > MAX_COMMIT_MESSAGE_BYTES || value.contains('\0') {
+pub(crate) fn validate_commit_message(value: &str) -> Result<(), GitOperationError> {
+    if value.is_empty() || value.len() > MAX_COMMIT_MESSAGE_BYTES || value.contains('\0') {
         Err(GitOperationError::InvalidInput)
     } else {
         Ok(())
     }
 }
 
-
-pub(crate) fn validate_correlation(value: &str) -> Result<(), GitOperationError> {    if (1..=128).contains(&value.len())
+pub(crate) fn validate_correlation(value: &str) -> Result<(), GitOperationError> {
+    if (1..=128).contains(&value.len())
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
@@ -328,19 +338,19 @@ pub(crate) fn validate_correlation(value: &str) -> Result<(), GitOperationError>
     }
 }
 
-
-pub(crate) fn parse_uuid(value: &str) -> Result<Uuid, GitOperationError> {    Uuid::from_str(value).map_err(|_| GitOperationError::Unavailable)
+pub(crate) fn parse_uuid(value: &str) -> Result<Uuid, GitOperationError> {
+    Uuid::from_str(value).map_err(|_| GitOperationError::Unavailable)
 }
 
-
-pub(crate) fn parse_version(value: i64) -> Result<u64, GitOperationError> {    u64::try_from(value)
+pub(crate) fn parse_version(value: i64) -> Result<u64, GitOperationError> {
+    u64::try_from(value)
         .ok()
         .filter(|value| *value > 0)
         .ok_or(GitOperationError::Unavailable)
 }
 
-
-pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    tx: &mut Transaction<'_, Postgres>,
     actor: UserId,
     action: &str,
     scope_type: &str,
@@ -357,8 +367,8 @@ pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn map_database_error(error: sqlx::Error) -> GitOperationError {    match error
+pub(crate) fn map_database_error(error: sqlx::Error) -> GitOperationError {
+    match error
         .as_database_error()
         .and_then(|value| value.code())
         .as_deref()

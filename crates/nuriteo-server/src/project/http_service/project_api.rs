@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::response_cursors::*;
+use super::*;
 use std::fmt;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use base64::Engine;
 
@@ -29,7 +28,6 @@ use tokio::time as tokio_time;
 use url::Url;
 
 use utoipa::ToSchema;
-
 
 use crate::access_token::{
     AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenScope,
@@ -60,7 +58,6 @@ use crate::save::{
     PromoteHistoricalReference, RecoveryCheckpoint,
 };
 
-
 use super::super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
     ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRole,
@@ -68,9 +65,14 @@ use super::super::{
     ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectTemplate,
     ProjectVersion,
 };
-use super::{CURSOR_PREFIX, CURSOR_TTL_SECONDS, CURSOR_KEY_BYTES, MAX_CURSOR_BYTES, ProjectHttpPolicy, ProjectHttpError, ProjectHttpService, Runtime, RoleOperation, SaveProjectContext, BrowserIdentity, ProjectAccessTokenIdentity, ProjectView, ProjectListView, ProjectRoleView, ProjectRoleListView, ProjectRoleMutationView, ProjectVersionView, ProjectVersionCreateView, ProjectVersionListView, RecoveryCheckpointView, RecoveryCheckpointListView, HistoricalPromotionView, CursorSigner, CursorClaims, CursorBinding, CursorPosition};
-
-
+use super::{
+    BrowserIdentity, CURSOR_KEY_BYTES, CURSOR_PREFIX, CURSOR_TTL_SECONDS, CursorBinding,
+    CursorClaims, CursorPosition, CursorSigner, HistoricalPromotionView, MAX_CURSOR_BYTES,
+    ProjectAccessTokenIdentity, ProjectHttpError, ProjectHttpPolicy, ProjectHttpService,
+    ProjectListView, ProjectRoleListView, ProjectRoleMutationView, ProjectRoleView,
+    ProjectVersionCreateView, ProjectVersionListView, ProjectVersionView, ProjectView,
+    RecoveryCheckpointListView, RecoveryCheckpointView, RoleOperation, Runtime, SaveProjectContext,
+};
 
 impl super::ProjectHttpPolicy {
     pub fn new(operation_timeout: Duration) -> Result<Self, ProjectHttpError> {
@@ -81,16 +83,16 @@ impl super::ProjectHttpPolicy {
     }
 }
 
-
-impl Default for ProjectHttpPolicy { fn default() -> Self {
+impl Default for ProjectHttpPolicy {
+    fn default() -> Self {
         Self {
             operation_timeout: Duration::from_secs(5),
         }
     }
 }
 
-
-impl fmt::Display for ProjectHttpError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for ProjectHttpError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::AuthenticationFailed => "project authentication failed",
             Self::Forbidden => "project request is forbidden",
@@ -109,18 +111,16 @@ impl fmt::Display for ProjectHttpError { fn fmt(&self, formatter: &mut fmt::Form
     }
 }
 
-
 impl std::error::Error for ProjectHttpError {}
 
-
-impl fmt::Debug for ProjectHttpService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for ProjectHttpService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ProjectHttpService")
             .field("configured", &self.runtime.is_some())
             .finish()
     }
 }
-
 
 impl ProjectHttpService {
     #[must_use]
@@ -829,7 +829,6 @@ impl ProjectHttpService {
         self.runtime.as_deref().ok_or(ProjectHttpError::Unavailable)
     }
 }
-
 
 impl ProjectAccessTokenIdentity {
     pub(crate) const fn is_human_actor(&self) -> bool {

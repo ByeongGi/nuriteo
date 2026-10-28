@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::backup::*;
+use super::*;
 use std::ffi::{OsStr, OsString};
 
 use std::fs::{self, File, OpenOptions};
@@ -9,11 +9,9 @@ use std::io::{self, Read, Write};
 
 use std::path::{Path, PathBuf};
 
-
 use clap::error::ErrorKind;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-
 
 use crate::app::run_server;
 
@@ -48,10 +46,12 @@ use crate::storage_check;
 
 use crate::upgrade_preflight;
 
+use super::{
+    BINARY_NAME, BackupCommand, CliAction, MigrationCommandError, OperationalCommand,
+    RecoveryKitCliError, RecoveryKitCommand, backup_error_category, bootstrap_category,
+    is_successful_display,
+};
 use crate::{CommandStatus, VERSION};
-use super::{BINARY_NAME, BackupCommand, RecoveryKitCommand, OperationalCommand, CliAction, bootstrap_category, MigrationCommandError, backup_error_category, RecoveryKitCliError, is_successful_display};
-
-
 
 impl super::OperationalCommand {
     #[must_use]
@@ -69,7 +69,6 @@ impl super::OperationalCommand {
         }
     }
 }
-
 
 #[must_use]
 pub fn root_command() -> Command {
@@ -123,8 +122,8 @@ pub fn root_command() -> Command {
         .subcommand(recovery_kit_command())
 }
 
-
-pub(crate) fn backup_command() -> Command {    let backup_id = || Arg::new("backup-id").required(true).value_name("BACKUP_ID");
+pub(crate) fn backup_command() -> Command {
+    let backup_id = || Arg::new("backup-id").required(true).value_name("BACKUP_ID");
     Command::new("backup")
         .about("Create, verify, transfer, restore, and prune backups")
         .disable_version_flag(true)
@@ -192,8 +191,8 @@ pub(crate) fn backup_command() -> Command {    let backup_id = || Arg::new("back
         .subcommand(Command::new("prune").about("Prune unretained restore points"))
 }
 
-
-pub(crate) fn recovery_kit_command() -> Command {    let input = || Arg::new("input").long("input").required(true);
+pub(crate) fn recovery_kit_command() -> Command {
+    let input = || Arg::new("input").long("input").required(true);
     let passphrase_file = || {
         Arg::new("passphrase-file")
             .long("passphrase-file")
@@ -235,7 +234,6 @@ pub(crate) fn recovery_kit_command() -> Command {    let input = || Arg::new("in
         )
 }
 
-
 pub fn parse<I, S>(args: I) -> Result<CliAction, clap::Error>
 where
     I: IntoIterator<Item = S>,
@@ -261,7 +259,6 @@ where
     command_from_matches(&matches)
 }
 
-
 pub fn run<I, S, O, E>(args: I, stdout: &mut O, stderr: &mut E) -> io::Result<CommandStatus>
 where
     I: IntoIterator<Item = S>,
@@ -285,7 +282,6 @@ where
         }
     }
 }
-
 
 /// Parses synchronously, then dispatches operational work across an explicit
 /// async boundary. Help, version and usage rendering remain deterministic and
@@ -340,8 +336,8 @@ where
     }
 }
 
-
-pub(crate) async fn storage_configure_browser_upload_cors<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn storage_configure_browser_upload_cors<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     match storage_check::configure_browser_upload_cors(&SystemEnvironment, &SystemFileReader).await
@@ -361,8 +357,8 @@ pub(crate) async fn storage_configure_browser_upload_cors<O: Write, E: Write>(  
     }
 }
 
-
-pub(crate) async fn bootstrap_admin<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn bootstrap_admin<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     let environment = SystemEnvironment;
@@ -399,13 +395,16 @@ pub(crate) async fn bootstrap_admin<O: Write, E: Write>(    stdout: &mut O,
     }
 }
 
-
-pub(crate) fn bootstrap_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {    writeln!(stderr, "{BINARY_NAME}: bootstrap-admin failed ({category})")?;
+pub(crate) fn bootstrap_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: bootstrap-admin failed ({category})")?;
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) async fn serve<E: Write>(stderr: &mut E) -> io::Result<CommandStatus> {    match run_server(&SystemEnvironment, &SystemFileReader).await {
+pub(crate) async fn serve<E: Write>(stderr: &mut E) -> io::Result<CommandStatus> {
+    match run_server(&SystemEnvironment, &SystemFileReader).await {
         Ok(()) => Ok(CommandStatus::Success),
         Err(error) => {
             writeln!(stderr, "{BINARY_NAME}: serve failed ({})", error.category())?;
@@ -414,8 +413,8 @@ pub(crate) async fn serve<E: Write>(stderr: &mut E) -> io::Result<CommandStatus>
     }
 }
 
-
-pub(crate) async fn healthcheck<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn healthcheck<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     if run_http_healthcheck(&SystemEnvironment).await {
@@ -427,8 +426,8 @@ pub(crate) async fn healthcheck<O: Write, E: Write>(    stdout: &mut O,
     }
 }
 
-
-pub(crate) async fn storage_check<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn storage_check<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     match storage_check::execute(&SystemEnvironment, &SystemFileReader).await {
@@ -445,13 +444,19 @@ pub(crate) async fn storage_check<O: Write, E: Write>(    stdout: &mut O,
     }
 }
 
-
-pub(crate) fn storage_check_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {    writeln!(stderr, "{BINARY_NAME}: storage-check failed ({category})")?;
+pub(crate) fn storage_check_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: storage-check failed ({category})")?;
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) async fn migrate<O: Write, E: Write>(stdout: &mut O, stderr: &mut E) -> io::Result<CommandStatus> {    let environment = SystemEnvironment;
+pub(crate) async fn migrate<O: Write, E: Write>(
+    stdout: &mut O,
+    stderr: &mut E,
+) -> io::Result<CommandStatus> {
+    let environment = SystemEnvironment;
     let files = SystemFileReader;
     if Config::load(&environment, &files).is_err() {
         return migration_failure(stderr, "configuration");
@@ -490,8 +495,8 @@ pub(crate) async fn migrate<O: Write, E: Write>(stdout: &mut O, stderr: &mut E) 
     }
 }
 
-
-pub(crate) async fn upgrade_preflight<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn upgrade_preflight<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     let environment = SystemEnvironment;
@@ -521,8 +526,8 @@ pub(crate) async fn upgrade_preflight<O: Write, E: Write>(    stdout: &mut O,
     }
 }
 
-
-pub(crate) fn upgrade_preflight_failure<E: Write>(    stderr: &mut E,
+pub(crate) fn upgrade_preflight_failure<E: Write>(
+    stderr: &mut E,
     category: &str,
 ) -> io::Result<CommandStatus> {
     writeln!(
@@ -532,8 +537,8 @@ pub(crate) fn upgrade_preflight_failure<E: Write>(    stderr: &mut E,
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) async fn execute_migration(    pool: &DatabasePool,
+pub(crate) async fn execute_migration(
+    pool: &DatabasePool,
     config: &DatabaseRuntimeConfig,
 ) -> Result<SchemaReadiness, MigrationCommandError> {
     let before = check_schema_readiness(pool)
@@ -555,13 +560,16 @@ pub(crate) async fn execute_migration(    pool: &DatabasePool,
     }
 }
 
-
-pub(crate) fn migration_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {    writeln!(stderr, "{BINARY_NAME}: migrate failed ({category})")?;
+pub(crate) fn migration_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: migrate failed ({category})")?;
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {    match matches.subcommand_name() {
+pub(crate) fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
+    match matches.subcommand_name() {
         Some("serve") => Ok(CliAction::Operational(OperationalCommand::Serve)),
         Some("migrate") => Ok(CliAction::Operational(OperationalCommand::Migrate)),
         Some("upgrade-preflight") => {
@@ -582,8 +590,8 @@ pub(crate) fn command_from_matches(matches: &ArgMatches) -> Result<CliAction, cl
     }
 }
 
-
-pub(crate) fn recovery_kit_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {    let (_, recovery_kit) = matches.subcommand().ok_or_else(|| {
+pub(crate) fn recovery_kit_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
+    let (_, recovery_kit) = matches.subcommand().ok_or_else(|| {
         root_command().error(
             ErrorKind::MissingSubcommand,
             "recovery-kit command required",
@@ -619,8 +627,8 @@ pub(crate) fn recovery_kit_from_matches(matches: &ArgMatches) -> Result<CliActio
     )))
 }
 
-
-pub(crate) fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {    let (_, backup) = matches.subcommand().ok_or_else(|| {
+pub(crate) fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, clap::Error> {
+    let (_, backup) = matches.subcommand().ok_or_else(|| {
         root_command().error(ErrorKind::MissingSubcommand, "backup command required")
     })?;
     let command = match backup.subcommand() {
@@ -661,8 +669,8 @@ pub(crate) fn backup_from_matches(matches: &ArgMatches) -> Result<CliAction, cla
     Ok(CliAction::Operational(OperationalCommand::Backup(command)))
 }
 
-
-pub(crate) fn required_string(matches: &ArgMatches, name: &str) -> Result<String, clap::Error> {    matches.get_one::<String>(name).cloned().ok_or_else(|| {
+pub(crate) fn required_string(matches: &ArgMatches, name: &str) -> Result<String, clap::Error> {
+    matches.get_one::<String>(name).cloned().ok_or_else(|| {
         root_command().error(
             ErrorKind::MissingRequiredArgument,
             "required backup argument missing",
@@ -670,8 +678,8 @@ pub(crate) fn required_string(matches: &ArgMatches, name: &str) -> Result<String
     })
 }
 
-
-pub(crate) async fn run_backup_command<O: Write, E: Write>(    command: BackupCommand,
+pub(crate) async fn run_backup_command<O: Write, E: Write>(
+    command: BackupCommand,
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {

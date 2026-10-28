@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::relay::*;
+use super::*;
 use std::fmt;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -19,7 +18,6 @@ use tokio::io::AsyncRead;
 use tokio::time;
 
 use utoipa::ToSchema;
-
 
 use crate::database::DatabasePool;
 
@@ -36,7 +34,6 @@ use crate::project::{
 
 use crate::quota::{EffectiveQuota, SaveSessionId};
 
-
 use super::super::http_config::SaveUploadTransport;
 
 use super::super::relay::{RelayUploadError, RelayUploadService};
@@ -49,17 +46,21 @@ use super::super::{
     SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
     VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitService,
 };
-use super::{BUNDLE_CONTENT_TYPE, RELAY_CHECKSUM_HEADER, SaveHttpPolicy, SaveHttpError, SaveHttpService, Runtime, SaveCreateInput, SavePartInput, SaveReceiptInput, RelaySingleUploadInput, RelayPartUploadInput, UploadCapabilityView, UploadHeaderView, SaveSessionView, CommitView};
+use super::{
+    BUNDLE_CONTENT_TYPE, CommitView, RELAY_CHECKSUM_HEADER, RelayPartUploadInput,
+    RelaySingleUploadInput, Runtime, SaveCreateInput, SaveHttpError, SaveHttpPolicy,
+    SaveHttpService, SavePartInput, SaveReceiptInput, SaveSessionView, UploadCapabilityView,
+    UploadHeaderView,
+};
 
-
-
-pub(crate) fn save_session_expiry(value: OffsetDateTime) -> Result<String, SaveHttpError> {    Timestamp::from_datetime(value)
+pub(crate) fn save_session_expiry(value: OffsetDateTime) -> Result<String, SaveHttpError> {
+    Timestamp::from_datetime(value)
         .map(|timestamp| timestamp.to_string())
         .map_err(|_| SaveHttpError::Internal)
 }
 
-
-impl Default for SaveHttpPolicy { fn default() -> Self {
+impl Default for SaveHttpPolicy {
+    fn default() -> Self {
         Self {
             operation_timeout: Duration::from_secs(5),
             verification_timeout: Duration::from_secs(120),
@@ -73,8 +74,8 @@ impl Default for SaveHttpPolicy { fn default() -> Self {
     }
 }
 
-
-impl fmt::Display for SaveHttpError { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for SaveHttpError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::AuthenticationFailed => "Save authentication failed",
             Self::Forbidden => "Save request is forbidden",
@@ -95,13 +96,13 @@ impl fmt::Display for SaveHttpError { fn fmt(&self, f: &mut fmt::Formatter<'_>) 
 
 impl std::error::Error for SaveHttpError {}
 
-impl fmt::Debug for SaveHttpService { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for SaveHttpService {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SaveHttpService")
             .field("configured", &self.runtime.is_some())
             .finish()
     }
 }
-
 
 impl SaveHttpService {
     #[must_use]
@@ -494,8 +495,8 @@ impl SaveHttpService {
     }
 }
 
-
-pub(crate) async fn load_committed_outcome(    runtime: &Runtime,
+pub(crate) async fn load_committed_outcome(
+    runtime: &Runtime,
     context: SaveProjectContext,
     session_id: SaveSessionId,
 ) -> Result<Option<CommitView>, SaveHttpError> {
@@ -546,8 +547,8 @@ pub(crate) async fn load_committed_outcome(    runtime: &Runtime,
     .map_err(|_| SaveHttpError::OperationTimeout)?
 }
 
-
-pub(crate) async fn authorize(    runtime: &Runtime,
+pub(crate) async fn authorize(
+    runtime: &Runtime,
     browser: BrowserRequestHeaders<'_>,
     owner: ProjectOwner,
     project_id: ProjectId,
@@ -559,7 +560,11 @@ pub(crate) async fn authorize(    runtime: &Runtime,
         .map_err(map_project)
 }
 
-pub(crate) fn multipart_context(c: SaveProjectContext, session_id: SaveSessionId) -> MultipartSessionContext {    MultipartSessionContext {
+pub(crate) fn multipart_context(
+    c: SaveProjectContext,
+    session_id: SaveSessionId,
+) -> MultipartSessionContext {
+    MultipartSessionContext {
         storage_scope_id: c.storage_scope_id,
         project_id: c.project_id,
         actor_user_id: c.actor_user_id,
@@ -567,7 +572,11 @@ pub(crate) fn multipart_context(c: SaveProjectContext, session_id: SaveSessionId
     }
 }
 
-pub(crate) fn verify_context(c: SaveProjectContext, session_id: SaveSessionId) -> VerifyStagingBundle {    VerifyStagingBundle {
+pub(crate) fn verify_context(
+    c: SaveProjectContext,
+    session_id: SaveSessionId,
+) -> VerifyStagingBundle {
+    VerifyStagingBundle {
         storage_scope_id: c.storage_scope_id,
         project_id: c.project_id,
         actor_user_id: c.actor_user_id,
@@ -585,7 +594,8 @@ impl SavePartInput {
     }
 }
 
-impl From<CommitWorkingHeadOutcome> for CommitView { fn from(v: CommitWorkingHeadOutcome) -> Self {
+impl From<CommitWorkingHeadOutcome> for CommitView {
+    fn from(v: CommitWorkingHeadOutcome) -> Self {
         Self {
             bundle_id: v.bundle_id().to_string(),
             project_version: v.project_version().get(),
@@ -593,8 +603,8 @@ impl From<CommitWorkingHeadOutcome> for CommitView { fn from(v: CommitWorkingHea
     }
 }
 
-
-pub(crate) fn direct_capability_view(    r: &BoundedPresignedRequest,
+pub(crate) fn direct_capability_view(
+    r: &BoundedPresignedRequest,
     expected_bytes: u64,
 ) -> Result<UploadCapabilityView, SaveHttpError> {
     if r.operation() != PresignedOperation::Put {
@@ -614,8 +624,8 @@ pub(crate) fn direct_capability_view(    r: &BoundedPresignedRequest,
     })
 }
 
-
-pub(crate) fn relay_capability(    path: String,
+pub(crate) fn relay_capability(
+    path: String,
     expected_bytes: u64,
     checksum: &Sha256Checksum,
 ) -> UploadCapabilityView {
@@ -636,8 +646,8 @@ pub(crate) fn relay_capability(    path: String,
     }
 }
 
-
-pub(crate) fn relay_single_path(    owner: ProjectOwner,
+pub(crate) fn relay_single_path(
+    owner: ProjectOwner,
     project_id: ProjectId,
     session_id: SaveSessionId,
 ) -> String {
@@ -647,8 +657,8 @@ pub(crate) fn relay_single_path(    owner: ProjectOwner,
     )
 }
 
-
-pub(crate) fn relay_part_path(    owner: ProjectOwner,
+pub(crate) fn relay_part_path(
+    owner: ProjectOwner,
     project_id: ProjectId,
     session_id: SaveSessionId,
     part_number: u16,
@@ -659,31 +669,31 @@ pub(crate) fn relay_part_path(    owner: ProjectOwner,
     )
 }
 
-
-pub(crate) fn owner_path(owner: ProjectOwner) -> (&'static str, String) {    match owner {
+pub(crate) fn owner_path(owner: ProjectOwner) -> (&'static str, String) {
+    match owner {
         ProjectOwner::User(id) => ("users", id.to_string()),
         ProjectOwner::Organization(id) => ("organizations", id.to_string()),
     }
 }
 
-
-pub(crate) fn require_relay(runtime: &Runtime) -> Result<(), SaveHttpError> {    if runtime.upload_transport == SaveUploadTransport::Relay {
+pub(crate) fn require_relay(runtime: &Runtime) -> Result<(), SaveHttpError> {
+    if runtime.upload_transport == SaveUploadTransport::Relay {
         Ok(())
     } else {
         Err(SaveHttpError::NotFound)
     }
 }
 
-
-pub(crate) fn require_direct(runtime: &Runtime) -> Result<(), SaveHttpError> {    if runtime.upload_transport == SaveUploadTransport::Direct {
+pub(crate) fn require_direct(runtime: &Runtime) -> Result<(), SaveHttpError> {
+    if runtime.upload_transport == SaveUploadTransport::Direct {
         Ok(())
     } else {
         Err(SaveHttpError::NotFound)
     }
 }
 
-
-pub(crate) fn map_project(e: ProjectHttpError) -> SaveHttpError {    match e {
+pub(crate) fn map_project(e: ProjectHttpError) -> SaveHttpError {
+    match e {
         ProjectHttpError::AuthenticationFailed => SaveHttpError::AuthenticationFailed,
         ProjectHttpError::Forbidden | ProjectHttpError::RateLimited => SaveHttpError::Forbidden,
         ProjectHttpError::NotFound => SaveHttpError::NotFound,
@@ -701,7 +711,8 @@ pub(crate) fn map_project(e: ProjectHttpError) -> SaveHttpError {    match e {
     }
 }
 
-pub(crate) fn map_single(e: SinglePutServiceError) -> SaveHttpError {    match e {
+pub(crate) fn map_single(e: SinglePutServiceError) -> SaveHttpError {
+    match e {
         SinglePutServiceError::InvalidInput => SaveHttpError::InvalidInput,
         SinglePutServiceError::ScopeNotFound | SinglePutServiceError::ProjectNotFound => {
             SaveHttpError::NotFound
@@ -724,7 +735,8 @@ pub(crate) fn map_single(e: SinglePutServiceError) -> SaveHttpError {    match e
     }
 }
 
-pub(crate) fn map_multipart(e: MultipartServiceError) -> SaveHttpError {    match e {
+pub(crate) fn map_multipart(e: MultipartServiceError) -> SaveHttpError {
+    match e {
         MultipartServiceError::InvalidInput
         | MultipartServiceError::PartConflict
         | MultipartServiceError::PartsIncomplete => SaveHttpError::InvalidInput,
@@ -752,7 +764,8 @@ pub(crate) fn map_multipart(e: MultipartServiceError) -> SaveHttpError {    matc
     }
 }
 
-pub(crate) fn map_verification(e: VerificationError) -> SaveHttpError {    match e {
+pub(crate) fn map_verification(e: VerificationError) -> SaveHttpError {
+    match e {
         VerificationError::InvalidInput
         | VerificationError::ObjectMismatch
         | VerificationError::InvalidArchive => SaveHttpError::InvalidInput,
@@ -769,7 +782,8 @@ pub(crate) fn map_verification(e: VerificationError) -> SaveHttpError {    match
     }
 }
 
-pub(crate) fn map_commit(e: WorkingHeadCommitError) -> SaveHttpError {    match e {
+pub(crate) fn map_commit(e: WorkingHeadCommitError) -> SaveHttpError {
+    match e {
         WorkingHeadCommitError::InvalidInput | WorkingHeadCommitError::ObjectMismatch => {
             SaveHttpError::InvalidInput
         }
@@ -786,7 +800,8 @@ pub(crate) fn map_commit(e: WorkingHeadCommitError) -> SaveHttpError {    match 
     }
 }
 
-pub(crate) fn map_cleanup(e: CleanupError) -> SaveHttpError {    match e {
+pub(crate) fn map_cleanup(e: CleanupError) -> SaveHttpError {
+    match e {
         CleanupError::InvalidPolicy => SaveHttpError::Internal,
         CleanupError::ScopeNotFound
         | CleanupError::ProjectNotFound

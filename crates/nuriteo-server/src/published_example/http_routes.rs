@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-
 use axum::{
     Json,
     body::{Body, to_bytes},
@@ -26,14 +25,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::{
     http::{FieldViolation, HttpError, RequestId},
     identity::{BrowserMethod, BrowserRequestHeaders, UserId},
     organization::OrganizationId,
     project::{ProjectId, ProjectOwner},
 };
-
 
 use super::{
     PublicPublishedExampleListView, PublicPublishedExampleView, PublishedExampleCreateView,
@@ -42,7 +39,6 @@ use super::{
     PublishedExamplePublicId, PublishedExampleVersionMutationView, PublishedExampleView,
     PublishedExampleVisibility,
 };
-
 
 const COLLECTION: &str =
     "/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/published-examples";
@@ -87,7 +83,6 @@ const PREVIEW_ABUSE_KEY: HeaderName = HeaderName::from_static("x-nuriteo-preview
 
 const PREVIEW_ABUSE_PROOF: HeaderName = HeaderName::from_static("x-nuriteo-preview-abuse-proof");
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateRequest {
@@ -96,13 +91,11 @@ struct CreateRequest {
     visibility: String,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AddVersionRequest {
     project_version_id: String,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -110,13 +103,11 @@ struct SelectVersionRequest {
     version_id: String,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct VisibilityRequest {
     visibility: String,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -124,14 +115,12 @@ struct DeleteRequest {
     name: String,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct DestinationOwnerRequest {
     owner_type: String,
     owner_id: String,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -141,18 +130,15 @@ struct ForkRequest {
     name: String,
 }
 
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct PublicListQuery {
+pub(crate) struct PublicListQuery {
     limit: Option<u16>,
 }
-
 
 type ManagementPath = (String, String, String);
 
 type ManagementItemPath = (String, String, String, String);
-
 
 macro_rules! publication_action {
     ($handler:ident, $path:expr, $method:ident) => {
@@ -195,21 +181,17 @@ macro_rules! publication_action {
     };
 }
 
-
 publication_action!(unpublish, UNPUBLISH, unpublish);
 
 publication_action!(republish, REPUBLISH, republish);
 
-
 struct PublishedExampleBundleBinary;
-
 
 struct BrowserHeaders<'a> {
     origins: Vec<&'a str>,
     cookies: Vec<&'a str>,
     csrf: Vec<&'a str>,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -334,7 +316,6 @@ mod tests {
         );
     }
 }
-
 
 mod publication;
 pub(crate) use publication::*;

@@ -8,7 +8,6 @@ use std::str::FromStr;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
@@ -27,12 +26,10 @@ use url::Url;
 
 use uuid::Uuid;
 
-
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
 };
-
 
 mod http_routes;
 
@@ -43,7 +40,6 @@ pub(crate) use http_routes::openapi_router;
 pub use http_service::RegistryHttpService;
 
 pub(crate) use http_service::{RegistryAdminView, RegistryCollectionView};
-
 
 const INTEGRATION_TYPE: &str = "registry";
 
@@ -63,13 +59,11 @@ const METADATA_LIMIT: usize = 2 * 1024 * 1024;
 
 const PACKAGE_SEGMENT: &AsciiSet = &CONTROLS.add(b'/').add(b'?').add(b'#').add(b'%').add(b' ');
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistryState {
     Active,
     Disabled,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistryConnectionInput {
@@ -79,7 +73,6 @@ pub struct RegistryConnectionInput {
     canonical_port: u16,
     base_path: String,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistryConnectionMetadata {
@@ -96,13 +89,11 @@ pub struct RegistryConnectionMetadata {
     pub validated_at: Option<OffsetDateTime>,
 }
 
-
 pub struct RegistryPayload {
     pub connection_id: Uuid,
     pub content_type: Option<String>,
     pub body: Vec<u8>,
 }
-
 
 #[derive(Clone)]
 pub struct RegistryGatewayService {
@@ -111,8 +102,7 @@ pub struct RegistryGatewayService {
     allow_test_addresses: bool,
 }
 
-
-struct RegistryRuntime {
+pub(crate) struct RegistryRuntime {
     metadata: RegistryConnectionMetadata,
     token: SecretValue,
     ca: Option<ValidatedCaBundle>,
@@ -120,8 +110,7 @@ struct RegistryRuntime {
     binding: CaEndpointBinding,
 }
 
-
-struct BoundedResponse {
+pub(crate) struct BoundedResponse {
     content_type: Option<String>,
     body: Vec<u8>,
 }
@@ -140,7 +129,6 @@ const fn map_integration_error(error: IntegrationError) -> RegistryError {
         IntegrationError::Unavailable => RegistryError::Unavailable,
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegistryError {
@@ -162,7 +150,6 @@ pub enum RegistryError {
     UpstreamUnavailable { connection_id: Uuid },
     Unavailable,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -526,7 +513,6 @@ mod tests {
         .unwrap()
     }
 }
-
 
 mod connections;
 pub(crate) use connections::*;

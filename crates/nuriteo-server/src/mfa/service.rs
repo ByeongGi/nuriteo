@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use hmac::{Hmac, KeyInit, Mac};
@@ -29,7 +28,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -40,13 +38,11 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::{
     DEFAULT_TIMEOUT, ENVELOPE_ALGORITHM, ENVELOPE_DOMAIN, MfaCredentialMetadata,
     MfaCredentialState, MfaRepository, MfaStorageError, RecoveryCode, TotpSecret, append_audit,
     insert_recovery_hashes, lock_local_user, validate_correlation, verify_recovery_code,
 };
-
 
 const TOTP_DIGITS: u32 = 6;
 
@@ -86,16 +82,12 @@ const RECEIPT_TTL_MINUTES: i32 = 15;
 
 const MAX_RECEIPTS_PER_USER: i64 = 32;
 
-
 #[derive(PartialEq, Eq)]
 pub(crate) struct MfaIdempotencyKey(String);
 
-
 struct SecretBytes(Zeroizing<Vec<u8>>);
 
-
 struct SecretToken(Zeroizing<String>);
-
 
 #[derive(Serialize, Deserialize)]
 struct EnrollmentStartReceipt {
@@ -105,13 +97,11 @@ struct EnrollmentStartReceipt {
     secret: SecretBytes,
 }
 
-
 #[derive(Serialize, Deserialize)]
 struct SessionReceipt {
     token: SecretToken,
     session: SessionFields,
 }
-
 
 #[derive(Serialize, Deserialize)]
 struct EnrollmentCompleteReceipt {
@@ -119,10 +109,8 @@ struct EnrollmentCompleteReceipt {
     recovery_codes: Vec<SecretBytes>,
 }
 
-
 #[derive(PartialEq, Eq)]
 pub(crate) struct TotpCode(Zeroizing<[u8; 6]>);
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct MfaChallengePolicy {
@@ -132,18 +120,15 @@ pub(crate) struct MfaChallengePolicy {
     operation_timeout: Duration,
 }
 
-
 pub(crate) struct EnrollmentStart {
     pub(crate) metadata: MfaCredentialMetadata,
     pub(crate) secret: TotpSecret,
 }
 
-
 pub(crate) struct EnrollmentComplete {
     pub(crate) session: IssuedSession,
     pub(crate) recovery_codes: Vec<RecoveryCode>,
 }
-
 
 #[derive(Clone)]
 pub(crate) struct MfaService {
@@ -155,21 +140,18 @@ pub(crate) struct MfaService {
     keyring: MasterKeyring,
 }
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ReceiptBindingAuthority {
+pub(crate) enum ReceiptBindingAuthority {
     Original,
     Rotated,
 }
 
-
-struct ChallengeState {
+pub(crate) struct ChallengeState {
     last_accepted_counter: Option<u64>,
     locked_until: Option<OffsetDateTime>,
 }
 
-
-struct ChallengeAttempt<'a> {
+pub(crate) struct ChallengeAttempt<'a> {
     user_id: UserId,
     credential_id: Uuid,
     secret: &'a TotpSecret,
@@ -178,15 +160,12 @@ struct ChallengeAttempt<'a> {
     correlation_id: &'a str,
 }
 
-
 #[derive(Clone)]
 struct MfaPasswordExecutor {
     permits: Arc<Semaphore>,
 }
 
-
 struct MfaPasswordAdmission(OwnedSemaphorePermit);
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MfaServiceError {
@@ -200,10 +179,8 @@ pub(crate) enum MfaServiceError {
     Unavailable,
 }
 
-
 #[cfg(test)]
 mod tests;
-
 
 mod secrets;
 pub(crate) use secrets::*;

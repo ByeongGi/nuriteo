@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::verification::*;
+use super::*;
 
 use std::fmt;
 
@@ -9,7 +9,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use std::time::{Duration, Instant};
-
 
 use base64::Engine;
 
@@ -41,22 +40,28 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
+use super::super::{
+    OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider,
+};
 
-use super::super::{OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider};
-
+use super::{
+    Audience, AuthorizationRuntime, CLOCK_SKEW_SECONDS, CacheEntry, CacheKey, DEFAULT_CACHE_TTL,
+    DISCOVERY_LIMIT, DiscoveryDocument, IdTokenClaims, JWKS_LIMIT, JWT_LIMIT, JwkShape,
+    JwksDocument, JwtHeader, MAX_CACHE_ENTRIES, MAX_CACHE_TTL, MAX_DNS_ADDRESSES, MAX_DNS_TIMEOUT,
+    MAX_JWKS_KEYS, MAX_TIMEOUT, MAX_TOKEN_AGE_SECONDS, MIN_TIMEOUT, OidcEndpointValidator,
+    OidcValidationProof, RUNTIME_ACCESS, RuntimeAccess, TOKEN_RESPONSE_LIMIT, TokenResponse,
+    ValidationMaterial, VerificationJwk, VerificationJwks, VerifiedIdToken, ZeroizingRequestBody,
+};
 use crate::integration::{CaEndpointBinding, IntegrationAdminActor, ValidatedCaBundle};
-use super::{DISCOVERY_LIMIT, JWKS_LIMIT, MAX_JWKS_KEYS, MAX_CACHE_ENTRIES, DEFAULT_CACHE_TTL, MAX_CACHE_TTL, MIN_TIMEOUT, MAX_TIMEOUT, MAX_DNS_TIMEOUT, MAX_DNS_ADDRESSES, TOKEN_RESPONSE_LIMIT, JWT_LIMIT, MAX_TOKEN_AGE_SECONDS, CLOCK_SKEW_SECONDS, RuntimeAccess, RUNTIME_ACCESS, ZeroizingRequestBody, AuthorizationRuntime, VerifiedIdToken, OidcEndpointValidator, OidcValidationProof, DiscoveryDocument, JwksDocument, JwkShape, TokenResponse, VerificationJwks, VerificationJwk, JwtHeader, IdTokenClaims, Audience, CacheKey, CacheEntry, ValidationMaterial};
 
-
-
-impl fmt::Debug for super::OidcProtocolRuntime { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for super::OidcProtocolRuntime {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("OidcProtocolRuntime")
             .field("provider_id", &self.provider.metadata.id)
             .finish_non_exhaustive()
     }
 }
-
 
 impl OidcProtocolRuntime {
     #[cfg(test)]
@@ -181,14 +186,14 @@ impl OidcProtocolRuntime {
     }
 }
 
-
-impl AsRef<[u8]> for ZeroizingRequestBody { fn as_ref(&self) -> &[u8] {
+impl AsRef<[u8]> for ZeroizingRequestBody {
+    fn as_ref(&self) -> &[u8] {
         self.0.as_slice()
     }
 }
 
-
-impl fmt::Debug for OidcEndpointValidator { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for OidcEndpointValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("OidcEndpointValidator")
             .field("timeout", &self.timeout)
@@ -196,7 +201,6 @@ impl fmt::Debug for OidcEndpointValidator { fn fmt(&self, formatter: &mut fmt::F
             .finish()
     }
 }
-
 
 impl OidcEndpointValidator {
     pub fn new(timeout: Duration) -> Result<Self, OidcProviderError> {
@@ -217,6 +221,14 @@ impl OidcEndpointValidator {
         Ok(validator)
     }
 
+    fn endpoint_mode(&self) -> EndpointMode {
+        if self.allow_test_addresses {
+            EndpointMode::AllowTestAddresses
+        } else {
+            EndpointMode::Production
+        }
+    }
+
     pub async fn validate_and_activate(
         &self,
         service: &OidcProviderService,
@@ -229,11 +241,11 @@ impl OidcEndpointValidator {
         let candidate = service
             .precheck_validation_actor(actor, provider_id, expected_version)
             .await?;
-        let redirect = validate_redirect_uri(redirect_uri, self.allow_test_addresses)?;
+        let redirect = validate_redirect_uri(redirect_uri, self.endpoint_mode())?;
         if candidate.issuer.ends_with('/') {
             return Err(OidcProviderError::InvalidInput);
         }
-        let issuer = validate_endpoint(&candidate.issuer, self.allow_test_addresses)?;
+        let issuer = validate_endpoint(&candidate.issuer, self.endpoint_mode())?;
         service
             .verify_candidate_secret(provider_id, expected_version, candidate.secret_version)
             .await?;
@@ -279,9 +291,9 @@ impl OidcEndpointValidator {
             return Err(OidcProviderError::ValidationFailed);
         }
         let authorization =
-            validate_endpoint(&document.authorization_endpoint, self.allow_test_addresses)?;
-        let token = validate_endpoint(&document.token_endpoint, self.allow_test_addresses)?;
-        let jwks = validate_endpoint(&document.jwks_uri, self.allow_test_addresses)?;
+            validate_endpoint(&document.authorization_endpoint, self.endpoint_mode())?;
+        let token = validate_endpoint(&document.token_endpoint, self.endpoint_mode())?;
+        let jwks = validate_endpoint(&document.jwks_uri, self.endpoint_mode())?;
         for endpoint in [&authorization, &token, &jwks] {
             require_same_origin(&issuer, endpoint)?;
             let endpoint_addresses = resolve_checked(
@@ -350,7 +362,7 @@ impl OidcEndpointValidator {
             .into_iter()
             .find(|provider| provider.id == provider_id)
             .ok_or(OidcProviderError::NotFound)?;
-        let issuer = validate_endpoint(&candidate.issuer, self.allow_test_addresses)?;
+        let issuer = validate_endpoint(&candidate.issuer, self.endpoint_mode())?;
         let host = issuer.host_str().ok_or(OidcProviderError::InvalidInput)?;
         let port = issuer
             .port_or_known_default()
@@ -383,10 +395,10 @@ impl OidcEndpointValidator {
             &document.token_endpoint,
             &document.jwks_uri,
         ] {
-            let parsed = validate_endpoint(value, self.allow_test_addresses)?;
+            let parsed = validate_endpoint(value, self.endpoint_mode())?;
             require_same_origin(&issuer, &parsed)?;
         }
-        let jwks = validate_endpoint(&document.jwks_uri, self.allow_test_addresses)?;
+        let jwks = validate_endpoint(&document.jwks_uri, self.endpoint_mode())?;
         self.jwks_fingerprint(
             provider_id,
             candidate.config_version,
@@ -452,7 +464,7 @@ impl OidcEndpointValidator {
         }) {
             return Err(OidcProviderError::Conflict);
         }
-        let issuer = validate_endpoint(&runtime.metadata.issuer, self.allow_test_addresses)?;
+        let issuer = validate_endpoint(&runtime.metadata.issuer, self.endpoint_mode())?;
         let host = issuer
             .host_str()
             .ok_or(OidcProviderError::ValidationFailed)?;
@@ -472,7 +484,7 @@ impl OidcEndpointValidator {
             &runtime.token_endpoint,
             &runtime.jwks_uri,
         ] {
-            let endpoint = validate_endpoint(value, self.allow_test_addresses)?;
+            let endpoint = validate_endpoint(value, self.endpoint_mode())?;
             require_same_origin(&issuer, &endpoint)?;
             let addresses = resolve_checked(
                 endpoint
@@ -490,7 +502,7 @@ impl OidcEndpointValidator {
             }
             endpoints.push(endpoint);
         }
-        validate_redirect_uri(&runtime.redirect_uri, self.allow_test_addresses)?;
+        validate_redirect_uri(&runtime.redirect_uri, self.endpoint_mode())?;
         let mut builder = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(self.timeout)
@@ -667,8 +679,8 @@ impl OidcEndpointValidator {
     }
 }
 
-
-pub(crate) fn validate_verification_jwks(jwks: &VerificationJwks) -> Result<(), OidcProviderError> {    if jwks.keys.is_empty() || jwks.keys.len() > MAX_JWKS_KEYS {
+pub(crate) fn validate_verification_jwks(jwks: &VerificationJwks) -> Result<(), OidcProviderError> {
+    if jwks.keys.is_empty() || jwks.keys.len() > MAX_JWKS_KEYS {
         return Err(OidcProviderError::ValidationFailed);
     }
     let mut kids = HashSet::new();
@@ -693,8 +705,11 @@ pub(crate) fn validate_verification_jwks(jwks: &VerificationJwks) -> Result<(), 
     Ok(())
 }
 
-
-pub(crate) fn validate_redirect_uri(value: &str, allow_test: bool) -> Result<Url, OidcProviderError> {    let url = validate_endpoint(value, allow_test)?;
+pub(crate) fn validate_redirect_uri(
+    value: &str,
+    mode: EndpointMode,
+) -> Result<Url, OidcProviderError> {
+    let url = validate_endpoint(value, mode)?;
     if url.query().is_some()
         || url.fragment().is_some()
         || !url.username().is_empty()
@@ -705,8 +720,17 @@ pub(crate) fn validate_redirect_uri(value: &str, allow_test: bool) -> Result<Url
     Ok(url)
 }
 
+/// Selects whether an OIDC URL may use a non-public address.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EndpointMode {
+    /// Reject loopback, link-local, and other non-public addresses.
+    Production,
+    /// Accept the non-public addresses that production mode rejects.
+    AllowTestAddresses,
+}
 
-pub(crate) fn validate_endpoint(value: &str, allow_test: bool) -> Result<Url, OidcProviderError> {    if value.len() > 2048 || value.trim() != value {
+pub(crate) fn validate_endpoint(value: &str, mode: EndpointMode) -> Result<Url, OidcProviderError> {
+    if value.len() > 2048 || value.trim() != value {
         return Err(OidcProviderError::InvalidInput);
     }
     let url = Url::parse(value).map_err(|_| OidcProviderError::InvalidInput)?;
@@ -722,7 +746,7 @@ pub(crate) fn validate_endpoint(value: &str, allow_test: bool) -> Result<Url, Oi
         url::Host::Ipv4(ip) => Some(IpAddr::V4(ip)),
         url::Host::Ipv6(ip) => Some(IpAddr::V6(ip)),
         url::Host::Domain(_) => None,
-    }) && !allow_test
+    }) && mode == EndpointMode::Production
         && !is_public_ip(ip)
     {
         return Err(OidcProviderError::NetworkDenied);
@@ -730,8 +754,8 @@ pub(crate) fn validate_endpoint(value: &str, allow_test: bool) -> Result<Url, Oi
     Ok(url)
 }
 
-
-pub(crate) fn discovery_url(issuer: &Url) -> Result<Url, OidcProviderError> {    if issuer.query().is_some() || issuer.fragment().is_some() {
+pub(crate) fn discovery_url(issuer: &Url) -> Result<Url, OidcProviderError> {
+    if issuer.query().is_some() || issuer.fragment().is_some() {
         return Err(OidcProviderError::InvalidInput);
     }
     Url::parse(&format!(
@@ -741,8 +765,8 @@ pub(crate) fn discovery_url(issuer: &Url) -> Result<Url, OidcProviderError> {   
     .map_err(|_| OidcProviderError::InvalidInput)
 }
 
-
-pub(crate) async fn resolve_checked(    host: &str,
+pub(crate) async fn resolve_checked(
+    host: &str,
     port: u16,
     allow_test: bool,
     deadline: Duration,
@@ -759,8 +783,8 @@ pub(crate) async fn resolve_checked(    host: &str,
     Ok(addresses)
 }
 
-
-pub(crate) fn validate_resolved_addresses(    addresses: &[SocketAddr],
+pub(crate) fn validate_resolved_addresses(
+    addresses: &[SocketAddr],
     allow_test: bool,
 ) -> Result<(), OidcProviderError> {
     if addresses.is_empty() || addresses.len() > MAX_DNS_ADDRESSES {
@@ -772,12 +796,12 @@ pub(crate) fn validate_resolved_addresses(    addresses: &[SocketAddr],
     Ok(())
 }
 
-
-pub(crate) fn same_address_set(left: &[SocketAddr], right: &[SocketAddr]) -> bool {    left == right
+pub(crate) fn same_address_set(left: &[SocketAddr], right: &[SocketAddr]) -> bool {
+    left == right
 }
 
-
-pub(crate) fn require_same_origin(issuer: &Url, endpoint: &Url) -> Result<(), OidcProviderError> {    if issuer.scheme() != endpoint.scheme()
+pub(crate) fn require_same_origin(issuer: &Url, endpoint: &Url) -> Result<(), OidcProviderError> {
+    if issuer.scheme() != endpoint.scheme()
         || issuer.host_str().map(str::to_ascii_lowercase)
             != endpoint.host_str().map(str::to_ascii_lowercase)
         || issuer.port_or_known_default() != endpoint.port_or_known_default()

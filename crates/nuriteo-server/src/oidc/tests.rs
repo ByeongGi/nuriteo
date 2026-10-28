@@ -1,6 +1,5 @@
 use super::*;
 
-
 use std::env;
 
 use std::ffi::OsString;
@@ -11,13 +10,11 @@ use std::io;
 
 use std::path::Path;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use sha2::{Digest, Sha256};
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -43,13 +40,10 @@ use std::pin::Pin;
 
 use url::Url;
 
-
 struct ExactPreflight;
-
 
 #[derive(Clone)]
 struct TestEnvironment(Vec<(OsString, OsString)>);
-
 
 struct NoFiles;
 

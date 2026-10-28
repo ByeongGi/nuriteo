@@ -1,3 +1,13 @@
+//! Nuriteo control-plane server library.
+//!
+//! Imports named only inside `#[cfg(test)]` modules still warn on the
+//! non-test target. Expecting that lint keeps `cargo clippy -- -D warnings`
+//! green without rewriting those modules.
+#![expect(
+    unused_imports,
+    reason = "test-only imports warn on the non-test crate target"
+)]
+
 pub(crate) mod access_token;
 pub mod admin;
 pub mod app;

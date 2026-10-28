@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
-use super::worker::*;
 use super::jobs::*;
+use super::worker::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::future::Future;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use sqlx::{Acquire, Postgres, Transaction};
 
@@ -20,7 +19,6 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{self, Instant};
 
 use uuid::Uuid;
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -37,10 +35,14 @@ use crate::project::{
 
 use crate::quota::{QuotaRepository, SaveSessionId};
 
+use super::{
+    AbortSaveSession, AbortSaveSessionResult, CanonicalMaterializationDisposition, ClaimedJob,
+    CleanupBackend, CleanupBackendOutcome, CleanupError, CleanupKind, CleanupService,
+    CleanupTarget, CleanupWorker, CleanupWorkerPolicy, Deadline, ExpirySweepReport, MAX_ATTEMPTS,
+    MAX_BATCH_SIZE, MAX_CONCURRENCY, ReconcilePreparation, SQL_TIMEOUT_MARGIN, WorkerShutdown,
+    canonical_materialization_disposition,
+};
 use crate::workspace::StorageScopeId;
-use super::{MAX_BATCH_SIZE, MAX_CONCURRENCY, MAX_ATTEMPTS, SQL_TIMEOUT_MARGIN, CleanupWorkerPolicy, CleanupError, AbortSaveSession, AbortSaveSessionResult, ExpirySweepReport, WorkerShutdown, CleanupService, CleanupBackend, CleanupTarget, CleanupKind, CleanupBackendOutcome, CanonicalMaterializationDisposition, canonical_materialization_disposition, CleanupWorker, ClaimedJob, ReconcilePreparation, Deadline};
-
-
 
 impl super::CleanupWorkerPolicy {
     #[allow(
@@ -98,8 +100,8 @@ impl super::CleanupWorkerPolicy {
     }
 }
 
-
-impl Default for CleanupWorkerPolicy { fn default() -> Self {
+impl Default for CleanupWorkerPolicy {
+    fn default() -> Self {
         Self {
             batch_size: 32,
             concurrency: 4,
@@ -114,8 +116,8 @@ impl Default for CleanupWorkerPolicy { fn default() -> Self {
     }
 }
 
-
-impl fmt::Display for CleanupError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for CleanupError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidPolicy => "Save cleanup policy is invalid",
             Self::ScopeNotFound => "storage scope was not found",
@@ -132,11 +134,10 @@ impl fmt::Display for CleanupError { fn fmt(&self, formatter: &mut fmt::Formatte
     }
 }
 
-
 impl std::error::Error for CleanupError {}
 
-
-impl<B> fmt::Debug for CleanupService<B> { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl<B> fmt::Debug for CleanupService<B> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CleanupService")
             .field("pool", &self.pool)
@@ -145,8 +146,8 @@ impl<B> fmt::Debug for CleanupService<B> { fn fmt(&self, formatter: &mut fmt::Fo
     }
 }
 
-
-impl fmt::Debug for CleanupTarget { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for CleanupTarget {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CleanupTarget")
             .field("kind", &self.kind)
@@ -159,8 +160,8 @@ impl fmt::Debug for CleanupTarget { fn fmt(&self, formatter: &mut fmt::Formatter
     }
 }
 
-
-impl CleanupBackend for S3ObjectStore { async fn cleanup(&self, target: CleanupTarget) -> CleanupBackendOutcome {
+impl CleanupBackend for S3ObjectStore {
+    async fn cleanup(&self, target: CleanupTarget) -> CleanupBackendOutcome {
         let result = match target.kind {
             CleanupKind::ObjectDelete => self.delete(&target.object_key).await,
             CleanupKind::MultipartAbort => {
@@ -222,8 +223,10 @@ impl CleanupBackend for S3ObjectStore { async fn cleanup(&self, target: CleanupT
     }
 }
 
-
-pub(crate) fn classify_backend_result(result: Result<(), ObjectStoreError>) -> CleanupBackendOutcome {    match result {
+pub(crate) fn classify_backend_result(
+    result: Result<(), ObjectStoreError>,
+) -> CleanupBackendOutcome {
+    match result {
         Ok(()) => CleanupBackendOutcome::Completed,
         Err(error) if error.kind() == ObjectStoreErrorKind::NotFound => {
             CleanupBackendOutcome::Missing

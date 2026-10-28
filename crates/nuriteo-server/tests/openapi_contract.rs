@@ -1,3 +1,7 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use axum::Router;
 
 use axum::body::{Body, to_bytes};
@@ -13,7 +17,6 @@ use nuriteo_server::openapi::{self, DOCS_PATH, DOCUMENT_PATH};
 use serde_json::{Value, json};
 
 use tower::ServiceExt;
-
 
 const REQUEST_ID: &str = "openapi-contract-01";
 

@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::races::*;
+use super::*;
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::audit::AuditEventId;
 
@@ -28,14 +27,16 @@ use nuriteo_server::project::{
 
 use sqlx::{Acquire, Executor, Postgres, Transaction};
 
+use super::{
+    DATABASE_CA_ENV, DATABASE_URL_ENV, DISABLED, MEMBER, MEMBER_TWO, ORGANIZATION,
+    ORGANIZATION_SCOPE, OUTSIDER, OWNER, PERSONAL_SCOPE,
+};
 use tokio::time as tokio_time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, OWNER, MEMBER, MEMBER_TWO, OUTSIDER, DISABLED, ORGANIZATION, PERSONAL_SCOPE, ORGANIZATION_SCOPE};
-
-
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-project-service/run.sh"]
-pub(crate) async fn project_service_is_authorized_versioned_audited_and_atomic() {    let pool = fixture_pool().await;
+pub(crate) async fn project_service_is_authorized_versioned_audited_and_atomic() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
         &pool,
@@ -466,8 +467,8 @@ pub(crate) async fn project_service_is_authorized_versioned_audited_and_atomic()
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn verify_direct_role_pagination(    pool: &DatabasePool,
+pub(crate) async fn verify_direct_role_pagination(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     member: UserId,
@@ -539,8 +540,8 @@ pub(crate) async fn verify_direct_role_pagination(    pool: &DatabasePool,
     assert!(!second.has_more());
 }
 
-
-pub(crate) async fn verify_audit_failure_rolls_back_and_denial_fails_closed(    pool: &DatabasePool,
+pub(crate) async fn verify_audit_failure_rolls_back_and_denial_fails_closed(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
 ) {
@@ -605,8 +606,8 @@ pub(crate) async fn verify_audit_failure_rolls_back_and_denial_fails_closed(    
     assert_eq!(project_name(pool, project.id()).await, "Denial Anchor");
 }
 
-
-pub(crate) async fn verify_failure_audit_uses_single_deadline(    pool: &DatabasePool,
+pub(crate) async fn verify_failure_audit_uses_single_deadline(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
 ) {
@@ -674,8 +675,11 @@ pub(crate) async fn verify_failure_audit_uses_single_deadline(    pool: &Databas
     assert_eq!(project_name(pool, project_id).await, "Audit Deadline");
 }
 
-
-pub(crate) async fn verify_commit_resolution_is_bounded_and_explicit(pool: &DatabasePool, owner: UserId) {    sqlx::query(
+pub(crate) async fn verify_commit_resolution_is_bounded_and_explicit(
+    pool: &DatabasePool,
+    owner: UserId,
+) {
+    sqlx::query(
         "CREATE OR REPLACE FUNCTION project_service_slow_commit() RETURNS trigger \
          LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(3); RETURN NEW; END $$",
     )

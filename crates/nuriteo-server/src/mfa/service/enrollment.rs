@@ -1,15 +1,14 @@
 #![allow(unused_imports)]
-use super::*;
-use super::secrets::*;
 use super::challenge::*;
+use super::secrets::*;
 use super::sessions::*;
+use super::*;
 
 use std::future::Future;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -31,7 +30,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -42,17 +40,25 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::super::{
     DEFAULT_TIMEOUT, ENVELOPE_ALGORITHM, ENVELOPE_DOMAIN, MfaCredentialMetadata,
     MfaCredentialState, MfaRepository, MfaStorageError, RecoveryCode, TotpSecret, append_audit,
     insert_recovery_hashes, lock_local_user, validate_correlation, verify_recovery_code,
 };
-use super::{TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW, DEFAULT_FAILURE_THRESHOLD, DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, MIN_FAILURE_THRESHOLD, MAX_FAILURE_THRESHOLD, MIN_FAILURE_DURATION, MAX_FAILURE_DURATION, RECOVERY_CODE_COUNT, RECOVERY_CODE_BYTES, RECOVERY_CODE_ENCODED_BYTES, ARGON2_CONCURRENCY, RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, MAX_RECEIPTS_PER_USER, MfaIdempotencyKey, SecretBytes, SecretToken, EnrollmentStartReceipt, SessionReceipt, EnrollmentCompleteReceipt, TotpCode, MfaChallengePolicy, EnrollmentStart, EnrollmentComplete, MfaService, ReceiptBindingAuthority, ChallengeState, ChallengeAttempt, MfaPasswordExecutor, MfaPasswordAdmission, MfaServiceError};
+use super::{
+    ARGON2_CONCURRENCY, ChallengeAttempt, ChallengeState, DEFAULT_FAILURE_THRESHOLD,
+    DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, EnrollmentComplete, EnrollmentCompleteReceipt,
+    EnrollmentStart, EnrollmentStartReceipt, MAX_FAILURE_DURATION, MAX_FAILURE_THRESHOLD,
+    MAX_RECEIPTS_PER_USER, MIN_FAILURE_DURATION, MIN_FAILURE_THRESHOLD, MfaChallengePolicy,
+    MfaIdempotencyKey, MfaPasswordAdmission, MfaPasswordExecutor, MfaService, MfaServiceError,
+    RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, RECOVERY_CODE_BYTES,
+    RECOVERY_CODE_COUNT, RECOVERY_CODE_ENCODED_BYTES, ReceiptBindingAuthority, SecretBytes,
+    SecretToken, SessionReceipt, TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW,
+    TotpCode,
+};
 
-
-
-impl super::MfaService {    pub(crate) fn new(
+impl super::MfaService {
+    pub(crate) fn new(
         pool: DatabasePool,
         keyring: MasterKeyring,
         session_policy: SessionPolicy,

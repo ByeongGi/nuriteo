@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::settings::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -12,7 +12,6 @@ use std::io;
 use std::path::Path;
 
 use std::time::Duration;
-
 
 use axum::Router;
 
@@ -62,12 +61,14 @@ use serde_json::{Value, json};
 
 use tower::ServiceExt;
 
+use super::{
+    Browser, DATABASE_CA_ENV, DATABASE_URL_ENV, NoFiles, ORIGIN_VALUE, PASSWORD, PASSWORD_HASH,
+    REQUEST_ID, SETTING_PATH, TestEnvironment,
+};
 use url::Url;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, ORIGIN_VALUE, REQUEST_ID, PASSWORD, PASSWORD_HASH, SETTING_PATH, Browser, TestEnvironment, NoFiles};
 
-
-
-pub(crate) async fn verify_audit_query_export_and_retention(    router: &Router,
+pub(crate) async fn verify_audit_query_export_and_retention(
+    router: &Router,
     pool: &DatabasePool,
     admin: &Browser,
     member: &Browser,
@@ -429,8 +430,8 @@ pub(crate) async fn verify_audit_query_export_and_retention(    router: &Router,
     assert_eq!(prune_audits, 2);
 }
 
-
-pub(crate) fn router(    pool: DatabasePool,
+pub(crate) fn router(
+    pool: DatabasePool,
     settings: nuriteo_server::instance_settings::EffectiveInstanceSettings,
 ) -> Router {
     let external_url = Url::parse(ORIGIN_VALUE).unwrap();
@@ -477,8 +478,8 @@ pub(crate) fn router(    pool: DatabasePool,
     )
 }
 
-
-pub(crate) fn fixture_keyring() -> MasterKeyring {    MasterKeyring::load(
+pub(crate) fn fixture_keyring() -> MasterKeyring {
+    MasterKeyring::load(
         &TestEnvironment(vec![
             (
                 "NURITEO_MASTER_KEY".into(),
@@ -491,20 +492,20 @@ pub(crate) fn fixture_keyring() -> MasterKeyring {    MasterKeyring::load(
     .unwrap()
 }
 
-
-impl Environment for TestEnvironment { fn entries(&self) -> Vec<(OsString, OsString)> {
+impl Environment for TestEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
         self.0.clone()
     }
 }
 
-
-impl FileReader for NoFiles { fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
+impl FileReader for NoFiles {
+    fn read(&self, _: &Path, _: usize) -> io::Result<Vec<u8>> {
         Err(io::ErrorKind::NotFound.into())
     }
 }
 
-
-pub(crate) async fn login(router: &Router, email: &str) -> Browser {    let response = send(
+pub(crate) async fn login(router: &Router, email: &str) -> Browser {
+    let response = send(
         router,
         Request::builder()
             .method(Method::POST)
@@ -544,8 +545,8 @@ pub(crate) async fn login(router: &Router, email: &str) -> Browser {    let resp
     }
 }
 
-
-pub(crate) async fn request(    router: &Router,
+pub(crate) async fn request(
+    router: &Router,
     browser: Option<&Browser>,
     method: Method,
     uri: &str,
@@ -577,12 +578,12 @@ pub(crate) async fn request(    router: &Router,
     send(router, builder.body(body).unwrap()).await
 }
 
-
-pub(crate) async fn send(router: &Router, request: Request<Body>) -> Response<Body> {    router.clone().oneshot(request).await.unwrap()
+pub(crate) async fn send(router: &Router, request: Request<Body>) -> Response<Body> {
+    router.clone().oneshot(request).await.unwrap()
 }
 
-
-pub(crate) async fn assert_problem(response: Response<Body>, status: StatusCode) {    let actual = response.status();
+pub(crate) async fn assert_problem(response: Response<Body>, status: StatusCode) {
+    let actual = response.status();
     let content_type = response.headers().get(CONTENT_TYPE).cloned();
     let bytes = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
     let body = serde_json::from_slice::<Value>(&bytes)
@@ -597,12 +598,12 @@ pub(crate) async fn assert_problem(response: Response<Body>, status: StatusCode)
     assert!(!body.to_string().contains(PASSWORD));
 }
 
-
-pub(crate) async fn json_body(response: Response<Body>) -> Value {    serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap()
+pub(crate) async fn json_body(response: Response<Body>) -> Value {
+    serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap()
 }
 
-
-pub(crate) async fn seed_user(pool: &DatabasePool, email: &str, admin: bool) -> UserId {    let id = UserId::new();
+pub(crate) async fn seed_user(pool: &DatabasePool, email: &str, admin: bool) -> UserId {
+    let id = UserId::new();
     sqlx::query(
         "INSERT INTO users (id, email, normalized_email, display_name, is_instance_admin) \
          VALUES ($1::uuid, $2, $2, $3, $4)",
@@ -625,8 +626,8 @@ pub(crate) async fn seed_user(pool: &DatabasePool, email: &str, admin: bool) -> 
     id
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    sqlx::query("DROP SCHEMA public CASCADE")
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    sqlx::query("DROP SCHEMA public CASCADE")
         .execute(&mut *acquire(pool).await)
         .await
         .unwrap();
@@ -636,8 +637,8 @@ pub(crate) async fn reset_fixture(pool: &DatabasePool) {    sqlx::query("DROP SC
         .unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::var(DATABASE_URL_ENV).unwrap();
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV).unwrap();
     let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
     let tls = DatabaseTlsConfig::verify_full(None, Some(ca), None).unwrap();
     let config = DatabasePoolConfig::new(
@@ -652,7 +653,6 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::
     DatabasePool::connect(config).await.unwrap()
 }
 
-
-pub(crate) async fn acquire(pool: &DatabasePool) -> sqlx::pool::PoolConnection<sqlx::Postgres> {    pool.acquire().await.unwrap()
+pub(crate) async fn acquire(pool: &DatabasePool) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
+    pool.acquire().await.unwrap()
 }
-

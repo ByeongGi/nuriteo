@@ -1,8 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::role_http::*;
+use super::*;
 use std::str::FromStr;
-
 
 use axum::Json;
 
@@ -26,7 +25,6 @@ use utoipa::ToSchema;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-
 use crate::http::{FieldViolation, HttpError, RequestId};
 
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
@@ -37,7 +35,6 @@ use crate::save::{
     ContentDescriptor, HistoricalReferenceKind, IdempotencyKey, ProjectVersionName,
     ProjectVersionPageLimit,
 };
-
 
 use super::super::http_service::{
     HistoricalPromotionView, ProjectHttpError, ProjectHttpService, ProjectListView,
@@ -50,10 +47,14 @@ use super::super::{
     ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
 
+use super::{
+    ARCHIVE, BrowserHeaders, COLLECTION, CONTENT, CONTENT_DOWNLOAD, CSRF, ChangeRoleRequest,
+    CreateProjectRequest, CreateVersionRequest, DeleteProjectRequest, GrantRoleRequest,
+    HISTORY_RESTORE, IDEMPOTENCY_KEY, ITEM, ListQuery, MAX_AUTHORIZATION_BYTES, MAX_BODY,
+    MAX_QUERY, ORIGIN, ProjectBundleBinary, PromoteHistoryRequest, RECOVERY_CHECKPOINTS, RESTORE,
+    ROLE, ROLES, RenameProjectRequest, VERSIONS, VersionListQuery,
+};
 use crate::access_token::{AccessTokenScope, ApiCategory};
-use super::{COLLECTION, ITEM, ARCHIVE, RESTORE, ROLES, ROLE, CONTENT, CONTENT_DOWNLOAD, VERSIONS, RECOVERY_CHECKPOINTS, HISTORY_RESTORE, MAX_BODY, MAX_QUERY, MAX_AUTHORIZATION_BYTES, ORIGIN, CSRF, IDEMPOTENCY_KEY, CreateVersionRequest, PromoteHistoryRequest, ProjectBundleBinary, CreateProjectRequest, RenameProjectRequest, DeleteProjectRequest, GrantRoleRequest, ChangeRoleRequest, BrowserHeaders, ListQuery, VersionListQuery};
-
-
 
 pub(crate) fn openapi_router(
     document: utoipa::openapi::OpenApi,
@@ -71,7 +72,6 @@ pub(crate) fn openapi_router(
         .routes(routes!(list_recovery_checkpoints))
         .routes(routes!(promote_history, reconcile_history))
 }
-
 
 #[utoipa::path(post, path = VERSIONS, tag = "project-versions",
     security(("projectSessionCookie" = [])),
@@ -92,7 +92,8 @@ pub(crate) fn openapi_router(
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn create_version(    State(service): State<ProjectHttpService>,
+pub(crate) async fn create_version(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -127,7 +128,6 @@ pub(crate) async fn create_version(    State(service): State<ProjectHttpService>
     Ok(response)
 }
 
-
 #[utoipa::path(get, path = VERSIONS, tag = "project-versions",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
@@ -140,7 +140,8 @@ pub(crate) async fn create_version(    State(service): State<ProjectHttpService>
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn list_versions(    State(service): State<ProjectHttpService>,
+pub(crate) async fn list_versions(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -164,7 +165,6 @@ pub(crate) async fn list_versions(    State(service): State<ProjectHttpService>,
     Ok(response)
 }
 
-
 #[utoipa::path(get, path = RECOVERY_CHECKPOINTS, tag = "project-history",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
@@ -174,7 +174,8 @@ pub(crate) async fn list_versions(    State(service): State<ProjectHttpService>,
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn list_recovery_checkpoints(    State(service): State<ProjectHttpService>,
+pub(crate) async fn list_recovery_checkpoints(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -190,7 +191,6 @@ pub(crate) async fn list_recovery_checkpoints(    State(service): State<ProjectH
         .map_err(|error| map_error(error, request_id, RECOVERY_CHECKPOINTS))?;
     Ok(private_no_store(Json(view).into_response()))
 }
-
 
 #[utoipa::path(post, path = HISTORY_RESTORE, tag = "project-history",
     security(("projectSessionCookie" = [])),
@@ -210,7 +210,8 @@ pub(crate) async fn list_recovery_checkpoints(    State(service): State<ProjectH
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn promote_history(    State(service): State<ProjectHttpService>,
+pub(crate) async fn promote_history(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -247,7 +248,6 @@ pub(crate) async fn promote_history(    State(service): State<ProjectHttpService
     Ok(response)
 }
 
-
 #[utoipa::path(get, path = HISTORY_RESTORE, tag = "project-history",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
@@ -259,7 +259,8 @@ pub(crate) async fn promote_history(    State(service): State<ProjectHttpService
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn reconcile_history(    State(service): State<ProjectHttpService>,
+pub(crate) async fn reconcile_history(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -282,7 +283,6 @@ pub(crate) async fn reconcile_history(    State(service): State<ProjectHttpServi
     Ok(response)
 }
 
-
 #[utoipa::path(get, path = CONTENT, tag = "projects",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path)),
@@ -292,7 +292,8 @@ pub(crate) async fn reconcile_history(    State(service): State<ProjectHttpServi
       (status = 409, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn get_content_descriptor(    State(service): State<ProjectHttpService>,
+pub(crate) async fn get_content_descriptor(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -316,7 +317,6 @@ pub(crate) async fn get_content_descriptor(    State(service): State<ProjectHttp
     Ok(response)
 }
 
-
 #[utoipa::path(get, path = CONTENT_DOWNLOAD, tag = "projects",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
@@ -330,7 +330,8 @@ pub(crate) async fn get_content_descriptor(    State(service): State<ProjectHttp
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn download_content(    State(service): State<ProjectHttpService>,
+pub(crate) async fn download_content(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id, bundle_id)): Path<(String, String, String, String)>,
     request: Request,
@@ -389,8 +390,8 @@ pub(crate) async fn download_content(    State(service): State<ProjectHttpServic
     Ok(response)
 }
 
-
-pub(crate) fn parse_content_if_match(    headers: &HeaderMap,
+pub(crate) fn parse_content_if_match(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<String, HttpError> {
@@ -414,8 +415,8 @@ pub(crate) fn parse_content_if_match(    headers: &HeaderMap,
     Ok(value.to_owned())
 }
 
-
-impl utoipa::PartialSchema for ProjectBundleBinary { fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+impl utoipa::PartialSchema for ProjectBundleBinary {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, Schema, SchemaFormat, Type};
 
         utoipa::openapi::RefOr::T(Schema::Object(
@@ -427,9 +428,7 @@ impl utoipa::PartialSchema for ProjectBundleBinary { fn schema() -> utoipa::open
     }
 }
 
-
 impl ToSchema for ProjectBundleBinary {}
-
 
 #[utoipa::path(post, path = COLLECTION, tag = "projects",
     security(("projectSessionCookie" = [])),
@@ -446,7 +445,8 @@ impl ToSchema for ProjectBundleBinary {}
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn create_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn create_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id)): Path<(String, String)>,
     request: Request,
@@ -471,7 +471,6 @@ pub(crate) async fn create_project(    State(service): State<ProjectHttpService>
     project_response(StatusCode::CREATED, view, true, request_id, COLLECTION)
 }
 
-
 #[utoipa::path(get, path = COLLECTION, tag = "projects",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path),
@@ -484,7 +483,8 @@ pub(crate) async fn create_project(    State(service): State<ProjectHttpService>
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn list_projects(    State(service): State<ProjectHttpService>,
+pub(crate) async fn list_projects(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id)): Path<(String, String)>,
     request: Request,
@@ -504,7 +504,6 @@ pub(crate) async fn list_projects(    State(service): State<ProjectHttpService>,
     Ok(Json(view))
 }
 
-
 #[utoipa::path(get, path = ITEM, tag = "projects",
     description = "Reads one Project with either a browser Session, a project:read Personal Access Token intersected with the user's live Project role, or a project:read Project Automation Token bound to this exact Project.",
     security(("projectSessionCookie" = []), ("accessTokenBearer" = [])),
@@ -516,7 +515,8 @@ pub(crate) async fn list_projects(    State(service): State<ProjectHttpService>,
       (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn get_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn get_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -547,7 +547,6 @@ pub(crate) async fn get_project(    State(service): State<ProjectHttpService>,
     project_response(StatusCode::OK, view, false, request_id, ITEM)
 }
 
-
 #[utoipa::path(patch, path = ITEM, tag = "projects",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
@@ -565,7 +564,8 @@ pub(crate) async fn get_project(    State(service): State<ProjectHttpService>,
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn rename_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn rename_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -588,7 +588,6 @@ pub(crate) async fn rename_project(    State(service): State<ProjectHttpService>
     project_response(StatusCode::OK, view, false, request_id, ITEM)
 }
 
-
 #[utoipa::path(delete, path = ITEM, tag = "projects",
     security(("projectSessionCookie" = [])),
     params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path),
@@ -606,7 +605,8 @@ pub(crate) async fn rename_project(    State(service): State<ProjectHttpService>
       (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
       (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn delete_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn delete_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -631,7 +631,6 @@ pub(crate) async fn delete_project(    State(service): State<ProjectHttpService>
     Ok(StatusCode::NO_CONTENT)
 }
 
-
 #[utoipa::path(post, path = ARCHIVE, tag = "projects", description = "Archives a Project with a browser Session or a project:write Personal Access Token. Origin and X-CSRF-Token are required for browser Session authentication and ignored for non-ambient Bearer authentication. Project Automation Tokens cannot perform lifecycle mutations because audit requires a live human actor.", security(("projectSessionCookie" = []), ("accessTokenBearer" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = Option<String>, Header), ("X-CSRF-Token" = Option<String>, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -643,14 +642,14 @@ pub(crate) async fn delete_project(    State(service): State<ProjectHttpService>
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn archive_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn archive_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<(String, String, String)>,
     request: Request,
 ) -> Result<Response, HttpError> {
     lifecycle(service, request_id, path, request, false, ARCHIVE).await
 }
-
 
 #[utoipa::path(post, path = RESTORE, tag = "projects", description = "Restores a Project with a browser Session or a project:write Personal Access Token. Origin and X-CSRF-Token are required for browser Session authentication and ignored for non-ambient Bearer authentication. Project Automation Tokens cannot perform lifecycle mutations because audit requires a live human actor.", security(("projectSessionCookie" = []), ("accessTokenBearer" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = Option<String>, Header), ("X-CSRF-Token" = Option<String>, Header)), responses((status = 200, body = ProjectView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -663,7 +662,8 @@ pub(crate) async fn archive_project(    State(service): State<ProjectHttpService
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn restore_project(    State(service): State<ProjectHttpService>,
+pub(crate) async fn restore_project(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<(String, String, String)>,
     request: Request,
@@ -671,8 +671,8 @@ pub(crate) async fn restore_project(    State(service): State<ProjectHttpService
     lifecycle(service, request_id, path, request, true, RESTORE).await
 }
 
-
-pub(crate) async fn lifecycle(    service: ProjectHttpService,
+pub(crate) async fn lifecycle(
+    service: ProjectHttpService,
     request_id: RequestId,
     (owner_type, owner_id, project_id): (String, String, String),
     request: Request,
@@ -726,7 +726,6 @@ pub(crate) async fn lifecycle(    service: ProjectHttpService,
     project_response(StatusCode::OK, view, false, request_id, path)
 }
 
-
 #[utoipa::path(get, path = ROLES, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("pageSize" = Option<u16>, Query), ("cursor" = Option<String>, Query)), responses((status = 200, body = ProjectRoleListView),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -735,7 +734,8 @@ pub(crate) async fn lifecycle(    service: ProjectHttpService,
     (status = 422, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn list_roles(    State(service): State<ProjectHttpService>,
+pub(crate) async fn list_roles(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<(String, String, String)>,
     request: Request,
@@ -758,7 +758,6 @@ pub(crate) async fn list_roles(    State(service): State<ProjectHttpService>,
     Ok(Json(view))
 }
 
-
 #[utoipa::path(post, path = ROLES, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)), request_body(content = GrantRoleRequest, content_type = "application/json"), responses((status = 201, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -771,7 +770,8 @@ pub(crate) async fn list_roles(    State(service): State<ProjectHttpService>,
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn grant_role(    State(service): State<ProjectHttpService>,
+pub(crate) async fn grant_role(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<(String, String, String)>,
     request: Request,

@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
-use super::materialization::*;
 use super::connection_rows::*;
+use super::materialization::*;
+use super::*;
 
 use std::any::Any;
 
@@ -17,7 +17,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
@@ -25,7 +24,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::database::DatabasePool;
 
@@ -47,13 +45,18 @@ use crate::quota::EffectiveQuota;
 
 use crate::workspace::StorageScopeId;
 
-
 pub(crate) use http_routes::openapi_router;
 
+use super::{
+    CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, GitCredential, GitCredentialConnection,
+    GitExecution, GitExecutionFuture, GitExecutorError, GitOperationError, GitOperationOutcome,
+    GitOperationService, GitPushExecution, GitRemoteBinding, GitRemoteExecutor, GitUpdateExecution,
+    GitWorkingHeadFuture, GitWorkingHeadPreparation, GitWorkingHeadPrepare, GitWorkingHeadStore,
+    INSTANCE_ID, INTEGRATION_TYPE, MAX_BRANCH_BYTES, MAX_CHANGED_OBJECTS, MAX_COMMIT_MESSAGE_BYTES,
+    MAX_OPERATION_TIMEOUT, MAX_TRANSFER_BYTES, MIN_OPERATION_TIMEOUT, UnavailableGitExecutor,
+    UnavailableGitWorkingHeadStore, map_executor_error, map_integration_error, map_provider_error,
+};
 pub use http_service::{GitHttpError, GitHttpService};
-use super::{INSTANCE_ID, INTEGRATION_TYPE, CREDENTIAL_KIND, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MAX_BRANCH_BYTES, MAX_COMMIT_MESSAGE_BYTES, MAX_CHANGED_OBJECTS, MAX_TRANSFER_BYTES, GitCredentialConnection, GitCredential, GitRemoteBinding, GitOperationOutcome, GitExecution, GitUpdateExecution, GitPushExecution, GitExecutionFuture, GitRemoteExecutor, GitWorkingHeadFuture, GitWorkingHeadPrepare, GitWorkingHeadPreparation, GitWorkingHeadStore, UnavailableGitWorkingHeadStore, UnavailableGitExecutor, GitExecutorError, GitOperationService, GitOperationError, map_integration_error, map_provider_error, map_executor_error};
-
-
 
 impl super::GitOperationService {
     /// Composes the production embedded HTTPS transport and canonical
@@ -699,7 +702,9 @@ impl super::GitOperationService {
         self.bounded(operation).await
     }
 
-    pub(crate) async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, GitOperationError> {
+    pub(crate) async fn acquire(
+        &self,
+    ) -> Result<sqlx::pool::PoolConnection<Postgres>, GitOperationError> {
         self.integrations
             .pool()
             .acquire()
@@ -717,8 +722,8 @@ impl super::GitOperationService {
     }
 }
 
-
-impl fmt::Display for GitOperationError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for GitOperationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "Git operation input is invalid",
             Self::AuthenticationFailed => "Git credential was rejected",
@@ -740,11 +745,10 @@ impl fmt::Display for GitOperationError { fn fmt(&self, formatter: &mut fmt::For
     }
 }
 
-
 impl std::error::Error for GitOperationError {}
 
-
-pub(crate) async fn ensure_active_user(    connection: &mut PgConnection,
+pub(crate) async fn ensure_active_user(
+    connection: &mut PgConnection,
     user_id: UserId,
 ) -> Result<(), GitOperationError> {
     let active: bool = sqlx::query_scalar(
@@ -761,8 +765,8 @@ pub(crate) async fn ensure_active_user(    connection: &mut PgConnection,
     }
 }
 
-
-pub(crate) async fn require_recent_reauthentication(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_recent_reauthentication(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     session_id: SessionId,
 ) -> Result<(), GitOperationError> {
@@ -791,8 +795,8 @@ pub(crate) async fn require_recent_reauthentication(    tx: &mut Transaction<'_,
     }
 }
 
-
-pub(crate) async fn require_project_write(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_project_write(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
     user_id: UserId,
 ) -> Result<(), GitOperationError> {
@@ -806,8 +810,8 @@ pub(crate) async fn require_project_write(    tx: &mut Transaction<'_, Postgres>
     }
 }
 
-
-pub(crate) async fn require_project_read(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_project_read(
+    tx: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
     user_id: UserId,
 ) -> Result<(), GitOperationError> {

@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::console::*;
+use super::*;
 use axum::Json;
 
 use axum::body::{Body, to_bytes};
@@ -27,7 +27,6 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::audit::AuditEventId;
 
 use crate::http::{FieldViolation, HttpError, RequestId};
@@ -35,7 +34,6 @@ use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 
 use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
-
 
 use super::super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
@@ -46,11 +44,18 @@ use super::super::{
     AdminStatusView, AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
     AdminUpdateReadinessView,
 };
-use super::{SETTINGS, SETTING, SETTING_IMPACT, POLICY_CLEANUP_PREVIEW, STATUS, OPERATIONS, SUPPORT_BUNDLE, AUDIT_EVENTS, AUDIT_EVENT, AUDIT_EXPORT, AUDIT_RETENTION_PREVIEW, AUDIT_RETENTION_PRUNE, UPDATE_READINESS, UPDATE_HISTORY, UPDATE_APPROVAL, MAINTENANCE, BACKUPS, BACKUP_POLICY, BACKUP_OPERATIONS, MAX_BODY_BYTES, ORIGIN, CSRF, BackupOperationsQuery, UpdateSettingRequest, PolicyImpactRequest, PolicyCleanupPreviewQuery, UpdateHistoryQuery, AuditFilterRequest, AuditExportRequest, AuditRetentionPreviewQuery, AuditRetentionPruneRequest, UpdateApprovalRequest, MaintenanceRequest, BrowserHeaders};
+use super::{
+    AUDIT_EVENT, AUDIT_EVENTS, AUDIT_EXPORT, AUDIT_RETENTION_PREVIEW, AUDIT_RETENTION_PRUNE,
+    AuditExportRequest, AuditFilterRequest, AuditRetentionPreviewQuery, AuditRetentionPruneRequest,
+    BACKUP_OPERATIONS, BACKUP_POLICY, BACKUPS, BackupOperationsQuery, BrowserHeaders, CSRF,
+    MAINTENANCE, MAX_BODY_BYTES, MaintenanceRequest, OPERATIONS, ORIGIN, POLICY_CLEANUP_PREVIEW,
+    PolicyCleanupPreviewQuery, PolicyImpactRequest, SETTING, SETTING_IMPACT, SETTINGS, STATUS,
+    SUPPORT_BUNDLE, UPDATE_APPROVAL, UPDATE_HISTORY, UPDATE_READINESS, UpdateApprovalRequest,
+    UpdateHistoryQuery, UpdateSettingRequest,
+};
 
-
-
-pub(crate) fn parse_query<T: DeserializeOwned>(    uri: &Uri,
+pub(crate) fn parse_query<T: DeserializeOwned>(
+    uri: &Uri,
     request_id: &RequestId,
     path: &str,
 ) -> Result<T, HttpError> {
@@ -59,8 +64,8 @@ pub(crate) fn parse_query<T: DeserializeOwned>(    uri: &Uri,
         .map_err(|_| validation(request_id, path, "query"))
 }
 
-
-pub(crate) fn audit_list_input(    request: AuditFilterRequest,
+pub(crate) fn audit_list_input(
+    request: AuditFilterRequest,
     request_id: &RequestId,
     path: &str,
 ) -> Result<AdminAuditListInput, HttpError> {
@@ -92,8 +97,8 @@ pub(crate) fn audit_list_input(    request: AuditFilterRequest,
     })
 }
 
-
-pub(crate) fn export_response(    export: super::super::AdminAuditExportView,
+pub(crate) fn export_response(
+    export: super::super::AdminAuditExportView,
     request_id: RequestId,
 ) -> Result<Response, HttpError> {
     let disposition =
@@ -123,9 +128,12 @@ pub(crate) fn export_response(    export: super::super::AdminAuditExportView,
     Ok(response)
 }
 
-
 impl<'a> BrowserHeaders<'a> {
-    pub(crate) fn read(headers: &'a HeaderMap, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+    pub(crate) fn read(
+        headers: &'a HeaderMap,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<Self, HttpError> {
         Ok(Self {
             origins: header_values(headers, &ORIGIN)
                 .map_err(|_| HttpError::forbidden(request_id.clone(), path))?,
@@ -146,8 +154,8 @@ impl<'a> BrowserHeaders<'a> {
     }
 }
 
-
-pub(crate) async fn json_body<T: for<'de> Deserialize<'de>>(    headers: &HeaderMap,
+pub(crate) async fn json_body<T: for<'de> Deserialize<'de>>(
+    headers: &HeaderMap,
     body: Body,
     request_id: &RequestId,
     path: &str,
@@ -170,8 +178,8 @@ pub(crate) async fn json_body<T: for<'de> Deserialize<'de>>(    headers: &Header
     serde_json::from_slice(&bytes).map_err(|_| validation(request_id, path, "body"))
 }
 
-
-pub(crate) fn parse_if_match(    headers: &HeaderMap,
+pub(crate) fn parse_if_match(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<u64, HttpError> {
@@ -192,8 +200,8 @@ pub(crate) fn parse_if_match(    headers: &HeaderMap,
         .ok_or_else(|| HttpError::precondition_failed(request_id.clone(), path))
 }
 
-
-pub(crate) fn parse_version_etag(    headers: &HeaderMap,
+pub(crate) fn parse_version_etag(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
     prefix: &str,
@@ -215,8 +223,8 @@ pub(crate) fn parse_version_etag(    headers: &HeaderMap,
         .ok_or_else(|| HttpError::precondition_failed(request_id.clone(), path))
 }
 
-
-pub(crate) fn backup_response(    view: AdminBackupConsoleView,
+pub(crate) fn backup_response(
+    view: AdminBackupConsoleView,
     request_id: RequestId,
     path: &str,
 ) -> Result<Response, HttpError> {
@@ -230,8 +238,8 @@ pub(crate) fn backup_response(    view: AdminBackupConsoleView,
     Ok(response)
 }
 
-
-pub(crate) fn setting_response(    view: AdminSettingView,
+pub(crate) fn setting_response(
+    view: AdminSettingView,
     request_id: RequestId,
     path: &str,
 ) -> Result<Response, HttpError> {
@@ -245,23 +253,26 @@ pub(crate) fn setting_response(    view: AdminSettingView,
     Ok(response)
 }
 
-
-pub(crate) fn private_no_store(mut response: Response) -> Response {    response
+pub(crate) fn private_no_store(mut response: Response) -> Response {
+    response
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     response
 }
 
-
-pub(crate) fn header_values<'a>(headers: &'a HeaderMap, name: &HeaderName) -> Result<Vec<&'a str>, ()> {    headers
+pub(crate) fn header_values<'a>(
+    headers: &'a HeaderMap,
+    name: &HeaderName,
+) -> Result<Vec<&'a str>, ()> {
+    headers
         .get_all(name)
         .iter()
         .map(|value| value.to_str().map_err(|_| ()))
         .collect()
 }
 
-
-pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {    HttpError::validation(
+pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
+    HttpError::validation(
         request_id.clone(),
         path,
         [FieldViolation::new(
@@ -272,8 +283,12 @@ pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> Htt
     )
 }
 
-
-pub(crate) fn map_error(error: AdminHttpServiceError, request_id: RequestId, path: &str) -> HttpError {    match error {
+pub(crate) fn map_error(
+    error: AdminHttpServiceError,
+    request_id: RequestId,
+    path: &str,
+) -> HttpError {
+    match error {
         AdminHttpServiceError::AuthenticationFailed => HttpError::authentication(request_id, path),
         AdminHttpServiceError::Forbidden => HttpError::forbidden(request_id, path),
         AdminHttpServiceError::ReauthenticationRequired => {

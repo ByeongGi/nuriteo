@@ -1,15 +1,15 @@
 #![allow(unused_imports)]
-use super::*;
-use super::verifier::*;
-use super::working_head::*;
-use super::save_http::*;
+use super::admission::*;
+use super::history::*;
+use super::postgres_bucket::*;
+use super::relay_client::*;
 use super::relay_multipart::*;
 use super::relay_streams::*;
+use super::save_http::*;
+use super::verifier::*;
 use super::versions::*;
-use super::history::*;
-use super::admission::*;
-use super::relay_client::*;
-use super::postgres_bucket::*;
+use super::working_head::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -23,7 +23,6 @@ use std::str::FromStr;
 use std::task::Poll;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -120,10 +119,19 @@ use tower::ServiceExt as _;
 
 use url::Url;
 
+use super::{
+    ACCESS_KEY, AbortBehavior, AttachFailureStore, BUCKET, BoundedFrameBody, CapturedLogWriter,
+    DATABASE_CA_ENV, DATABASE_URL_ENV, FailingPresigner, FixtureEnvironment, GatedFrameBody,
+    HangingPresigner, LostCompleteStore, NeverReadBody, ORG, ORG_MEMBER, ORG_OWNER,
+    ORG_PROJECT_MEMBER, ORG_PROJECT_MULTI_ARCHIVE, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_OUTSIDER,
+    ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_READ, ORG_SCOPE, ORG_WRITE,
+    OUTSIDER, ObservedFrameBody, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_HISTORY_LEFT,
+    PROJECT_HISTORY_RIGHT, PROJECT_LEASE_ABORT, PROJECT_LEASE_CLOCK, PROJECT_LEASE_COMPLETE,
+    PROJECT_LEASE_EXPIRE, PROJECT_MULTI_EXPIRY, PROJECT_TIMEOUT, PersistedRelaySecretRow,
+    RelayMultipartFixture, S3_CA_ENV, S3_ENDPOINT_ENV, SCOPE, SECRET_KEY, TEST_PASSWORD,
+    TEST_PASSWORD_HASH, USER, VersionBrowser, WEB_ORIGIN,
+};
 use uuid::Uuid;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BUCKET, ACCESS_KEY, SECRET_KEY, WEB_ORIGIN, TEST_PASSWORD, TEST_PASSWORD_HASH, USER, SCOPE, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_TIMEOUT, PROJECT_LEASE_ABORT, PROJECT_LEASE_EXPIRE, PROJECT_LEASE_COMPLETE, PROJECT_MULTI_EXPIRY, PROJECT_LEASE_CLOCK, PROJECT_HISTORY_LEFT, PROJECT_HISTORY_RIGHT, OUTSIDER, ORG_OWNER, ORG_READ, ORG_WRITE, ORG_MEMBER, ORG_SCOPE, ORG, ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_PROJECT_MEMBER, ORG_PROJECT_OUTSIDER, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_MULTI_ARCHIVE, PersistedRelaySecretRow, FixtureEnvironment, AbortBehavior, AttachFailureStore, LostCompleteStore, FailingPresigner, HangingPresigner, VersionBrowser, RelayMultipartFixture, CapturedLogWriter, NeverReadBody, BoundedFrameBody, ObservedFrameBody, GatedFrameBody};
-
-
 
 impl MultipartStore for super::AttachFailureStore {
     type Error = ();
@@ -171,7 +179,6 @@ impl MultipartStore for super::AttachFailureStore {
     }
 }
 
-
 impl MultipartStore for LostCompleteStore {
     type Error = ();
 
@@ -203,8 +210,11 @@ impl MultipartStore for LostCompleteStore {
     }
 }
 
-
-pub(crate) async fn verify_attach_failure_compensation(pool: &DatabasePool, config: &ObjectStorageConfig) {    for (project, scope, actor, key, behavior, timeout) in [
+pub(crate) async fn verify_attach_failure_compensation(
+    pool: &DatabasePool,
+    config: &ObjectStorageConfig,
+) {
+    for (project, scope, actor, key, behavior, timeout) in [
         (
             PROJECT_FAIL,
             SCOPE,
@@ -295,8 +305,8 @@ pub(crate) async fn verify_attach_failure_compensation(pool: &DatabasePool, conf
     }
 }
 
-
-pub(crate) async fn verify_complete_response_loss(    pool: &DatabasePool,
+pub(crate) async fn verify_complete_response_loss(
+    pool: &DatabasePool,
     config: &ObjectStorageConfig,
     ca_file: &str,
 ) {
@@ -395,7 +405,6 @@ pub(crate) async fn verify_complete_response_loss(    pool: &DatabasePool,
     );
 }
 
-
 impl PutPresigner for FailingPresigner {
     type Error = ();
 
@@ -406,7 +415,6 @@ impl PutPresigner for FailingPresigner {
         Err(())
     }
 }
-
 
 impl PutPresigner for HangingPresigner {
     type Error = ();
@@ -419,12 +427,12 @@ impl PutPresigner for HangingPresigner {
     }
 }
 
-
-pub(crate) fn request(project: &str, idempotency: &str, body: &[u8]) -> CreateSinglePutSession {    request_for(SCOPE, project, USER, idempotency, body)
+pub(crate) fn request(project: &str, idempotency: &str, body: &[u8]) -> CreateSinglePutSession {
+    request_for(SCOPE, project, USER, idempotency, body)
 }
 
-
-pub(crate) fn verification_context(    project: &str,
+pub(crate) fn verification_context(
+    project: &str,
     session_id: nuriteo_server::quota::SaveSessionId,
 ) -> VerifyStagingBundle {
     VerifyStagingBundle {
@@ -435,8 +443,13 @@ pub(crate) fn verification_context(    project: &str,
     }
 }
 
-
-pub(crate) fn canonical_test_bundle(project: &str, scope: &str, path: &str, content: &[u8]) -> Vec<u8> {    let content_sha = hex_digest(content);
+pub(crate) fn canonical_test_bundle(
+    project: &str,
+    scope: &str,
+    path: &str,
+    content: &[u8],
+) -> Vec<u8> {
+    let content_sha = hex_digest(content);
     let manifest = format!(
         "{{\"format\":\"project-bundle-v1\",\"schemaVersion\":1,\"project\":{{\"id\":\"{project}\",\"storageScopeId\":\"{scope}\"}},\"fileCount\":1,\"logicalBytes\":{},\"files\":[{{\"path\":\"{path}\",\"kind\":\"text\",\"mode\":\"0644\",\"sizeBytes\":{},\"sha256\":\"{content_sha}\"}}]}}\n",
         content.len(),
@@ -455,8 +468,12 @@ pub(crate) fn canonical_test_bundle(project: &str, scope: &str, path: &str, cont
     archive
 }
 
-
-pub(crate) fn canonical_multi_file_bundle(project: &str, scope: &str, files: &[(String, Vec<u8>)]) -> Vec<u8> {    let logical_bytes = files
+pub(crate) fn canonical_multi_file_bundle(
+    project: &str,
+    scope: &str,
+    files: &[(String, Vec<u8>)],
+) -> Vec<u8> {
+    let logical_bytes = files
         .iter()
         .map(|(_, content)| content.len())
         .sum::<usize>();
@@ -496,8 +513,8 @@ pub(crate) fn canonical_multi_file_bundle(project: &str, scope: &str, files: &[(
     archive
 }
 
-
-pub(crate) fn test_tar_entry(name: &str, kind: u8, mode: u64, content: &[u8]) -> Vec<u8> {    let mut header = [0_u8; 512];
+pub(crate) fn test_tar_entry(name: &str, kind: u8, mode: u64, content: &[u8]) -> Vec<u8> {
+    let mut header = [0_u8; 512];
     header[..name.len()].copy_from_slice(name.as_bytes());
     test_octal(&mut header[100..108], mode);
     test_octal(&mut header[108..116], 0);
@@ -519,15 +536,15 @@ pub(crate) fn test_tar_entry(name: &str, kind: u8, mode: u64, content: &[u8]) ->
     entry
 }
 
-
-pub(crate) fn test_octal(target: &mut [u8], value: u64) {    let digits = format!("{:0width$o}", value, width = target.len() - 1);
+pub(crate) fn test_octal(target: &mut [u8], value: u64) {
+    let digits = format!("{:0width$o}", value, width = target.len() - 1);
     let count = target.len() - 1;
     target[..count].copy_from_slice(digits.as_bytes());
     target[count] = 0;
 }
 
-
-pub(crate) fn test_pax_record(path: &str) -> String {    let body = format!("path={path}\n");
+pub(crate) fn test_pax_record(path: &str) -> String {
+    let body = format!("path={path}\n");
     let mut length = body.len() + 2;
     loop {
         let record = format!("{length} {body}");
@@ -538,8 +555,8 @@ pub(crate) fn test_pax_record(path: &str) -> String {    let body = format!("pat
     }
 }
 
-
-pub(crate) fn hex_digest(bytes: &[u8]) -> String {    use std::fmt::Write as _;
+pub(crate) fn hex_digest(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
     let mut value = String::with_capacity(64);
     for byte in Sha256::digest(bytes) {
         let _ = write!(value, "{byte:02x}");
@@ -547,18 +564,22 @@ pub(crate) fn hex_digest(bytes: &[u8]) -> String {    use std::fmt::Write as _;
     value
 }
 
-
-pub(crate) fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {    haystack
+pub(crate) fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
         .windows(needle.len())
         .position(|window| window == needle)
 }
 
-
-pub(crate) fn multipart_request(project: &str, idempotency: &str, bodies: &[Bytes]) -> CreateMultipartSession {    multipart_request_for_bodies(SCOPE, project, USER, idempotency, bodies)
+pub(crate) fn multipart_request(
+    project: &str,
+    idempotency: &str,
+    bodies: &[Bytes],
+) -> CreateMultipartSession {
+    multipart_request_for_bodies(SCOPE, project, USER, idempotency, bodies)
 }
 
-
-pub(crate) fn multipart_request_for_bodies(    scope: &str,
+pub(crate) fn multipart_request_for_bodies(
+    scope: &str,
     project: &str,
     actor: &str,
     idempotency: &str,
@@ -591,8 +612,8 @@ pub(crate) fn multipart_request_for_bodies(    scope: &str,
     }
 }
 
-
-pub(crate) fn multipart_request_for(    scope: &str,
+pub(crate) fn multipart_request_for(
+    scope: &str,
     project: &str,
     actor: &str,
     idempotency: &str,
@@ -605,8 +626,11 @@ pub(crate) fn multipart_request_for(    scope: &str,
     request
 }
 
-
-pub(crate) fn multipart_boundary_request(project: &str, idempotency: &str) -> CreateMultipartSession {    let part_size = 16 * 1024 * 1024_u64;
+pub(crate) fn multipart_boundary_request(
+    project: &str,
+    idempotency: &str,
+) -> CreateMultipartSession {
+    let part_size = 16 * 1024 * 1024_u64;
     let parts = (1..=128)
         .map(|number| {
             MultipartPartPlan::new(
@@ -631,8 +655,8 @@ pub(crate) fn multipart_boundary_request(project: &str, idempotency: &str) -> Cr
     }
 }
 
-
-pub(crate) fn request_for(    storage_scope: &str,
+pub(crate) fn request_for(
+    storage_scope: &str,
     project: &str,
     actor: &str,
     idempotency: &str,
@@ -652,8 +676,8 @@ pub(crate) fn request_for(    storage_scope: &str,
     }
 }
 
-
-pub(crate) async fn verify_authorization(service: &SinglePutService, body: &[u8]) {    assert_eq!(
+pub(crate) async fn verify_authorization(service: &SinglePutService, body: &[u8]) {
+    assert_eq!(
         service
             .create(request_for(
                 SCOPE,
@@ -701,8 +725,8 @@ pub(crate) async fn verify_authorization(service: &SinglePutService, body: &[u8]
     }
 }
 
-
-pub(crate) async fn send_with_mutation(    client: &reqwest::Client,
+pub(crate) async fn send_with_mutation(
+    client: &reqwest::Client,
     capability: &BoundedPresignedRequest,
     body: &[u8],
     header_override: Option<(&str, &str)>,
@@ -732,8 +756,8 @@ pub(crate) async fn send_with_mutation(    client: &reqwest::Client,
         .unwrap_or(false)
 }
 
-
-pub(crate) async fn send_multipart_part(    client: &reqwest::Client,
+pub(crate) async fn send_multipart_part(
+    client: &reqwest::Client,
     capability: &BoundedPresignedRequest,
     body: &[u8],
 ) -> Option<String> {
@@ -752,8 +776,8 @@ pub(crate) async fn send_multipart_part(    client: &reqwest::Client,
         .map(str::to_owned)
 }
 
-
-pub(crate) fn fixture_http_client(ca_file: &str) -> reqwest::Client {    let certificate = reqwest::Certificate::from_pem(&fs::read(ca_file).unwrap()).unwrap();
+pub(crate) fn fixture_http_client(ca_file: &str) -> reqwest::Client {
+    let certificate = reqwest::Certificate::from_pem(&fs::read(ca_file).unwrap()).unwrap();
     reqwest::Client::builder()
         .add_root_certificate(certificate)
         .timeout(Duration::from_secs(2))
@@ -761,8 +785,8 @@ pub(crate) fn fixture_http_client(ca_file: &str) -> reqwest::Client {    let cer
         .unwrap()
 }
 
-
-pub(crate) fn version_http_router(pool: DatabasePool) -> Router {    let external_url = Url::parse(WEB_ORIGIN).unwrap();
+pub(crate) fn version_http_router(pool: DatabasePool) -> Router {
+    let external_url = Url::parse(WEB_ORIGIN).unwrap();
     let auth = AuthService::production(
         pool.clone(),
         &external_url,
@@ -787,16 +811,16 @@ pub(crate) fn version_http_router(pool: DatabasePool) -> Router {    let externa
     )
 }
 
-
-pub(crate) async fn save_http_service(    pool: DatabasePool,
+pub(crate) async fn save_http_service(
+    pool: DatabasePool,
     store: S3ObjectStore,
     secret: IdempotencySecret,
 ) -> Result<(ProjectHttpService, SaveHttpService), SaveHttpError> {
     save_http_service_with_transport(pool, store, secret, SaveUploadTransport::Direct).await
 }
 
-
-pub(crate) async fn save_http_service_with_transport(    pool: DatabasePool,
+pub(crate) async fn save_http_service_with_transport(
+    pool: DatabasePool,
     store: S3ObjectStore,
     secret: IdempotencySecret,
     transport: SaveUploadTransport,
@@ -825,8 +849,8 @@ pub(crate) async fn save_http_service_with_transport(    pool: DatabasePool,
     Ok((projects, save))
 }
 
-
-pub(crate) async fn save_http_router_with_transport(    pool: DatabasePool,
+pub(crate) async fn save_http_router_with_transport(
+    pool: DatabasePool,
     store: S3ObjectStore,
     secret: IdempotencySecret,
     transport: SaveUploadTransport,
@@ -851,8 +875,8 @@ pub(crate) async fn save_http_router_with_transport(    pool: DatabasePool,
     ))
 }
 
-
-pub(crate) async fn save_http_router(    pool: DatabasePool,
+pub(crate) async fn save_http_router(
+    pool: DatabasePool,
     store: S3ObjectStore,
     secret: IdempotencySecret,
 ) -> Result<Router, SaveHttpError> {

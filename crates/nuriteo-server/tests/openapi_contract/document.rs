@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::routes::*;
+use super::*;
 use axum::Router;
 
 use axum::body::{Body, to_bytes};
@@ -15,13 +15,12 @@ use nuriteo_server::openapi::{self, DOCS_PATH, DOCUMENT_PATH};
 
 use serde_json::{Value, json};
 
-use tower::ServiceExt;
 use super::{REQUEST_ID, SNAPSHOT};
-
-
+use tower::ServiceExt;
 
 #[test]
-pub(crate) fn versioned_document_matches_the_reviewed_snapshot() {    let document = serde_json::to_string_pretty(&openapi::document()).unwrap();
+pub(crate) fn versioned_document_matches_the_reviewed_snapshot() {
+    let document = serde_json::to_string_pretty(&openapi::document()).unwrap();
     let document = format!("{document}\n");
     if std::env::var_os("NURITEO_UPDATE_OPENAPI_SNAPSHOT").is_some() {
         let path =
@@ -32,9 +31,9 @@ pub(crate) fn versioned_document_matches_the_reviewed_snapshot() {    let docume
     assert_eq!(document, SNAPSHOT);
 }
 
-
 #[test]
-pub(crate) fn published_content_is_binary_and_cookie_free() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn published_content_is_binary_and_cookie_free() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     for path in [
         "/api/v1/published-examples/{public_id}/content",
         "/api/v1/published-examples/{public_id}/versions/{version_number}/content",
@@ -55,9 +54,9 @@ pub(crate) fn published_content_is_binary_and_cookie_free() {    let document = 
     }
 }
 
-
 #[test]
-pub(crate) fn audit_api_declares_cursor_export_and_retention_security_boundaries() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn audit_api_declares_cursor_export_and_retention_security_boundaries() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let list = &document["paths"]["/api/v1/admin/audit-events"]["get"];
     let parameters = list["parameters"].as_array().unwrap();
     for name in [
@@ -124,9 +123,9 @@ pub(crate) fn audit_api_declares_cursor_export_and_retention_security_boundaries
     );
 }
 
-
 #[test]
-pub(crate) fn backup_api_declares_admin_mutation_and_concurrency_boundaries() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn backup_api_declares_admin_mutation_and_concurrency_boundaries() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let console = &document["paths"]["/api/v1/admin/backups"]["get"];
     assert_eq!(console["security"][0]["projectSessionCookie"], json!([]));
     assert_eq!(
@@ -168,9 +167,9 @@ pub(crate) fn backup_api_declares_admin_mutation_and_concurrency_boundaries() { 
     );
 }
 
-
 #[test]
-pub(crate) fn integration_ca_api_exposes_only_server_bound_safe_metadata() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn integration_ca_api_exposes_only_server_bound_safe_metadata() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let stage = &document["paths"]["/api/v1/admin/integrations/{integrationType}/{integrationId}/ca/candidates"]
         ["post"];
     let headers = stage["parameters"]
@@ -207,9 +206,9 @@ pub(crate) fn integration_ca_api_exposes_only_server_bound_safe_metadata() {    
     }
 }
 
-
 #[test]
-pub(crate) fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let operation = &document["paths"]["/api/v1/admin/operations"]["get"];
     assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
     assert_eq!(
@@ -232,9 +231,9 @@ pub(crate) fn operations_dashboard_is_admin_only_and_uses_safe_aggregate_schema(
     }
 }
 
-
 #[test]
-pub(crate) fn support_bundle_is_admin_only_and_has_no_secret_bearing_fields() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn support_bundle_is_admin_only_and_has_no_secret_bearing_fields() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let operation = &document["paths"]["/api/v1/admin/support-bundle"]["get"];
     assert_eq!(operation["security"][0]["projectSessionCookie"], json!([]));
     assert_eq!(
@@ -268,9 +267,9 @@ pub(crate) fn support_bundle_is_admin_only_and_has_no_secret_bearing_fields() { 
     }
 }
 
-
 #[tokio::test]
-pub(crate) async fn serves_the_versioned_document_from_the_application_router() {    let response = get(build_router(), DOCUMENT_PATH).await;
+pub(crate) async fn serves_the_versioned_document_from_the_application_router() {
+    let response = get(build_router(), DOCUMENT_PATH).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()[CONTENT_TYPE], "application/json");
@@ -445,9 +444,9 @@ pub(crate) async fn serves_the_versioned_document_from_the_application_router() 
     );
 }
 
-
 #[test]
-pub(crate) fn git_api_exposes_only_metadata_and_requires_browser_mutation_guards() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn git_api_exposes_only_metadata_and_requires_browser_mutation_guards() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let schemas = document["components"]["schemas"].as_object().unwrap();
     for schema in ["GitConnectionView", "GitRemoteView", "GitOperationView"] {
         let serialized = serde_json::to_string(&schemas[schema]).unwrap();
@@ -490,9 +489,9 @@ pub(crate) fn git_api_exposes_only_metadata_and_requires_browser_mutation_guards
     }
 }
 
-
 #[test]
-pub(crate) fn git_provider_administration_is_guarded_versioned_and_secret_free() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn git_provider_administration_is_guarded_versioned_and_secret_free() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let schema =
         serde_json::to_string(&document["components"]["schemas"]["GitProviderAdminView"]).unwrap();
     for forbidden in ["token", "clientSecret", "credential", "caPem", "privateKey"] {
@@ -526,9 +525,9 @@ pub(crate) fn git_provider_administration_is_guarded_versioned_and_secret_free()
     }
 }
 
-
 #[test]
-pub(crate) fn published_example_forks_require_session_csrf_origin_and_idempotency() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn published_example_forks_require_session_csrf_origin_and_idempotency() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     for path in [
         "/api/v1/published-examples/{public_id}/forks",
         "/api/v1/published-examples/{public_id}/versions/{version_number}/forks",
@@ -562,9 +561,9 @@ pub(crate) fn published_example_forks_require_session_csrf_origin_and_idempotenc
     }
 }
 
-
 #[test]
-pub(crate) fn team_api_declares_session_csrf_etag_and_no_store_contracts() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn team_api_declares_session_csrf_etag_and_no_store_contracts() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     for path in [
         "/api/v1/organizations/{organization_id}/teams",
         "/api/v1/organizations/{organization_id}/teams/{team_id}",
@@ -643,9 +642,9 @@ pub(crate) fn team_api_declares_session_csrf_etag_and_no_store_contracts() {    
     }
 }
 
-
 #[tokio::test]
-pub(crate) async fn problem_schema_tracks_the_actual_safe_error_shape() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) async fn problem_schema_tracks_the_actual_safe_error_shape() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let schema = &document["components"]["schemas"]["ProblemDetails"];
     assert_eq!(
         schema["required"],
@@ -686,9 +685,9 @@ pub(crate) async fn problem_schema_tracks_the_actual_safe_error_shape() {    let
     }
 }
 
-
 #[test]
-pub(crate) fn project_openapi_declares_every_error_as_problem_json() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn project_openapi_declares_every_error_as_problem_json() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let scheme = &document["components"]["securitySchemes"]["projectSessionCookie"];
     assert_eq!(scheme["type"], "apiKey");
     assert_eq!(scheme["in"], "cookie");
@@ -767,9 +766,9 @@ pub(crate) fn project_openapi_declares_every_error_as_problem_json() {    let do
     }
 }
 
-
 #[test]
-pub(crate) fn project_content_download_is_declared_as_binary_octets() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn project_content_download_is_declared_as_binary_octets() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let response = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/content/{bundle_id}"]
         ["get"]["responses"]["200"];
     assert_eq!(

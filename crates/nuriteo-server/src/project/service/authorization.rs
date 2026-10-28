@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
 use super::audit_context::*;
-use super::projects::*;
 use super::commit::*;
+use super::projects::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -16,7 +16,6 @@ use std::sync::{
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -24,7 +23,6 @@ use sqlx::{Acquire, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -39,18 +37,23 @@ use crate::organization::OrganizationId;
 
 use crate::workspace::StorageScopeId;
 
-
 use super::super::{
     DirectProjectRoleGrant, EffectiveProjectRole, NewProject, Project, ProjectAccessError,
     ProjectAccessRepository, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageKey,
     ProjectPageLimit, ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleVersion,
     ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MIN_DATABASE_TIMEOUT, DATABASE_TIMEOUT_RESOLUTION_MARGIN, COMMIT_RESOLUTION_GRACE, DEFAULT_PROJECT_ROLE_PAGE_SIZE, MAX_PROJECT_ROLE_PAGE_SIZE, ProjectRow, GrantRow, ProjectServicePolicy, ProjectAuditContext, ProjectListPage, ProjectRolePageLimit, ProjectRolePageKey, DirectProjectRolePage, ProjectDeleteConfirmation, ProjectRoleMutationResult, ProjectServiceError, ProjectService, MutationDeadline, ListAuthorization};
+use super::{
+    COMMIT_RESOLUTION_GRACE, DATABASE_TIMEOUT_RESOLUTION_MARGIN, DEFAULT_OPERATION_TIMEOUT,
+    DEFAULT_PROJECT_ROLE_PAGE_SIZE, DirectProjectRolePage, GrantRow, ListAuthorization,
+    MAX_OPERATION_TIMEOUT, MAX_PROJECT_ROLE_PAGE_SIZE, MIN_DATABASE_TIMEOUT, MIN_OPERATION_TIMEOUT,
+    MutationDeadline, ProjectAuditContext, ProjectDeleteConfirmation, ProjectListPage,
+    ProjectRoleMutationResult, ProjectRolePageKey, ProjectRolePageLimit, ProjectRow,
+    ProjectService, ProjectServiceError, ProjectServicePolicy,
+};
 
-
-
-impl super::ProjectService {    #[allow(
+impl super::ProjectService {
+    #[allow(
         clippy::too_many_arguments,
         reason = "role mutation inputs remain explicit"
     )]
@@ -107,7 +110,9 @@ impl super::ProjectService {    #[allow(
             ProjectRoleMutationResult::AlreadyAbsent
         })
     }
-    pub(crate) async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, ProjectServiceError> {
+    pub(crate) async fn acquire(
+        &self,
+    ) -> Result<sqlx::pool::PoolConnection<Postgres>, ProjectServiceError> {
         self.pool
             .acquire()
             .await
@@ -203,7 +208,6 @@ impl super::ProjectService {    #[allow(
     }
 }
 
-
 impl ProjectServiceError {
     pub(crate) const fn requires_failure_audit(self) -> bool {
         matches!(
@@ -254,8 +258,8 @@ impl ProjectServiceError {
     }
 }
 
-
-pub(crate) async fn authorize_create(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_create(
+    transaction: &mut Transaction<'_, Postgres>,
     actor_user_id: UserId,
     owner: ProjectOwner,
 ) -> Result<StorageScopeId, ProjectServiceError> {
@@ -279,8 +283,8 @@ pub(crate) async fn authorize_create(    transaction: &mut Transaction<'_, Postg
     }
 }
 
-
-pub(crate) async fn authorize_list(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_list(
+    transaction: &mut Transaction<'_, Postgres>,
     actor_user_id: UserId,
     owner: ProjectOwner,
 ) -> Result<ListAuthorization, ProjectServiceError> {
@@ -308,8 +312,8 @@ pub(crate) async fn authorize_list(    transaction: &mut Transaction<'_, Postgre
     }
 }
 
-
-pub(crate) async fn authorize_mutation(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_mutation(
+    transaction: &mut Transaction<'_, Postgres>,
     actor_user_id: UserId,
     owner: ProjectOwner,
     project_id: ProjectId,
@@ -344,8 +348,8 @@ pub(crate) async fn authorize_mutation(    transaction: &mut Transaction<'_, Pos
     Ok((project, now))
 }
 
-
-pub(crate) async fn authorize_role_management(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_role_management(
+    transaction: &mut Transaction<'_, Postgres>,
     actor_user_id: UserId,
     owner: ProjectOwner,
     project_id: ProjectId,
@@ -374,8 +378,8 @@ pub(crate) async fn authorize_role_management(    transaction: &mut Transaction<
     Ok(now)
 }
 
-
-pub(crate) async fn require_active_user(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_active_user(
+    transaction: &mut Transaction<'_, Postgres>,
     user_id: UserId,
 ) -> Result<(), ProjectServiceError> {
     let status: Option<String> =
@@ -391,8 +395,8 @@ pub(crate) async fn require_active_user(    transaction: &mut Transaction<'_, Po
     }
 }
 
-
-pub(crate) async fn require_active_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_active_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), ProjectServiceError> {
     let status: Option<String> =
@@ -409,8 +413,8 @@ pub(crate) async fn require_active_organization(    transaction: &mut Transactio
     }
 }
 
-
-pub(crate) async fn lock_membership_role(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_membership_role(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     user_id: UserId,
 ) -> Result<Option<String>, ProjectServiceError> {
@@ -425,8 +429,8 @@ pub(crate) async fn lock_membership_role(    transaction: &mut Transaction<'_, P
     .map_err(map_service_query_error)
 }
 
-
-pub(crate) async fn storage_scope_for_owner(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn storage_scope_for_owner(
+    transaction: &mut Transaction<'_, Postgres>,
     owner: ProjectOwner,
 ) -> Result<StorageScopeId, ProjectServiceError> {
     let value: Option<String> = match owner {
@@ -456,8 +460,8 @@ pub(crate) async fn storage_scope_for_owner(    transaction: &mut Transaction<'_
         .map_err(|_| ProjectServiceError::InvariantViolation)
 }
 
-
-pub(crate) async fn query_authorized_page(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn query_authorized_page(
+    transaction: &mut Transaction<'_, Postgres>,
     actor_user_id: UserId,
     owner: ProjectOwner,
     authorization: ListAuthorization,
@@ -534,8 +538,8 @@ pub(crate) async fn query_authorized_page(    transaction: &mut Transaction<'_, 
     decode_list_page(rows, limit)
 }
 
-
-pub(crate) fn decode_list_page(    rows: Vec<ProjectRow>,
+pub(crate) fn decode_list_page(
+    rows: Vec<ProjectRow>,
     limit: ProjectPageLimit,
 ) -> Result<ProjectListPage, ProjectServiceError> {
     let mut projects = rows
@@ -555,8 +559,8 @@ pub(crate) fn decode_list_page(    rows: Vec<ProjectRow>,
     Ok(ProjectListPage { projects, next_key })
 }
 
-
-pub(crate) fn decode_project(row: ProjectRow) -> Result<Project, ProjectServiceError> {    let id = row
+pub(crate) fn decode_project(row: ProjectRow) -> Result<Project, ProjectServiceError> {
+    let id = row
         .0
         .parse()
         .map_err(|_| ProjectServiceError::InvariantViolation)?;
@@ -612,8 +616,8 @@ pub(crate) fn decode_project(row: ProjectRow) -> Result<Project, ProjectServiceE
     .map_err(|_| ProjectServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn decode_grant(row: GrantRow) -> Result<DirectProjectRoleGrant, ProjectServiceError> {    DirectProjectRoleGrant::reconstruct(
+pub(crate) fn decode_grant(row: GrantRow) -> Result<DirectProjectRoleGrant, ProjectServiceError> {
+    DirectProjectRoleGrant::reconstruct(
         row.0
             .parse()
             .map_err(|_| ProjectServiceError::InvariantViolation)?,
@@ -631,8 +635,8 @@ pub(crate) fn decode_grant(row: GrantRow) -> Result<DirectProjectRoleGrant, Proj
     .map_err(map_access_error)
 }
 
-
-pub(crate) fn reconstruct_changed_project(    project: &Project,
+pub(crate) fn reconstruct_changed_project(
+    project: &Project,
     name: ProjectName,
     state: ProjectState,
     updated_at: Timestamp,
@@ -657,22 +661,22 @@ pub(crate) fn reconstruct_changed_project(    project: &Project,
     .map_err(|_| ProjectServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn ensure_active(project: &Project) -> Result<(), ProjectServiceError> {    if project.state() != ProjectState::Active {
+pub(crate) fn ensure_active(project: &Project) -> Result<(), ProjectServiceError> {
+    if project.state() != ProjectState::Active {
         return Err(ProjectServiceError::Archived);
     }
     Ok(())
 }
 
-
-pub(crate) fn require_one_versioned_row(rows_affected: u64) -> Result<(), ProjectServiceError> {    if rows_affected != 1 {
+pub(crate) fn require_one_versioned_row(rows_affected: u64) -> Result<(), ProjectServiceError> {
+    if rows_affected != 1 {
         return Err(ProjectServiceError::StaleVersion);
     }
     Ok(())
 }
 
-
-pub(crate) async fn advance_project_version(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn advance_project_version(
+    transaction: &mut Transaction<'_, Postgres>,
     project_id: ProjectId,
     expected_version: ProjectVersion,
     now: Timestamp,
@@ -690,8 +694,8 @@ pub(crate) async fn advance_project_version(    transaction: &mut Transaction<'_
     require_one_versioned_row(result.rows_affected())
 }
 
-
-pub(crate) async fn append_success_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_success_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &ProjectAuditContext,
     occurred_at: Timestamp,
     project_id: ProjectId,
@@ -714,12 +718,12 @@ pub(crate) async fn append_success_audit(    transaction: &mut Transaction<'_, P
         .map_err(|_| ProjectServiceError::AuditUnavailable)
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "audit fields are explicit security context"
 )]
-pub(crate) async fn append_role_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_role_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &ProjectAuditContext,
     occurred_at: Timestamp,
     project_id: ProjectId,
@@ -743,12 +747,12 @@ pub(crate) async fn append_role_audit(    transaction: &mut Transaction<'_, Post
         .map_err(|_| ProjectServiceError::AuditUnavailable)
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "audit fields are explicit security context"
 )]
-pub(crate) fn build_audit_event(    audit: &ProjectAuditContext,
+pub(crate) fn build_audit_event(
+    audit: &ProjectAuditContext,
     occurred_at: Timestamp,
     project_id: ProjectId,
     action: &str,
@@ -788,8 +792,8 @@ pub(crate) fn build_audit_event(    audit: &ProjectAuditContext,
     .map_err(|_| ProjectServiceError::InvalidInput)
 }
 
-
-pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Timestamp, ProjectServiceError> {
     let value: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)

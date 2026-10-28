@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::session::*;
+use super::*;
 use std::fmt;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -19,7 +18,6 @@ use tokio::io::AsyncRead;
 use tokio::time;
 
 use utoipa::ToSchema;
-
 
 use crate::database::DatabasePool;
 
@@ -36,7 +34,6 @@ use crate::project::{
 
 use crate::quota::{EffectiveQuota, SaveSessionId};
 
-
 use super::super::http_config::SaveUploadTransport;
 
 use super::super::relay::{RelayUploadError, RelayUploadService};
@@ -49,11 +46,15 @@ use super::super::{
     SinglePutServicePolicy, StagingVerifier, StagingVerifierPolicy, VerificationError,
     VerifyStagingBundle, WorkingHeadCommitError, WorkingHeadCommitPolicy, WorkingHeadCommitService,
 };
-use super::{BUNDLE_CONTENT_TYPE, RELAY_CHECKSUM_HEADER, SaveHttpPolicy, SaveHttpError, SaveHttpService, Runtime, SaveCreateInput, SavePartInput, SaveReceiptInput, RelaySingleUploadInput, RelayPartUploadInput, UploadCapabilityView, UploadHeaderView, SaveSessionView, CommitView};
+use super::{
+    BUNDLE_CONTENT_TYPE, CommitView, RELAY_CHECKSUM_HEADER, RelayPartUploadInput,
+    RelaySingleUploadInput, Runtime, SaveCreateInput, SaveHttpError, SaveHttpPolicy,
+    SaveHttpService, SavePartInput, SaveReceiptInput, SaveSessionView, UploadCapabilityView,
+    UploadHeaderView,
+};
 
-
-
-pub(crate) fn map_relay(error: RelayUploadError) -> SaveHttpError {    match error {
+pub(crate) fn map_relay(error: RelayUploadError) -> SaveHttpError {
+    match error {
         RelayUploadError::NotFound => SaveHttpError::NotFound,
         RelayUploadError::InvalidInput => SaveHttpError::InvalidInput,
         RelayUploadError::Conflict => SaveHttpError::Conflict,
@@ -65,16 +66,16 @@ pub(crate) fn map_relay(error: RelayUploadError) -> SaveHttpError {    match err
     }
 }
 
-
-pub(crate) fn upload_plan_matches_policy(    physical_bytes: u64,
+pub(crate) fn upload_plan_matches_policy(
+    physical_bytes: u64,
     parts_are_empty: bool,
     single_put_threshold_bytes: u64,
 ) -> bool {
     (physical_bytes <= single_put_threshold_bytes) == parts_are_empty
 }
 
-
-pub(crate) async fn configure_reconcile_deadline(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn configure_reconcile_deadline(
+    transaction: &mut Transaction<'_, Postgres>,
     operation_timeout: Duration,
 ) -> Result<(), SaveHttpError> {
     let millis = operation_timeout
@@ -93,8 +94,8 @@ pub(crate) async fn configure_reconcile_deadline(    transaction: &mut Transacti
     Ok(())
 }
 
-
-pub(crate) fn map_reconcile_query(error: sqlx::Error) -> SaveHttpError {    if error
+pub(crate) fn map_reconcile_query(error: sqlx::Error) -> SaveHttpError {
+    if error
         .as_database_error()
         .and_then(sqlx::error::DatabaseError::code)
         .is_some_and(|code| matches!(code.as_ref(), "57014" | "55P03"))

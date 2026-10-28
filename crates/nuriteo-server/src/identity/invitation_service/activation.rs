@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::invitation_store::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -10,7 +10,6 @@ use std::net::IpAddr;
 use std::pin::Pin;
 
 use std::time::Duration;
-
 
 use serde_json::json;
 
@@ -22,7 +21,6 @@ use tokio::time as tokio_time;
 
 use uuid::Uuid;
 
-
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
     AuditScope, AuditTarget, AuditWriter, ScopeType,
@@ -32,15 +30,18 @@ use crate::database::DatabasePool;
 
 use crate::policy::EffectivePolicyEngine;
 
-
 use super::super::{
     ActivationInvitation, ActivationInvitationFields, ActivationInvitationId,
     ActivationInvitationStatus, ActivationToken, ActivationTokenError, InvitationExpiryPolicy,
     NormalizedEmail, Timestamp, UserId,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, InvitationAuditContext, InvitationServicePolicy, InvitationServicePolicyError, IssuedActivationInvitation, InvitationRevokeResult, PendingInvitationActivation, InvitationActivationFuture, InvitationActivator, InvitationActivationError, InvitationServiceError, InvitationService, AuditInput, map_token_error};
-
-
+use super::{
+    AuditInput, DEFAULT_OPERATION_TIMEOUT, InvitationActivationError, InvitationActivationFuture,
+    InvitationActivator, InvitationAuditContext, InvitationRevokeResult, InvitationService,
+    InvitationServiceError, InvitationServicePolicy, InvitationServicePolicyError,
+    IssuedActivationInvitation, MAX_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT,
+    PendingInvitationActivation, map_token_error,
+};
 
 impl super::InvitationAuditContext {
     #[must_use]
@@ -61,8 +62,8 @@ impl super::InvitationAuditContext {
     }
 }
 
-
-impl fmt::Debug for InvitationAuditContext { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for InvitationAuditContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("InvitationAuditContext")
             .field("event_id", &self.event_id)
@@ -70,7 +71,6 @@ impl fmt::Debug for InvitationAuditContext { fn fmt(&self, formatter: &mut fmt::
             .finish_non_exhaustive()
     }
 }
-
 
 impl InvitationServicePolicy {
     pub fn new(
@@ -97,8 +97,8 @@ impl InvitationServicePolicy {
     }
 }
 
-
-impl Default for InvitationServicePolicy { fn default() -> Self {
+impl Default for InvitationServicePolicy {
+    fn default() -> Self {
         Self {
             expiry: InvitationExpiryPolicy::default(),
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
@@ -106,15 +106,13 @@ impl Default for InvitationServicePolicy { fn default() -> Self {
     }
 }
 
-
-impl fmt::Display for InvitationServicePolicyError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for InvitationServicePolicyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("invitation operation timeout is invalid")
     }
 }
 
-
 impl std::error::Error for InvitationServicePolicyError {}
-
 
 impl IssuedActivationInvitation {
     #[must_use]
@@ -138,8 +136,8 @@ impl IssuedActivationInvitation {
     }
 }
 
-
-impl fmt::Debug for IssuedActivationInvitation { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for IssuedActivationInvitation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("IssuedActivationInvitation")
             .field("invitation", &self.invitation)
@@ -147,7 +145,6 @@ impl fmt::Debug for IssuedActivationInvitation { fn fmt(&self, formatter: &mut f
             .finish()
     }
 }
-
 
 impl PendingInvitationActivation {
     #[must_use]
@@ -161,8 +158,8 @@ impl PendingInvitationActivation {
     }
 }
 
-
-impl fmt::Display for InvitationActivationError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for InvitationActivationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::Rejected => "invitation activation was rejected",
             Self::DatabaseUnavailable => "invitation activation persistence is unavailable",
@@ -171,11 +168,10 @@ impl fmt::Display for InvitationActivationError { fn fmt(&self, formatter: &mut 
     }
 }
 
-
 impl std::error::Error for InvitationActivationError {}
 
-
-impl fmt::Display for InvitationServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for InvitationServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::AlreadyPending => "a pending invitation already exists",
             Self::InvalidInvitation => "activation invitation is invalid",
@@ -192,9 +188,7 @@ impl fmt::Display for InvitationServiceError { fn fmt(&self, formatter: &mut fmt
     }
 }
 
-
 impl std::error::Error for InvitationServiceError {}
-
 
 impl InvitationService {
     #[must_use]
@@ -671,7 +665,6 @@ impl InvitationService {
     }
 }
 
-
 impl AuditInput {
     pub(crate) fn success(
         action: &'static str,
@@ -701,8 +694,8 @@ impl AuditInput {
     }
 }
 
-
-pub(crate) async fn require_issuing_admin(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_issuing_admin(
+    transaction: &mut Transaction<'_, Postgres>,
     inviter: UserId,
     audit: &InvitationAuditContext,
 ) -> Result<(), InvitationServiceError> {
@@ -715,8 +708,8 @@ pub(crate) async fn require_issuing_admin(    transaction: &mut Transaction<'_, 
     require_admin_id(transaction, inviter).await
 }
 
-
-pub(crate) async fn require_context_admin(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_context_admin(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &InvitationAuditContext,
 ) -> Result<(), InvitationServiceError> {
     let Some(user_id) = audit.actor.user_id else {
@@ -728,8 +721,8 @@ pub(crate) async fn require_context_admin(    transaction: &mut Transaction<'_, 
     require_admin_id(transaction, user_id).await
 }
 
-
-pub(crate) async fn require_admin_id(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_admin_id(
+    transaction: &mut Transaction<'_, Postgres>,
     user_id: UserId,
 ) -> Result<(), InvitationServiceError> {
     let admin: Option<(String, bool)> =
@@ -744,8 +737,8 @@ pub(crate) async fn require_admin_id(    transaction: &mut Transaction<'_, Postg
     Ok(())
 }
 
-
-pub(crate) async fn lock_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_email(
+    transaction: &mut Transaction<'_, Postgres>,
     email: &NormalizedEmail,
 ) -> Result<(), InvitationServiceError> {
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1229867348))")
@@ -756,8 +749,8 @@ pub(crate) async fn lock_email(    transaction: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn expire_pending_for_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn expire_pending_for_email(
+    transaction: &mut Transaction<'_, Postgres>,
     email: &NormalizedEmail,
 ) -> Result<(), InvitationServiceError> {
     sqlx::query(
@@ -772,8 +765,8 @@ pub(crate) async fn expire_pending_for_email(    transaction: &mut Transaction<'
     Ok(())
 }
 
-
-pub(crate) async fn pending_id_for_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn pending_id_for_email(
+    transaction: &mut Transaction<'_, Postgres>,
     email: &NormalizedEmail,
 ) -> Result<Option<ActivationInvitationId>, InvitationServiceError> {
     sqlx::query_scalar::<_, String>(
@@ -792,8 +785,8 @@ pub(crate) async fn pending_id_for_email(    transaction: &mut Transaction<'_, P
     .transpose()
 }
 
-
-pub(crate) async fn invitation_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn invitation_email(
+    transaction: &mut Transaction<'_, Postgres>,
     id: ActivationInvitationId,
 ) -> Result<Option<NormalizedEmail>, InvitationServiceError> {
     sqlx::query_scalar::<_, String>(

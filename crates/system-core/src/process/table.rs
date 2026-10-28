@@ -1,4 +1,8 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
 
 use super::{
     resources::ResourceTable,
@@ -7,24 +11,57 @@ use super::{
     },
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Why a process-table operation failed.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProcessError {
+    /// The process group does not belong to the session.
     InvalidProcessGroup,
+    /// The process cannot become a session leader.
     InvalidSession,
+    /// The current status does not allow this transition.
     InvalidTransition,
+    /// No process is registered for the pid.
     NotFound,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl ProcessError {
+    /// Static sentence returned to a guest for this process failure.
+    #[must_use]
+    pub const fn reason(self) -> &'static str {
+        match self {
+            Self::InvalidProcessGroup => "invalid process group",
+            Self::InvalidSession => "invalid session",
+            Self::InvalidTransition => "invalid process state transition",
+            Self::NotFound => "process was not found",
+        }
+    }
+}
+
+impl Display for ProcessError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.reason())
+    }
+}
+
+impl Error for ProcessError {}
+
+/// Process and signal queued for delivery.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SignalDelivery {
+    /// Process that will observe the signal.
     pub pid: Pid,
+    /// Generation of that process at queue time.
     pub generation: Generation,
+    /// Signal waiting to be taken.
     pub signal: VirtualSignal,
 }
 
+/// Process-table operation result alias.
 pub type ProcessResult<T> = Result<T, ProcessError>;
 
-#[derive(Debug, Default, Clone)]
+/// Processes, sessions, and pending virtual signals.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ProcessTable {
     next_pid: u32,
     next_generation: u32,
@@ -34,6 +71,14 @@ pub struct ProcessTable {
 }
 
 impl ProcessTable {
+    /// Creates a table with no processes.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Allocates a process in the prepared state.
+    #[must_use]
     pub fn prepare(
         &mut self,
         parent: Option<Pid>,
@@ -66,34 +111,70 @@ impl ProcessTable {
         state
     }
 
+    /// Moves a prepared process to starting.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when it is not prepared.
     pub fn start(&mut self, pid: Pid) -> ProcessResult<ProcessState> {
         self.transition(pid, ProcessStatus::Prepared, ProcessStatus::Starting, None)
     }
 
+    /// Moves a starting process to ready.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when it is not starting.
     pub fn ready(&mut self, pid: Pid) -> ProcessResult<ProcessState> {
         self.transition(pid, ProcessStatus::Starting, ProcessStatus::Ready, None)
     }
 
+    /// Marks a process failed and stores `exit_code`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when it has already stopped.
     pub fn fail(&mut self, pid: Pid, exit_code: i32) -> ProcessResult<ProcessState> {
         self.finish(pid, ProcessStatus::Failed, exit_code)
     }
 
+    /// Marks a process exited and stores `exit_code`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when it has already stopped.
     pub fn exit(&mut self, pid: Pid, exit_code: i32) -> ProcessResult<ProcessState> {
         self.finish(pid, ProcessStatus::Exited, exit_code)
     }
 
+    /// Marks a process killed.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when it has already stopped.
     pub fn kill(&mut self, pid: Pid) -> ProcessResult<ProcessState> {
         self.finish(pid, ProcessStatus::Killed, 137)
     }
 
+    /// Returns the state of `pid`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent.
     pub fn get(&self, pid: Pid) -> ProcessResult<&ProcessState> {
         self.processes.get(&pid).ok_or(ProcessError::NotFound)
     }
 
+    /// Reports whether `pid` still owns kernel resources.
+    #[must_use]
     pub fn has_resources(&self, pid: Pid) -> bool {
         self.resources.contains(pid)
     }
 
+    /// Makes `pid` the leader of a new session.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidSession`] when it already leads its group.
     pub fn create_session(&mut self, pid: Pid) -> ProcessResult<ProcessState> {
         let state = self.processes.get_mut(&pid).ok_or(ProcessError::NotFound)?;
         if state.process_group == ProcessGroupId(pid.0) {
@@ -104,6 +185,12 @@ impl ProcessTable {
         Ok(state.clone())
     }
 
+    /// Moves `pid` into an existing group in its session.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidProcessGroup`] when the group is empty, outside
+    /// the session, or the process is already a session leader.
     pub fn set_process_group(
         &mut self,
         pid: Pid,
@@ -120,11 +207,16 @@ impl ProcessTable {
         {
             return Err(ProcessError::InvalidProcessGroup);
         }
-        let state = self.processes.get_mut(&pid).expect("process was checked");
+        let state = self
+            .processes
+            .get_mut(&pid)
+            .expect("pid remained in the table after the membership check");
         state.process_group = process_group;
         Ok(state.clone())
     }
 
+    /// Returns live processes in `process_group`.
+    #[must_use]
     pub fn process_group_members(&self, process_group: ProcessGroupId) -> Vec<Pid> {
         self.processes
             .values()
@@ -135,6 +227,11 @@ impl ProcessTable {
             .collect()
     }
 
+    /// Queues a virtual signal for `pid`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent and
+    /// [`ProcessError::InvalidTransition`] when the process has already stopped.
     pub fn signal(&mut self, pid: Pid, signal: VirtualSignal) -> ProcessResult<SignalDelivery> {
         let state = self.processes.get(&pid).ok_or(ProcessError::NotFound)?;
         if is_terminal_status(state.status) {
@@ -152,6 +249,12 @@ impl ProcessTable {
         Ok(delivery)
     }
 
+    /// Queues a virtual signal for every live member of a group.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::InvalidProcessGroup`] when the group has no live
+    /// member, and [`ProcessError::NotFound`] or [`ProcessError::InvalidTransition`]
+    /// when a member cannot take the signal.
     pub fn signal_process_group(
         &mut self,
         process_group: ProcessGroupId,
@@ -167,6 +270,11 @@ impl ProcessTable {
             .collect()
     }
 
+    /// Pops the next queued signal for `pid`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` has no signal queue.
+    /// `Ok(None)` means the queue exists and is empty.
     pub fn take_signal(&mut self, pid: Pid) -> ProcessResult<Option<VirtualSignal>> {
         self.pending_signals
             .get_mut(&pid)
@@ -174,6 +282,10 @@ impl ProcessTable {
             .map(VecDeque::pop_front)
     }
 
+    /// Reports whether `process_group` belongs to the session of `pid`.
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::NotFound`] when `pid` is absent.
     pub fn same_session(&self, pid: Pid, process_group: ProcessGroupId) -> ProcessResult<bool> {
         let session = self.get(pid)?.session;
         Ok(self.processes.values().any(|candidate| {

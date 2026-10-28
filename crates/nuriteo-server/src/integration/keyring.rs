@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::credential_identity::*;
 use super::ca::*;
+use super::credential_identity::*;
 use super::error::*;
-
+use super::*;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -18,7 +17,6 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 
@@ -48,7 +46,6 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use zeroize::{Zeroize, Zeroizing};
 
-
 use crate::config::{Environment, FileReader, load_secret};
 
 use crate::database::DatabasePool;
@@ -57,10 +54,17 @@ use crate::identity::{SessionId, UserId};
 
 use crate::instance_settings::EffectiveInstanceSettings;
 
+use super::{
+    ALGORITHM, CaBundleMetadata, CaCandidatePreflight, CaEndpointBinding, CaPreflightProof,
+    CredentialIdentity, CredentialMetadata, DEFAULT_OPERATION_TIMEOUT, EncryptedSecretEnvelope,
+    IntegrationAdminActor, IntegrationAdminService, IntegrationAudit, IntegrationError,
+    IntegrationRepository, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_OPERATION_TIMEOUT, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH,
+    MAX_SECRET_BYTES, MIN_OPERATION_TIMEOUT, MasterKey, MasterKeyring, NONCE_BYTES,
+    PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, PreviousKeyInput, RotationReport, Sealed,
+    SecretValue, StoredCa, ValidatedCaBundle,
+};
 use crate::smtp::{SmtpConfig, SmtpPublicSettings, SmtpSecurity};
-use super::{ALGORITHM, NONCE_BYTES, MAX_SECRET_BYTES, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH, MAX_CA_BYTES, MAX_CA_CERTIFICATES, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, SecretValue, MasterKey, MasterKeyring, EncryptedSecretEnvelope, PreviousKeyInput, CredentialIdentity, CredentialMetadata, RotationReport, IntegrationRepository, Sealed, ValidatedCaBundle, CaBundleMetadata, CaEndpointBinding, IntegrationAdminActor, IntegrationAdminService, CaPreflightProof, CaCandidatePreflight, StoredCa, IntegrationAudit, IntegrationError};
-
-
 
 impl super::SecretValue {
     pub fn new(value: Vec<u8>) -> Result<Self, IntegrationError> {
@@ -76,20 +80,20 @@ impl super::SecretValue {
     }
 }
 
-
-impl fmt::Debug for SecretValue { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for SecretValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SecretValue([REDACTED])")
     }
 }
 
-
-impl fmt::Debug for MasterKey { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for MasterKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("MasterKey([REDACTED])")
     }
 }
 
-
-impl fmt::Debug for MasterKeyring { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for MasterKeyring {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MasterKeyring")
             .field("current_version", &self.current_version)
@@ -98,12 +102,11 @@ impl fmt::Debug for MasterKeyring { fn fmt(&self, formatter: &mut fmt::Formatter
     }
 }
 
-
-impl Drop for PreviousKeyInput { fn drop(&mut self) {
+impl Drop for PreviousKeyInput {
+    fn drop(&mut self) {
         self.key.zeroize();
     }
 }
-
 
 impl MasterKeyring {
     pub fn load(
@@ -292,8 +295,8 @@ impl MasterKeyring {
     }
 }
 
-
-pub(crate) fn scoped_attestation_input(    domain: &[u8],
+pub(crate) fn scoped_attestation_input(
+    domain: &[u8],
     context: &[&[u8]],
     key_version: u32,
 ) -> Result<Vec<u8>, IntegrationError> {
@@ -313,8 +316,8 @@ pub(crate) fn scoped_attestation_input(    domain: &[u8],
     Ok(out)
 }
 
-
-pub(crate) fn scoped_aad(    domain: &[u8],
+pub(crate) fn scoped_aad(
+    domain: &[u8],
     context: &[&[u8]],
     key_version: u32,
 ) -> Result<Vec<u8>, IntegrationError> {
@@ -330,8 +333,8 @@ pub(crate) fn scoped_aad(    domain: &[u8],
     Ok(out)
 }
 
-
-pub(crate) fn decode_key(value: &str) -> Result<MasterKey, IntegrationError> {    let decoded = Zeroizing::new(
+pub(crate) fn decode_key(value: &str) -> Result<MasterKey, IntegrationError> {
+    let decoded = Zeroizing::new(
         URL_SAFE_NO_PAD
             .decode(value)
             .or_else(|_| STANDARD.decode(value))
@@ -346,7 +349,6 @@ pub(crate) fn decode_key(value: &str) -> Result<MasterKey, IntegrationError> {  
     key.zeroize();
     Ok(protected)
 }
-
 
 impl CredentialIdentity {
     pub fn new(
@@ -372,15 +374,14 @@ impl CredentialIdentity {
     }
 }
 
-
-impl fmt::Debug for IntegrationRepository { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for IntegrationRepository {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("IntegrationRepository")
             .field("keyring", &self.keyring)
             .finish_non_exhaustive()
     }
 }
-
 
 impl IntegrationRepository {
     #[must_use]
@@ -611,7 +612,10 @@ impl IntegrationRepository {
             .map_err(|_| IntegrationError::Unavailable)?
     }
 
-    pub(crate) async fn rotate_batch_inner(&self, limit: u16) -> Result<RotationReport, IntegrationError> {
+    pub(crate) async fn rotate_batch_inner(
+        &self,
+        limit: u16,
+    ) -> Result<RotationReport, IntegrationError> {
         if limit == 0 || limit > MAX_ROTATION_BATCH {
             return Err(IntegrationError::InvalidInput);
         }
@@ -687,8 +691,8 @@ impl IntegrationRepository {
     }
 }
 
-
-pub(crate) async fn upsert_credential(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn upsert_credential(
+    transaction: &mut Transaction<'_, Postgres>,
     keyring: &MasterKeyring,
     identity: &CredentialIdentity,
     secret: &SecretValue,
@@ -763,8 +767,8 @@ pub(crate) async fn upsert_credential(    transaction: &mut Transaction<'_, Post
     })
 }
 
-
-pub(crate) fn credential_lock_key(identity: &CredentialIdentity) -> i64 {    let fields = [
+pub(crate) fn credential_lock_key(identity: &CredentialIdentity) -> i64 {
+    let fields = [
         identity.instance_id.as_bytes(),
         identity.integration_type.as_bytes(),
         identity.integration_id.as_bytes(),
@@ -783,15 +787,15 @@ pub(crate) fn credential_lock_key(identity: &CredentialIdentity) -> i64 {    let
     )
 }
 
-
-pub(crate) fn requires_integration_specific_admin(identity: &CredentialIdentity) -> bool {    (identity.integration_type == "smtp"
+pub(crate) fn requires_integration_specific_admin(identity: &CredentialIdentity) -> bool {
+    (identity.integration_type == "smtp"
         && identity.integration_id == "default"
         && matches!(identity.credential_kind.as_str(), "username" | "password"))
         || (identity.integration_type == "oidc" && identity.credential_kind == "client_secret")
 }
 
-
-pub(crate) fn seal(    ring: &MasterKeyring,
+pub(crate) fn seal(
+    ring: &MasterKeyring,
     identity: &CredentialIdentity,
     id: Uuid,
     logical_version: u64,

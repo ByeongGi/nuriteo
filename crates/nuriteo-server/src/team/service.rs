@@ -6,7 +6,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
@@ -14,7 +13,6 @@ use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -31,7 +29,6 @@ use crate::project::{
     EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, ProjectId, ProjectRole,
 };
 
-
 use super::{
     NewTeam, Team, TeamAction, TeamAuthorization, TeamAuthorizationPrincipal, TeamConflict,
     TeamDisplayName, TeamId, TeamMemberPageKey, TeamMemberPageLimit, TeamMembership,
@@ -41,26 +38,22 @@ use super::{
     TeamRole, TeamSlug, TeamVersion,
 };
 
-
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TeamServicePolicy {
     operation_timeout: Duration,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeamPrincipal {
     User(UserId),
     InstanceAdministrator(UserId),
 }
-
 
 #[derive(Clone)]
 pub struct TeamAuditContext {
@@ -71,13 +64,11 @@ pub struct TeamAuditContext {
     source_ip: Option<IpAddr>,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeamMutationResult {
     Changed,
     AlreadyAbsent,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -100,7 +91,6 @@ pub enum TeamServiceError {
     OperationTimeout,
     InvariantViolation,
 }
-
 
 #[derive(Clone)]
 pub struct TeamService {

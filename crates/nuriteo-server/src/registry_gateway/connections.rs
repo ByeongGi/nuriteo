@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::endpoint::*;
+use super::*;
 
 use std::fmt;
 
@@ -9,7 +9,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -29,7 +28,6 @@ use url::Url;
 
 use uuid::Uuid;
 
-
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
@@ -39,10 +37,13 @@ pub(crate) use http_routes::openapi_router;
 
 pub use http_service::RegistryHttpService;
 
+use super::{
+    BoundedResponse, CREDENTIAL_KIND, DEFAULT_TIMEOUT, DNS_TIMEOUT, INSTANCE_ID, INTEGRATION_TYPE,
+    MAX_DNS_ADDRESSES, METADATA_LIMIT, PACKAGE_SEGMENT, PREFLIGHT_LIMIT, RegistryConnectionInput,
+    RegistryConnectionMetadata, RegistryError, RegistryGatewayService, RegistryPayload,
+    RegistryRuntime, RegistryState, map_integration_error,
+};
 pub(crate) use http_service::{RegistryAdminView, RegistryCollectionView};
-use super::{INTEGRATION_TYPE, CREDENTIAL_KIND, INSTANCE_ID, DEFAULT_TIMEOUT, DNS_TIMEOUT, MAX_DNS_ADDRESSES, PREFLIGHT_LIMIT, METADATA_LIMIT, PACKAGE_SEGMENT, RegistryState, RegistryConnectionInput, RegistryConnectionMetadata, RegistryPayload, RegistryGatewayService, RegistryRuntime, BoundedResponse, map_integration_error, RegistryError};
-
-
 
 impl super::RegistryState {
     pub(crate) fn parse(value: &str) -> Result<Self, RegistryError> {
@@ -53,7 +54,6 @@ impl super::RegistryState {
         }
     }
 }
-
 
 impl RegistryConnectionInput {
     pub fn new(
@@ -84,8 +84,8 @@ impl RegistryConnectionInput {
     }
 }
 
-
-impl fmt::Debug for RegistryPayload { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for RegistryPayload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RegistryPayload")
             .field("connection_id", &self.connection_id)
@@ -95,15 +95,14 @@ impl fmt::Debug for RegistryPayload { fn fmt(&self, formatter: &mut fmt::Formatt
     }
 }
 
-
-impl fmt::Debug for RegistryGatewayService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for RegistryGatewayService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RegistryGatewayService")
             .field("timeout", &self.timeout)
             .finish_non_exhaustive()
     }
 }
-
 
 impl RegistryGatewayService {
     #[must_use]
@@ -609,7 +608,10 @@ impl RegistryGatewayService {
         Ok(runtime)
     }
 
-    pub(crate) async fn runtime_for_package(&self, package: &str) -> Result<RegistryRuntime, RegistryError> {
+    pub(crate) async fn runtime_for_package(
+        &self,
+        package: &str,
+    ) -> Result<RegistryRuntime, RegistryError> {
         let scope = package.split_once('/').map(|(scope, _)| scope);
         let mut connection = self.acquire().await?;
         let mut tx = connection
@@ -655,7 +657,10 @@ impl RegistryGatewayService {
         Ok(runtime)
     }
 
-    pub(crate) async fn preflight(&self, runtime: &RegistryRuntime) -> Result<[u8; 32], RegistryError> {
+    pub(crate) async fn preflight(
+        &self,
+        runtime: &RegistryRuntime,
+    ) -> Result<[u8; 32], RegistryError> {
         let url = Url::parse(&format!(
             "{}/-/ping",
             runtime.metadata.base_url.trim_end_matches('/')
@@ -781,7 +786,9 @@ impl RegistryGatewayService {
         Ok(BoundedResponse { content_type, body })
     }
 
-    pub(crate) async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, RegistryError> {
+    pub(crate) async fn acquire(
+        &self,
+    ) -> Result<sqlx::pool::PoolConnection<Postgres>, RegistryError> {
         self.integrations
             .pool()
             .acquire()
@@ -790,8 +797,8 @@ impl RegistryGatewayService {
     }
 }
 
-
-impl fmt::Debug for RegistryRuntime { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for RegistryRuntime {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RegistryRuntime")
             .field("metadata", &self.metadata)
@@ -800,8 +807,8 @@ impl fmt::Debug for RegistryRuntime { fn fmt(&self, formatter: &mut fmt::Formatt
     }
 }
 
-
-pub(crate) async fn load_runtime(    integrations: &IntegrationRepository,
+pub(crate) async fn load_runtime(
+    integrations: &IntegrationRepository,
     tx: &mut Transaction<'_, Postgres>,
     metadata: RegistryConnectionMetadata,
 ) -> Result<RegistryRuntime, RegistryError> {

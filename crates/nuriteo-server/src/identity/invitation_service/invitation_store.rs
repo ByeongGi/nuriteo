@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::activation::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -10,7 +10,6 @@ use std::net::IpAddr;
 use std::pin::Pin;
 
 use std::time::Duration;
-
 
 use serde_json::json;
 
@@ -22,7 +21,6 @@ use tokio::time as tokio_time;
 
 use uuid::Uuid;
 
-
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
     AuditScope, AuditTarget, AuditWriter, ScopeType,
@@ -32,17 +30,21 @@ use crate::database::DatabasePool;
 
 use crate::policy::EffectivePolicyEngine;
 
-
 use super::super::{
     ActivationInvitation, ActivationInvitationFields, ActivationInvitationId,
     ActivationInvitationStatus, ActivationToken, ActivationTokenError, InvitationExpiryPolicy,
     NormalizedEmail, Timestamp, UserId,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, InvitationAuditContext, InvitationServicePolicy, InvitationServicePolicyError, IssuedActivationInvitation, InvitationRevokeResult, PendingInvitationActivation, InvitationActivationFuture, InvitationActivator, InvitationActivationError, InvitationServiceError, InvitationService, AuditInput, map_token_error};
+use super::{
+    AuditInput, DEFAULT_OPERATION_TIMEOUT, InvitationActivationError, InvitationActivationFuture,
+    InvitationActivator, InvitationAuditContext, InvitationRevokeResult, InvitationService,
+    InvitationServiceError, InvitationServicePolicy, InvitationServicePolicyError,
+    IssuedActivationInvitation, MAX_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT,
+    PendingInvitationActivation, map_token_error,
+};
 
-
-
-pub(crate) async fn lock_invitation(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_invitation(
+    transaction: &mut Transaction<'_, Postgres>,
     id: ActivationInvitationId,
 ) -> Result<Option<sqlx::postgres::PgRow>, InvitationServiceError> {
     sqlx::query(
@@ -57,8 +59,8 @@ pub(crate) async fn lock_invitation(    transaction: &mut Transaction<'_, Postgr
     .map_err(database_error)
 }
 
-
-pub(crate) async fn lock_invitation_by_digest(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_invitation_by_digest(
+    transaction: &mut Transaction<'_, Postgres>,
     digest: &[u8; 32],
 ) -> Result<Option<sqlx::postgres::PgRow>, InvitationServiceError> {
     sqlx::query(
@@ -73,8 +75,8 @@ pub(crate) async fn lock_invitation_by_digest(    transaction: &mut Transaction<
     .map_err(database_error)
 }
 
-
-pub(crate) async fn mark_expired(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn mark_expired(
+    transaction: &mut Transaction<'_, Postgres>,
     id: ActivationInvitationId,
 ) -> Result<(), InvitationServiceError> {
     let updated = sqlx::query(
@@ -92,8 +94,8 @@ pub(crate) async fn mark_expired(    transaction: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn insert_pending(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn insert_pending(
+    transaction: &mut Transaction<'_, Postgres>,
     id: ActivationInvitationId,
     email: &NormalizedEmail,
     inviter: UserId,
@@ -120,15 +122,15 @@ pub(crate) async fn insert_pending(    transaction: &mut Transaction<'_, Postgre
     .map_err(database_error)
 }
 
-
-pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Timestamp, InvitationServiceError> {
     Timestamp::from_datetime(transaction_now_datetime(transaction).await?)
         .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) async fn enqueue_activation_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn enqueue_activation_email(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: ActivationInvitationId,
     email: &NormalizedEmail,
 ) -> Result<bool, InvitationServiceError> {
@@ -156,8 +158,8 @@ pub(crate) async fn enqueue_activation_email(    transaction: &mut Transaction<'
     Ok(true)
 }
 
-
-pub(crate) async fn transaction_now_datetime(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now_datetime(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<OffsetDateTime, InvitationServiceError> {
     sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)
@@ -165,8 +167,8 @@ pub(crate) async fn transaction_now_datetime(    transaction: &mut Transaction<'
         .map_err(database_error)
 }
 
-
-pub(crate) async fn append_denied_and_commit(    mut transaction: Transaction<'_, Postgres>,
+pub(crate) async fn append_denied_and_commit(
+    mut transaction: Transaction<'_, Postgres>,
     audit: &InvitationAuditContext,
     action: &'static str,
     target_id: String,
@@ -181,8 +183,8 @@ pub(crate) async fn append_denied_and_commit(    mut transaction: Transaction<'_
     transaction.commit().await.map_err(database_error)
 }
 
-
-pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     context: &InvitationAuditContext,
     input: AuditInput,
 ) -> Result<(), InvitationServiceError> {
@@ -218,8 +220,8 @@ pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>
         .map_err(|_| InvitationServiceError::AuditUnavailable)
 }
 
-
-pub(crate) fn invitation_from_row(    row: &sqlx::postgres::PgRow,
+pub(crate) fn invitation_from_row(
+    row: &sqlx::postgres::PgRow,
 ) -> Result<ActivationInvitation, InvitationServiceError> {
     ActivationInvitation::new(ActivationInvitationFields {
         id: parse_id(row, "id")?,
@@ -245,16 +247,22 @@ pub(crate) fn invitation_from_row(    row: &sqlx::postgres::PgRow,
     .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn required<T>(row: &sqlx::postgres::PgRow, column: &str) -> Result<T, InvitationServiceError>where
+pub(crate) fn required<T>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<T, InvitationServiceError>
+where
     T: for<'r> sqlx::Decode<'r, Postgres> + sqlx::Type<Postgres>,
 {
     row.try_get(column)
         .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_id<T>(row: &sqlx::postgres::PgRow, column: &str) -> Result<T, InvitationServiceError>where
+pub(crate) fn parse_id<T>(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<T, InvitationServiceError>
+where
     T: std::str::FromStr,
 {
     required::<String>(row, column)?
@@ -262,8 +270,8 @@ pub(crate) fn parse_id<T>(row: &sqlx::postgres::PgRow, column: &str) -> Result<T
         .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_optional_id<T>(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_optional_id<T>(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Option<T>, InvitationServiceError>
 where
@@ -278,16 +286,16 @@ where
         .transpose()
 }
 
-
-pub(crate) fn parse_timestamp(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_timestamp(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Timestamp, InvitationServiceError> {
     Timestamp::from_datetime(required(row, column)?)
         .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_optional_timestamp(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_optional_timestamp(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Option<Timestamp>, InvitationServiceError> {
     required::<Option<OffsetDateTime>>(row, column)?
@@ -296,6 +304,6 @@ pub(crate) fn parse_optional_timestamp(    row: &sqlx::postgres::PgRow,
         .map_err(|_| InvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn database_error(_: sqlx::Error) -> InvitationServiceError {    InvitationServiceError::DatabaseUnavailable
+pub(crate) fn database_error(_: sqlx::Error) -> InvitationServiceError {
+    InvitationServiceError::DatabaseUnavailable
 }

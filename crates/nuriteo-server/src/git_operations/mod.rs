@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
@@ -26,7 +25,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::database::DatabasePool;
 
@@ -48,7 +46,6 @@ use crate::quota::EffectiveQuota;
 
 use crate::workspace::StorageScopeId;
 
-
 pub mod embedded;
 
 mod http_routes;
@@ -59,11 +56,9 @@ pub mod transport_security;
 
 pub mod working_head;
 
-
 pub(crate) use http_routes::openapi_router;
 
 pub use http_service::{GitHttpError, GitHttpService};
-
 
 const INSTANCE_ID: &str = "instance";
 
@@ -85,7 +80,6 @@ const MAX_CHANGED_OBJECTS: u64 = 100_000;
 
 const MAX_TRANSFER_BYTES: u64 = 512 * 1024 * 1024;
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitCredentialConnection {
     pub id: Uuid,
@@ -97,11 +91,9 @@ pub struct GitCredentialConnection {
     pub updated_at: OffsetDateTime,
 }
 
-
 /// Decrypted credential available only to the in-process transport adapter.
 /// Its `Debug` implementation is inherited from `SecretValue` and redacted.
 pub struct GitCredential(SecretValue);
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitRemoteBinding {
@@ -115,7 +107,6 @@ pub struct GitRemoteBinding {
     pub updated_at: OffsetDateTime,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitOperationOutcome {
     previous_head_sha: Option<String>,
@@ -125,7 +116,6 @@ pub struct GitOperationOutcome {
     materialized_tree: Option<embedded::GitTreeSnapshot>,
 }
 
-
 #[derive(Debug)]
 pub struct GitExecution<'a> {
     pub provider: &'a GitProviderMetadata,
@@ -134,13 +124,11 @@ pub struct GitExecution<'a> {
     pub credential: &'a GitCredential,
 }
 
-
 #[derive(Debug)]
 pub struct GitUpdateExecution<'a> {
     pub remote: GitExecution<'a>,
     pub expected_remote_head_sha: &'a str,
 }
-
 
 #[derive(Debug)]
 pub struct GitPushExecution<'a> {
@@ -149,10 +137,8 @@ pub struct GitPushExecution<'a> {
     pub working_tree: &'a embedded::GitTreeSnapshot,
 }
 
-
 pub type GitExecutionFuture<'a> =
     Pin<Box<dyn Future<Output = Result<GitOperationOutcome, GitExecutorError>> + Send + 'a>>;
-
 
 /// Narrow adapter boundary for a bounded HTTPS Git implementation.
 /// Implementations must not log, persist, or return `GitCredential` contents.
@@ -162,10 +148,8 @@ pub trait GitRemoteExecutor: Send + Sync {
     fn commit_and_push<'a>(&'a self, input: GitPushExecution<'a>) -> GitExecutionFuture<'a>;
 }
 
-
 pub type GitWorkingHeadFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, GitExecutorError>> + Send + 'a>>;
-
 
 pub struct GitWorkingHeadPrepare<'a> {
     pub project_id: ProjectId,
@@ -175,9 +159,7 @@ pub struct GitWorkingHeadPrepare<'a> {
     pub tree: &'a embedded::GitTreeSnapshot,
 }
 
-
 pub struct GitWorkingHeadPreparation(Box<dyn Any + Send>);
-
 
 pub trait GitWorkingHeadStore: Send + Sync {
     fn prepare<'a>(
@@ -201,17 +183,14 @@ pub trait GitWorkingHeadStore: Send + Sync {
     ) -> GitWorkingHeadFuture<'a, embedded::GitTreeSnapshot>;
 }
 
-
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableGitWorkingHeadStore;
-
 
 /// Explicit fail-closed adapter used until a production HTTPS Git transport is
 /// configured. It prevents route composition from silently pretending that
 /// remote operations are available.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableGitExecutor;
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitExecutorError {
@@ -223,7 +202,6 @@ pub enum GitExecutorError {
     Unavailable,
 }
 
-
 #[derive(Clone)]
 pub struct GitOperationService {
     integrations: IntegrationRepository,
@@ -232,7 +210,6 @@ pub struct GitOperationService {
     working_heads: Arc<dyn GitWorkingHeadStore>,
     operation_timeout: Duration,
 }
-
 
 #[cfg(test)]
 const fn map_finalize_error(
@@ -245,7 +222,6 @@ const fn map_finalize_error(
         error
     }
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -269,7 +245,6 @@ pub enum GitOperationError {
     Unavailable,
 }
 
-
 const fn map_integration_error(error: IntegrationError) -> GitOperationError {
     match error {
         IntegrationError::InvalidInput => GitOperationError::InvalidInput,
@@ -281,7 +256,6 @@ const fn map_integration_error(error: IntegrationError) -> GitOperationError {
     }
 }
 
-
 const fn map_provider_error(error: GitProviderError) -> GitOperationError {
     match error {
         GitProviderError::InvalidInput => GitOperationError::InvalidInput,
@@ -290,7 +264,6 @@ const fn map_provider_error(error: GitProviderError) -> GitOperationError {
         _ => GitOperationError::Unavailable,
     }
 }
-
 
 const fn map_executor_error(error: GitExecutorError) -> GitOperationError {
     match error {
@@ -304,10 +277,8 @@ const fn map_executor_error(error: GitExecutorError) -> GitOperationError {
     }
 }
 
-
 #[cfg(test)]
 mod tests;
-
 
 mod materialization;
 pub(crate) use materialization::*;

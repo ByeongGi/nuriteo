@@ -13,7 +13,6 @@ use std::str::FromStr;
 
 use std::time::Duration;
 
-
 use ::time::OffsetDateTime;
 
 use reqwest::{Certificate, Client};
@@ -30,12 +29,10 @@ use url::Url;
 
 use uuid::Uuid;
 
-
 use crate::integration::{
     CaEndpointBinding, IntegrationAdminActor, IntegrationError, IntegrationRepository,
     ValidatedCaBundle, authorize_recent_admin,
 };
-
 
 const INTEGRATION_TYPE: &str = "git";
 
@@ -51,7 +48,6 @@ const MAX_DNS_ADDRESSES: usize = 16;
 
 const RESPONSE_LIMIT: usize = 64 * 1024;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitProviderKind {
     GitHub,
@@ -61,13 +57,11 @@ pub enum GitProviderKind {
     Generic,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitProviderState {
     Active,
     Disabled,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitProviderInput {
@@ -83,7 +77,6 @@ pub struct GitProviderInput {
     allows_write: bool,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitProviderUpdate {
     display_name: String,
@@ -94,7 +87,6 @@ pub struct GitProviderUpdate {
     allows_read: bool,
     allows_write: bool,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitProviderMetadata {
@@ -116,13 +108,11 @@ pub struct GitProviderMetadata {
     pub updated_at: OffsetDateTime,
 }
 
-
 #[derive(Clone)]
 pub struct GitProviderService {
     integrations: IntegrationRepository,
     timeout: Duration,
 }
-
 
 #[derive(Clone)]
 pub struct GitProviderValidator {
@@ -130,14 +120,12 @@ pub struct GitProviderValidator {
     allow_test_addresses: bool,
 }
 
-
 #[derive(Debug)]
-struct GitPreflightProof {
+pub(crate) struct GitPreflightProof {
     config_version: u64,
     endpoint_fingerprint: [u8; 32],
     ca_fingerprint: [u8; 32],
 }
-
 
 const fn map_integration_error(error: IntegrationError) -> GitProviderError {
     match error {
@@ -153,7 +141,6 @@ const fn map_integration_error(error: IntegrationError) -> GitProviderError {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitProviderError {
     InvalidInput,
@@ -166,7 +153,6 @@ pub enum GitProviderError {
     ValidationFailed,
     Unavailable,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -619,7 +605,6 @@ mod tests {
         .unwrap()
     }
 }
-
 
 mod providers;
 pub(crate) use providers::*;

@@ -1,13 +1,12 @@
 #![allow(unused_imports)]
-use super::*;
-use super::working_head::*;
 use super::constraints::*;
+use super::working_head::*;
+use super::*;
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
@@ -16,12 +15,15 @@ use nuriteo_server::database::{
 
 use sqlx::{Acquire, Executor};
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV};
 use tokio::time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV};
 
-
-
-pub(crate) async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32, contender_pid: i32) -> bool {    let deadline = time::Instant::now() + Duration::from_secs(2);
+pub(crate) async fn wait_for_database_block(
+    pool: &DatabasePool,
+    holder_pid: i32,
+    contender_pid: i32,
+) -> bool {
+    let deadline = time::Instant::now() + Duration::from_secs(2);
     let mut observer = pool.acquire().await.unwrap();
     loop {
         let remaining = deadline.saturating_duration_since(time::Instant::now());
@@ -48,15 +50,15 @@ pub(crate) async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32
     }
 }
 
-
-pub(crate) async fn execute(pool: &DatabasePool, statement: &'static str) {    sqlx::query(statement)
+pub(crate) async fn execute(pool: &DatabasePool, statement: &'static str) {
+    sqlx::query(statement)
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap_or_else(|error| panic!("fixture statement failed: {statement}\n{error}"));
 }
 
-
-pub(crate) async fn migrate(pool: &DatabasePool) -> MigrationReport {    run_embedded_migrations(
+pub(crate) async fn migrate(pool: &DatabasePool) -> MigrationReport {
+    run_embedded_migrations(
         pool,
         MigrationOptions::new(Duration::from_secs(5), Duration::from_secs(30)).unwrap(),
     )
@@ -64,8 +66,8 @@ pub(crate) async fn migrate(pool: &DatabasePool) -> MigrationReport {    run_emb
     .unwrap()
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("DROP SCHEMA public CASCADE")
         .await
@@ -73,8 +75,8 @@ pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection =
     connection.execute("CREATE SCHEMA public").await.unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::var(DATABASE_URL_ENV).unwrap();
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV).unwrap();
     let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
     let tls = DatabaseTlsConfig::verify_full(None, Some(ca), None).unwrap();
     DatabasePool::connect(
@@ -91,4 +93,3 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::
     .await
     .unwrap()
 }
-

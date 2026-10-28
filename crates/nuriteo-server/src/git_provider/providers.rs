@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::endpoint::*;
+use super::*;
 
 use std::collections::BTreeMap;
 
@@ -11,7 +11,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -29,14 +28,16 @@ use url::Url;
 
 use uuid::Uuid;
 
-
+use super::{
+    DEFAULT_TIMEOUT, DNS_TIMEOUT, GitPreflightProof, GitProviderError, GitProviderInput,
+    GitProviderKind, GitProviderMetadata, GitProviderService, GitProviderState, GitProviderUpdate,
+    GitProviderValidator, INTEGRATION_TYPE, MAX_DNS_ADDRESSES, MAX_TIMEOUT, MIN_TIMEOUT,
+    RESPONSE_LIMIT, map_integration_error,
+};
 use crate::integration::{
     CaEndpointBinding, IntegrationAdminActor, IntegrationError, IntegrationRepository,
     ValidatedCaBundle, authorize_recent_admin,
 };
-use super::{INTEGRATION_TYPE, DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT, DNS_TIMEOUT, MAX_DNS_ADDRESSES, RESPONSE_LIMIT, GitProviderKind, GitProviderState, GitProviderInput, GitProviderUpdate, GitProviderMetadata, GitProviderService, GitProviderValidator, GitPreflightProof, map_integration_error, GitProviderError};
-
-
 
 impl super::GitProviderKind {
     pub(crate) const fn as_str(self) -> &'static str {
@@ -61,7 +62,6 @@ impl super::GitProviderKind {
     }
 }
 
-
 impl GitProviderState {
     pub(crate) fn parse(value: &str) -> Result<Self, GitProviderError> {
         match value {
@@ -71,7 +71,6 @@ impl GitProviderState {
         }
     }
 }
-
 
 impl GitProviderInput {
     #[allow(clippy::too_many_arguments)]
@@ -104,7 +103,6 @@ impl GitProviderInput {
     }
 }
 
-
 impl GitProviderUpdate {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -132,15 +130,14 @@ impl GitProviderUpdate {
     }
 }
 
-
-impl fmt::Debug for GitProviderService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for GitProviderService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("GitProviderService")
             .field("timeout", &self.timeout)
             .finish_non_exhaustive()
     }
 }
-
 
 impl GitProviderService {
     #[must_use]
@@ -507,7 +504,9 @@ impl GitProviderService {
         Ok(metadata)
     }
 
-    pub(crate) async fn acquire(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, GitProviderError> {
+    pub(crate) async fn acquire(
+        &self,
+    ) -> Result<sqlx::pool::PoolConnection<Postgres>, GitProviderError> {
         self.integrations
             .pool()
             .acquire()
@@ -525,15 +524,14 @@ impl GitProviderService {
     }
 }
 
-
-impl fmt::Debug for GitProviderValidator { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for GitProviderValidator {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("GitProviderValidator")
             .field("timeout", &self.timeout)
             .finish_non_exhaustive()
     }
 }
-
 
 impl GitProviderValidator {
     pub fn new(timeout: Duration) -> Result<Self, GitProviderError> {
@@ -693,8 +691,8 @@ impl GitProviderValidator {
     }
 }
 
-
-pub(crate) fn validate_input(input: &GitProviderInput) -> Result<(), GitProviderError> {    if !valid_text(&input.display_name, 200)
+pub(crate) fn validate_input(input: &GitProviderInput) -> Result<(), GitProviderError> {
+    if !valid_text(&input.display_name, 200)
         || !valid_host(&input.canonical_host)
         || input.canonical_port == 0
         || (!input.allows_read && input.allows_write)
@@ -757,8 +755,8 @@ pub(crate) fn validate_input(input: &GitProviderInput) -> Result<(), GitProvider
     Ok(())
 }
 
-
-pub(crate) fn validate_endpoint(value: &str) -> Result<Url, GitProviderError> {    let url = Url::parse(value).map_err(|_| GitProviderError::InvalidInput)?;
+pub(crate) fn validate_endpoint(value: &str) -> Result<Url, GitProviderError> {
+    let url = Url::parse(value).map_err(|_| GitProviderError::InvalidInput)?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -771,8 +769,8 @@ pub(crate) fn validate_endpoint(value: &str) -> Result<Url, GitProviderError> { 
     Ok(url)
 }
 
-
-pub(crate) fn validate_repository_url(value: &str) -> Result<Url, GitProviderError> {    let canonical_candidate = value.to_ascii_lowercase();
+pub(crate) fn validate_repository_url(value: &str) -> Result<Url, GitProviderError> {
+    let canonical_candidate = value.to_ascii_lowercase();
     if canonical_candidate.contains("/../")
         || canonical_candidate.contains("/./")
         || canonical_candidate.contains("%2e")
@@ -786,8 +784,8 @@ pub(crate) fn validate_repository_url(value: &str) -> Result<Url, GitProviderErr
     Ok(url)
 }
 
-
-pub(crate) fn provider_urls(provider: &GitProviderMetadata) -> Result<Vec<Url>, GitProviderError> {    let mut urls = vec![validate_endpoint(&provider.api_base_url)?];
+pub(crate) fn provider_urls(provider: &GitProviderMetadata) -> Result<Vec<Url>, GitProviderError> {
+    let mut urls = vec![validate_endpoint(&provider.api_base_url)?];
     match (
         provider.oauth_authorization_url.as_deref(),
         provider.oauth_token_url.as_deref(),
@@ -802,8 +800,8 @@ pub(crate) fn provider_urls(provider: &GitProviderMetadata) -> Result<Vec<Url>, 
     Ok(urls)
 }
 
-
-pub(crate) fn exact_origin(url: &Url, host: &str, port: u16) -> bool {    url.scheme() == "https"
+pub(crate) fn exact_origin(url: &Url, host: &str, port: u16) -> bool {
+    url.scheme() == "https"
         && url
             .host_str()
             .is_some_and(|value| value.eq_ignore_ascii_case(host))

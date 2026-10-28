@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::membership_invites::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -8,7 +8,6 @@ use std::future::Future;
 use std::net::IpAddr;
 
 use std::time::Duration;
-
 
 use serde_json::json;
 
@@ -19,7 +18,6 @@ use time::OffsetDateTime;
 use tokio::time as tokio_time;
 
 use uuid::Uuid;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -32,18 +30,23 @@ use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, SessionId, Timest
 
 use crate::policy::EffectivePolicyEngine;
 
-
 use super::super::invitation::OrganizationInvitationTokenDigest;
 
 use super::super::{
     OrganizationId, OrganizationInvitation, OrganizationInvitationFields, OrganizationInvitationId,
     OrganizationInvitationStatus, OrganizationInvitationToken, OrganizationRole,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, DEFAULT_REAUTHENTICATION_AGE, MIN_REAUTHENTICATION_AGE, MAX_REAUTHENTICATION_AGE, OrganizationInvitationPolicy, OrganizationInvitationActor, OrganizationInvitationInvitee, OrganizationInvitationAuditContext, IssuedOrganizationInvitation, OrganizationInvitationRevokeResult, OrganizationInvitationServiceError, OrganizationInvitationService, PendingInsert, AuditInput, PendingState};
+use super::{
+    AuditInput, DEFAULT_OPERATION_TIMEOUT, DEFAULT_REAUTHENTICATION_AGE,
+    IssuedOrganizationInvitation, MAX_OPERATION_TIMEOUT, MAX_REAUTHENTICATION_AGE,
+    MIN_OPERATION_TIMEOUT, MIN_REAUTHENTICATION_AGE, OrganizationInvitationActor,
+    OrganizationInvitationAuditContext, OrganizationInvitationInvitee,
+    OrganizationInvitationPolicy, OrganizationInvitationRevokeResult,
+    OrganizationInvitationService, OrganizationInvitationServiceError, PendingInsert, PendingState,
+};
 
-
-
-pub(crate) async fn resolve_active_invitee(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn resolve_active_invitee(
+    transaction: &mut Transaction<'_, Postgres>,
     invitee_email: &NormalizedEmail,
 ) -> Result<(UserId, NormalizedEmail), OrganizationInvitationServiceError> {
     let row: Option<(String, String)> = sqlx::query_as(
@@ -68,8 +71,8 @@ pub(crate) async fn resolve_active_invitee(    transaction: &mut Transaction<'_,
     Ok((user_id, stored_email))
 }
 
-
-pub(crate) fn enumeration_safe_issue_error(    error: OrganizationInvitationServiceError,
+pub(crate) fn enumeration_safe_issue_error(
+    error: OrganizationInvitationServiceError,
 ) -> OrganizationInvitationServiceError {
     match error {
         OrganizationInvitationServiceError::Unauthorized => {
@@ -79,8 +82,8 @@ pub(crate) fn enumeration_safe_issue_error(    error: OrganizationInvitationServ
     }
 }
 
-
-pub(crate) async fn verify_invitee(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn verify_invitee(
+    transaction: &mut Transaction<'_, Postgres>,
     row: &sqlx::postgres::PgRow,
     invitee: &OrganizationInvitationInvitee,
 ) -> Result<(), OrganizationInvitationServiceError> {
@@ -110,8 +113,8 @@ pub(crate) async fn verify_invitee(    transaction: &mut Transaction<'_, Postgre
     Ok(())
 }
 
-
-pub(crate) async fn ensure_not_member(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn ensure_not_member(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     user_id: UserId,
 ) -> Result<(), OrganizationInvitationServiceError> {
@@ -130,8 +133,8 @@ pub(crate) async fn ensure_not_member(    transaction: &mut Transaction<'_, Post
     Ok(())
 }
 
-
-pub(crate) async fn lock_membership_admission(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_membership_admission(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationInvitationServiceError> {
     sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
@@ -142,8 +145,8 @@ pub(crate) async fn lock_membership_admission(    transaction: &mut Transaction<
     Ok(())
 }
 
-
-pub(crate) async fn ensure_member_capacity(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn ensure_member_capacity(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationInvitationServiceError> {
     let members: i64 = sqlx::query_scalar(
@@ -160,8 +163,8 @@ pub(crate) async fn ensure_member_capacity(    transaction: &mut Transaction<'_,
     Ok(())
 }
 
-
-pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationInvitationServiceError {    if error.as_database_error().is_some_and(|database| {
+pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationInvitationServiceError {
+    if error.as_database_error().is_some_and(|database| {
         database.code().as_deref() == Some("23514")
             && database.constraint() == Some("organization_member_limit")
     }) {
@@ -171,8 +174,8 @@ pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationInvitati
     }
 }
 
-
-pub(crate) async fn expire_pending(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn expire_pending(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     invitee_user_id: UserId,
 ) -> Result<(), OrganizationInvitationServiceError> {
@@ -190,8 +193,8 @@ pub(crate) async fn expire_pending(    transaction: &mut Transaction<'_, Postgre
     Ok(())
 }
 
-
-pub(crate) async fn pending_exists(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn pending_exists(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     invitee_user_id: UserId,
 ) -> Result<bool, OrganizationInvitationServiceError> {
@@ -207,8 +210,8 @@ pub(crate) async fn pending_exists(    transaction: &mut Transaction<'_, Postgre
     .map_err(database_error)
 }
 
-
-pub(crate) async fn invitation_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn invitation_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: OrganizationInvitationId,
 ) -> Result<Option<OrganizationId>, OrganizationInvitationServiceError> {
     sqlx::query_scalar::<_, String>(
@@ -226,8 +229,8 @@ pub(crate) async fn invitation_organization(    transaction: &mut Transaction<'_
     .transpose()
 }
 
-
-pub(crate) async fn invitation_organization_by_digest(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn invitation_organization_by_digest(
+    transaction: &mut Transaction<'_, Postgres>,
     digest: OrganizationInvitationTokenDigest,
 ) -> Result<Option<OrganizationId>, OrganizationInvitationServiceError> {
     sqlx::query_scalar::<_, String>(
@@ -245,8 +248,8 @@ pub(crate) async fn invitation_organization_by_digest(    transaction: &mut Tran
     .transpose()
 }
 
-
-pub(crate) async fn lock_invitation_by_id(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_invitation_by_id(
+    transaction: &mut Transaction<'_, Postgres>,
     id: OrganizationInvitationId,
 ) -> Result<Option<sqlx::postgres::PgRow>, OrganizationInvitationServiceError> {
     invitation_query()
@@ -256,8 +259,8 @@ pub(crate) async fn lock_invitation_by_id(    transaction: &mut Transaction<'_, 
         .map_err(database_error)
 }
 
-
-pub(crate) async fn lock_invitation_by_digest(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_invitation_by_digest(
+    transaction: &mut Transaction<'_, Postgres>,
     digest: OrganizationInvitationTokenDigest,
 ) -> Result<Option<sqlx::postgres::PgRow>, OrganizationInvitationServiceError> {
     sqlx::query(concat!(
@@ -273,8 +276,9 @@ pub(crate) async fn lock_invitation_by_digest(    transaction: &mut Transaction<
     .map_err(database_error)
 }
 
-
-pub(crate) fn invitation_query() -> sqlx::query::Query<'static, Postgres, sqlx::postgres::PgArguments> {    sqlx::query(concat!(
+pub(crate) fn invitation_query()
+-> sqlx::query::Query<'static, Postgres, sqlx::postgres::PgArguments> {
+    sqlx::query(concat!(
         "SELECT id::text, organization_id::text, invitee_user_id::text, normalized_email, ",
         "invited_by_user_id::text, proposed_role, status, created_at, expires_at, ",
         "accepted_at, declined_at, expired_at, revoked_at, superseded_at, ",
@@ -283,8 +287,8 @@ pub(crate) fn invitation_query() -> sqlx::query::Query<'static, Postgres, sqlx::
     ))
 }
 
-
-pub(crate) async fn pending_state(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn pending_state(
+    transaction: &mut Transaction<'_, Postgres>,
     row: &sqlx::postgres::PgRow,
     invitation_id: OrganizationInvitationId,
     now: OffsetDateTime,
@@ -301,8 +305,8 @@ pub(crate) async fn pending_state(    transaction: &mut Transaction<'_, Postgres
     Ok(PendingState::Pending)
 }
 
-
-pub(crate) async fn mark_expired(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn mark_expired(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: OrganizationInvitationId,
 ) -> Result<(), OrganizationInvitationServiceError> {
     let result = sqlx::query(
@@ -320,8 +324,8 @@ pub(crate) async fn mark_expired(    transaction: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn transition_pending(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transition_pending(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: OrganizationInvitationId,
     status: &str,
     timestamp_column: &str,
@@ -345,8 +349,8 @@ pub(crate) async fn transition_pending(    transaction: &mut Transaction<'_, Pos
     Ok(())
 }
 
-
-pub(crate) async fn transition_pending_returning(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transition_pending_returning(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: OrganizationInvitationId,
     digest: OrganizationInvitationTokenDigest,
     status: &str,
@@ -382,8 +386,8 @@ pub(crate) async fn transition_pending_returning(    transaction: &mut Transacti
         .ok_or(OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) async fn insert_pending(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn insert_pending(
+    transaction: &mut Transaction<'_, Postgres>,
     input: PendingInsert<'_>,
 ) -> Result<sqlx::postgres::PgRow, OrganizationInvitationServiceError> {
     sqlx::query(concat!(
@@ -409,8 +413,8 @@ pub(crate) async fn insert_pending(    transaction: &mut Transaction<'_, Postgre
     .map_err(database_error)
 }
 
-
-pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     context: &OrganizationInvitationAuditContext,
     organization_id: OrganizationId,
     invitation_id: OrganizationInvitationId,
@@ -453,8 +457,8 @@ pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>
         .map_err(|_| OrganizationInvitationServiceError::AuditUnavailable)
 }
 
-
-pub(crate) async fn enqueue_organization_invitation_email(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn enqueue_organization_invitation_email(
+    transaction: &mut Transaction<'_, Postgres>,
     invitation_id: OrganizationInvitationId,
     invitee_user_id: UserId,
     email: &NormalizedEmail,
@@ -502,8 +506,8 @@ pub(crate) async fn enqueue_organization_invitation_email(    transaction: &mut 
     Ok(true)
 }
 
-
-pub(crate) fn invitation_from_row(    row: &sqlx::postgres::PgRow,
+pub(crate) fn invitation_from_row(
+    row: &sqlx::postgres::PgRow,
 ) -> Result<OrganizationInvitation, OrganizationInvitationServiceError> {
     OrganizationInvitation::new(OrganizationInvitationFields {
         id: parse_id(row, "id")?,
@@ -526,8 +530,8 @@ pub(crate) fn invitation_from_row(    row: &sqlx::postgres::PgRow,
     .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_status(    value: &str,
+pub(crate) fn parse_status(
+    value: &str,
 ) -> Result<OrganizationInvitationStatus, OrganizationInvitationServiceError> {
     match value {
         "pending" => Ok(OrganizationInvitationStatus::Pending),
@@ -540,23 +544,25 @@ pub(crate) fn parse_status(    value: &str,
     }
 }
 
-
-pub(crate) fn role_name(role: OrganizationRole) -> &'static str {    match role {
+pub(crate) fn role_name(role: OrganizationRole) -> &'static str {
+    match role {
         OrganizationRole::Owner => "owner",
         OrganizationRole::Member => "member",
     }
 }
 
-
-pub(crate) fn parse_role(value: &str) -> Result<OrganizationRole, OrganizationInvitationServiceError> {    match value {
+pub(crate) fn parse_role(
+    value: &str,
+) -> Result<OrganizationRole, OrganizationInvitationServiceError> {
+    match value {
         "owner" => Ok(OrganizationRole::Owner),
         "member" => Ok(OrganizationRole::Member),
         _ => Err(OrganizationInvitationServiceError::InvariantViolation),
     }
 }
 
-
-pub(crate) fn ensure_audit_actor(    actor: UserId,
+pub(crate) fn ensure_audit_actor(
+    actor: UserId,
     audit: &OrganizationInvitationAuditContext,
 ) -> Result<(), OrganizationInvitationServiceError> {
     if audit.actor_user_id != actor {
@@ -565,15 +571,15 @@ pub(crate) fn ensure_audit_actor(    actor: UserId,
     Ok(())
 }
 
-
-pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Timestamp, OrganizationInvitationServiceError> {
     Timestamp::from_datetime(transaction_now_datetime(transaction).await?)
         .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) async fn transaction_now_datetime(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now_datetime(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<OffsetDateTime, OrganizationInvitationServiceError> {
     sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)
@@ -581,8 +587,8 @@ pub(crate) async fn transaction_now_datetime(    transaction: &mut Transaction<'
         .map_err(database_error)
 }
 
-
-pub(crate) fn required<T>(    row: &sqlx::postgres::PgRow,
+pub(crate) fn required<T>(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<T, OrganizationInvitationServiceError>
 where
@@ -592,8 +598,8 @@ where
         .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_id<T>(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_id<T>(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<T, OrganizationInvitationServiceError>
 where
@@ -604,8 +610,8 @@ where
         .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_optional_id<T>(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_optional_id<T>(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Option<T>, OrganizationInvitationServiceError>
 where
@@ -620,16 +626,16 @@ where
         .transpose()
 }
 
-
-pub(crate) fn parse_timestamp(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_timestamp(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Timestamp, OrganizationInvitationServiceError> {
     Timestamp::from_datetime(required(row, column)?)
         .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn parse_optional_timestamp(    row: &sqlx::postgres::PgRow,
+pub(crate) fn parse_optional_timestamp(
+    row: &sqlx::postgres::PgRow,
     column: &str,
 ) -> Result<Option<Timestamp>, OrganizationInvitationServiceError> {
     required::<Option<OffsetDateTime>>(row, column)?
@@ -638,6 +644,6 @@ pub(crate) fn parse_optional_timestamp(    row: &sqlx::postgres::PgRow,
         .map_err(|_| OrganizationInvitationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn database_error(_: sqlx::Error) -> OrganizationInvitationServiceError {    OrganizationInvitationServiceError::DatabaseUnavailable
+pub(crate) fn database_error(_: sqlx::Error) -> OrganizationInvitationServiceError {
+    OrganizationInvitationServiceError::DatabaseUnavailable
 }

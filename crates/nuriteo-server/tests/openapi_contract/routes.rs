@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::document::*;
+use super::*;
 use axum::Router;
 
 use axum::body::{Body, to_bytes};
@@ -15,13 +15,12 @@ use nuriteo_server::openapi::{self, DOCS_PATH, DOCUMENT_PATH};
 
 use serde_json::{Value, json};
 
-use tower::ServiceExt;
 use super::{REQUEST_ID, SNAPSHOT};
-
-
+use tower::ServiceExt;
 
 #[test]
-pub(crate) fn organization_invitation_issue_is_email_addressed_and_enumeration_safe() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn organization_invitation_issue_is_email_addressed_and_enumeration_safe() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let operation =
         &document["paths"]["/api/v1/organizations/{organization_id}/invitations"]["post"];
     assert_eq!(
@@ -39,9 +38,9 @@ pub(crate) fn organization_invitation_issue_is_email_addressed_and_enumeration_s
     );
 }
 
-
 #[test]
-pub(crate) fn explicit_project_versions_expose_bounded_immutable_contract() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn explicit_project_versions_expose_bounded_immutable_contract() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let operation = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/versions"];
     assert_eq!(
         operation["post"]["responses"]["201"]["content"]["application/json"]["schema"]["$ref"],
@@ -88,9 +87,9 @@ pub(crate) fn explicit_project_versions_expose_bounded_immutable_contract() {   
     );
 }
 
-
 #[test]
-pub(crate) fn project_history_exposes_recovery_list_promotion_and_reconcile() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn project_history_exposes_recovery_list_promotion_and_reconcile() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let recoveries = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/recovery-checkpoints"];
     assert_eq!(
         recoveries["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
@@ -139,9 +138,9 @@ pub(crate) fn project_history_exposes_recovery_list_promotion_and_reconcile() { 
     );
 }
 
-
 #[test]
-pub(crate) fn save_http_exposes_bounded_restart_safe_workflow() {    let document = serde_json::to_value(openapi::document()).unwrap();
+pub(crate) fn save_http_exposes_bounded_restart_safe_workflow() {
+    let document = serde_json::to_value(openapi::document()).unwrap();
     let collection = &document["paths"]["/api/v1/workspaces/{owner_type}/{owner_id}/projects/{project_id}/save-sessions"]
         ["post"];
     assert_eq!(
@@ -222,9 +221,9 @@ pub(crate) fn save_http_exposes_bounded_restart_safe_workflow() {    let documen
     );
 }
 
-
 #[tokio::test]
-pub(crate) async fn swagger_ui_is_self_contained_and_loads_only_vendored_assets() {    let redirect = get(build_router(), DOCS_PATH).await;
+pub(crate) async fn swagger_ui_is_self_contained_and_loads_only_vendored_assets() {
+    let redirect = get(build_router(), DOCS_PATH).await;
     assert!(redirect.status().is_redirection());
 
     let response = get(build_router(), "/api/docs/").await;
@@ -257,8 +256,8 @@ pub(crate) async fn swagger_ui_is_self_contained_and_loads_only_vendored_assets(
     }
 }
 
-
-pub(crate) async fn get(router: Router, uri: &str) -> Response {    router
+pub(crate) async fn get(router: Router, uri: &str) -> Response {
+    router
         .oneshot(
             Request::builder()
                 .uri(uri)
@@ -270,23 +269,23 @@ pub(crate) async fn get(router: Router, uri: &str) -> Response {    router
         .unwrap()
 }
 
-
-pub(crate) async fn body(response: Response) -> Vec<u8> {    to_bytes(response.into_body(), 4 * 1024 * 1024)
+pub(crate) async fn body(response: Response) -> Vec<u8> {
+    to_bytes(response.into_body(), 4 * 1024 * 1024)
         .await
         .unwrap()
         .to_vec()
 }
 
-
-pub(crate) async fn text_body(response: Response) -> String {    String::from_utf8(body(response).await).unwrap()
+pub(crate) async fn text_body(response: Response) -> String {
+    String::from_utf8(body(response).await).unwrap()
 }
 
-
-pub(crate) async fn json_body(response: Response) -> Value {    serde_json::from_slice(&body(response).await).unwrap()
+pub(crate) async fn json_body(response: Response) -> Value {
+    serde_json::from_slice(&body(response).await).unwrap()
 }
 
-
-pub(crate) fn sorted_keys(value: &Value) -> Vec<&str> {    let mut keys = value
+pub(crate) fn sorted_keys(value: &Value) -> Vec<&str> {
+    let mut keys = value
         .as_object()
         .unwrap()
         .keys()
@@ -295,4 +294,3 @@ pub(crate) fn sorted_keys(value: &Value) -> Vec<&str> {    let mut keys = value
     keys.sort_unstable();
     keys
 }
-

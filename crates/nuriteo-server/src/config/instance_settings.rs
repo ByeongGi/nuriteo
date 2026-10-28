@@ -2,13 +2,10 @@ use std::collections::BTreeMap;
 
 use std::fmt;
 
-
 use serde_json::Value;
-
 
 /// Version of the allowlisted Instance setting registry persisted beside setting values.
 pub const INSTANCE_SETTING_REGISTRY_VERSION: u16 = 4;
-
 
 /// How a validated setting becomes effective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,14 +18,12 @@ pub enum SettingApplyMode {
     ServerRestart,
 }
 
-
 /// Whether a setting value may be returned by an administrator read API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingSensitivity {
     Public,
     Secret,
 }
-
 
 /// Machine-readable validation for a setting value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,7 +53,6 @@ pub enum SettingConstraint {
     },
 }
 
-
 /// One allowlisted PostgreSQL-backed Instance setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InstanceSettingDefinition {
@@ -71,20 +65,17 @@ pub struct InstanceSettingDefinition {
     pub constraint: SettingConstraint,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InstanceSettingValidationError {
     pub key: &'static str,
     pub reason: &'static str,
 }
 
-
 const MFA_ENFORCEMENT: &[&str] = &["off", "administrators", "all_local_users"];
 
 const RUNTIME_NETWORK: &[&str] = &["browser_direct", "runtime_offline"];
 
 const SMTP_SECURITY: &[&str] = &["implicit-tls", "starttls"];
-
 
 const fn unsigned(
     key: &'static str,
@@ -104,7 +95,6 @@ const fn unsigned(
         constraint: SettingConstraint::UnsignedInteger { minimum, maximum },
     }
 }
-
 
 const fn policy_unsigned(
     key: &'static str,
@@ -126,7 +116,6 @@ const fn policy_unsigned(
     definition
 }
 
-
 const fn policy_boolean(
     key: &'static str,
     bootstrap_environment: &'static str,
@@ -142,7 +131,6 @@ const fn policy_boolean(
         constraint: SettingConstraint::Boolean,
     }
 }
-
 
 /// Sorted allowlist consumed by persistence, admin API and documentation generation.
 pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
@@ -507,7 +495,6 @@ pub const INSTANCE_SETTING_DEFINITIONS: &[InstanceSettingDefinition] = &[
     ),
 ];
 
-
 /// Returns an allowlisted definition. Unknown keys fail closed at the caller.
 #[must_use]
 pub fn instance_setting_definition(key: &str) -> Option<&'static InstanceSettingDefinition> {
@@ -517,7 +504,6 @@ pub fn instance_setting_definition(key: &str) -> Option<&'static InstanceSetting
         .map(|index| &INSTANCE_SETTING_DEFINITIONS[index])
 }
 
-
 /// Origin used only while materializing the first complete PostgreSQL setting set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BootstrapSettingOrigin {
@@ -526,7 +512,6 @@ pub enum BootstrapSettingOrigin {
     Environment,
 }
 
-
 /// Validated first-install inputs. PostgreSQL supersedes this object after materialization.
 #[derive(Clone, PartialEq, Eq)]
 pub struct InstanceSettingBootstrap {
@@ -534,13 +519,11 @@ pub struct InstanceSettingBootstrap {
     environment: BTreeMap<String, BootstrapEnvironmentValue>,
 }
 
-
 #[derive(Clone, PartialEq, Eq)]
 enum BootstrapEnvironmentValue {
     Parsed(Value),
     Raw(String),
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstanceSettingBootstrapError {
@@ -549,7 +532,6 @@ pub enum InstanceSettingBootstrapError {
     MissingDefault { key: &'static str },
     Invalid(InstanceSettingValidationError),
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -736,7 +718,6 @@ mod tests {
         assert!(!error.to_string().contains("do-not-echo"));
     }
 }
-
 
 mod bootstrap_values;
 pub(crate) use bootstrap_values::*;

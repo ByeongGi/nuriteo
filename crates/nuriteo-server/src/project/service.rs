@@ -11,7 +11,6 @@ use std::sync::{
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -19,7 +18,6 @@ use sqlx::{Acquire, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -34,14 +32,12 @@ use crate::organization::OrganizationId;
 
 use crate::workspace::StorageScopeId;
 
-
 use super::{
     DirectProjectRoleGrant, EffectiveProjectRole, NewProject, Project, ProjectAccessError,
     ProjectAccessRepository, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageKey,
     ProjectPageLimit, ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleVersion,
     ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
-
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -64,7 +60,6 @@ pub const DEFAULT_PROJECT_ROLE_PAGE_SIZE: u16 = 50;
 
 pub const MAX_PROJECT_ROLE_PAGE_SIZE: u16 = 100;
 
-
 type ProjectRow = (
     String,
     Option<String>,
@@ -80,7 +75,6 @@ type ProjectRow = (
     i64,
 );
 
-
 type GrantRow = (
     String,
     String,
@@ -91,12 +85,10 @@ type GrantRow = (
     i64,
 );
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectServicePolicy {
     operation_timeout: Duration,
 }
-
 
 #[derive(Clone)]
 pub struct ProjectAuditContext {
@@ -107,23 +99,19 @@ pub struct ProjectAuditContext {
     source_ip: Option<IpAddr>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectListPage {
     projects: Vec<Project>,
     next_key: Option<ProjectPageKey>,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectRolePageLimit(u16);
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectRolePageKey {
     user_id: UserId,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectProjectRolePage {
@@ -131,19 +119,16 @@ pub struct DirectProjectRolePage {
     next_key: Option<ProjectRolePageKey>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectDeleteConfirmation {
     name: ProjectName,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectRoleMutationResult {
     Changed,
     AlreadyAbsent,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -166,32 +151,27 @@ pub enum ProjectServiceError {
     InvariantViolation,
 }
 
-
 #[derive(Clone)]
 pub struct ProjectService {
     pool: DatabasePool,
     policy: ProjectServicePolicy,
 }
 
-
 #[derive(Clone)]
-struct MutationDeadline {
+pub(crate) struct MutationDeadline {
     at: tokio_time::Instant,
     commit_started: Arc<AtomicBool>,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ListAuthorization {
+pub(crate) enum ListAuthorization {
     PersonalOwner,
     OrganizationOwner,
     OrganizationMember,
 }
 
-
 #[cfg(test)]
 mod tests;
-
 
 mod audit_context;
 pub(crate) use audit_context::*;

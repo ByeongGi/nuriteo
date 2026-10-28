@@ -2,7 +2,6 @@
 
 pub mod recovery_kit;
 
-
 use std::collections::{BTreeMap, HashSet};
 
 use std::fmt;
@@ -16,7 +15,6 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 
@@ -46,7 +44,6 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use zeroize::{Zeroize, Zeroizing};
 
-
 use crate::config::{Environment, FileReader, load_secret};
 
 use crate::database::DatabasePool;
@@ -56,7 +53,6 @@ use crate::identity::{SessionId, UserId};
 use crate::instance_settings::EffectiveInstanceSettings;
 
 use crate::smtp::{SmtpConfig, SmtpPublicSettings, SmtpSecurity};
-
 
 const ALGORITHM: &str = "aes-256-gcm-v1";
 
@@ -78,7 +74,6 @@ const MIN_OPERATION_TIMEOUT: Duration = Duration::from_millis(100);
 
 const MAX_OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
-
 pub const MASTER_KEY: &str = "NURITEO_MASTER_KEY";
 
 pub const MASTER_KEY_FILE: &str = "NURITEO_MASTER_KEY_FILE";
@@ -89,14 +84,11 @@ pub const PREVIOUS_MASTER_KEYS: &str = "NURITEO_PREVIOUS_MASTER_KEYS";
 
 pub const PREVIOUS_MASTER_KEYS_FILE: &str = "NURITEO_PREVIOUS_MASTER_KEYS_FILE";
 
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretValue(Zeroizing<Vec<u8>>);
 
-
 #[derive(Clone)]
-struct MasterKey(Zeroizing<[u8; 32]>);
-
+pub(crate) struct MasterKey(Zeroizing<[u8; 32]>);
 
 #[derive(Clone)]
 pub struct MasterKeyring {
@@ -104,13 +96,11 @@ pub struct MasterKeyring {
     keys: BTreeMap<u32, MasterKey>,
 }
 
-
 pub(crate) struct EncryptedSecretEnvelope {
     pub(crate) key_version: u32,
     pub(crate) nonce: Vec<u8>,
     pub(crate) ciphertext: Vec<u8>,
 }
-
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -118,7 +108,6 @@ struct PreviousKeyInput {
     version: u32,
     key: String,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CredentialIdentity {
@@ -128,7 +117,6 @@ pub struct CredentialIdentity {
     pub credential_kind: String,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CredentialMetadata {
     pub id: Uuid,
@@ -137,13 +125,11 @@ pub struct CredentialMetadata {
     pub key_version: u32,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RotationReport {
     pub rotated: u16,
     pub remaining: bool,
 }
-
 
 #[derive(Clone)]
 pub struct IntegrationRepository {
@@ -152,13 +138,11 @@ pub struct IntegrationRepository {
     operation_timeout: Duration,
 }
 
-
-struct Sealed {
+pub(crate) struct Sealed {
     key_version: u32,
     nonce: Vec<u8>,
     ciphertext: Vec<u8>,
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct ValidatedCaBundle {
@@ -166,7 +150,6 @@ pub struct ValidatedCaBundle {
     fingerprints: Vec<String>,
     earliest_expiry: OffsetDateTime,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaBundleMetadata {
@@ -179,7 +162,6 @@ pub struct CaBundleMetadata {
     pub earliest_expiry: OffsetDateTime,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaEndpointBinding {
     integration_type: String,
@@ -189,13 +171,11 @@ pub struct CaEndpointBinding {
     transport: String,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct IntegrationAdminActor {
     pub user_id: UserId,
     pub session_id: SessionId,
 }
-
 
 /// Supported administrative boundary for integrity-sensitive integration CA
 /// changes. It never returns PEM and cannot skip reauthentication or preflight.
@@ -204,12 +184,10 @@ pub struct IntegrationAdminService {
     repository: IntegrationRepository,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CaPreflightProof {
     pub endpoint_fingerprint: [u8; 32],
 }
-
 
 pub trait CaCandidatePreflight: Send + Sync {
     fn preflight<'a>(
@@ -223,16 +201,14 @@ pub trait CaCandidatePreflight: Send + Sync {
     }
 }
 
-
-struct StoredCa {
+pub(crate) struct StoredCa {
     version: u64,
     pem_hash: [u8; 32],
     endpoint_fingerprint: [u8; 32],
     bundle: ValidatedCaBundle,
 }
 
-
-struct IntegrationAudit<'a> {
+pub(crate) struct IntegrationAudit<'a> {
     action: &'a str,
     kind: &'a str,
     integration_id: &'a str,
@@ -240,7 +216,6 @@ struct IntegrationAudit<'a> {
     changed_field: &'a str,
     correlation: &'a str,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IntegrationError {
@@ -253,7 +228,6 @@ pub enum IntegrationError {
     Conflict,
     Unavailable,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -291,7 +265,6 @@ mod tests {
         assert_eq!(format!("{value:?}"), "SecretValue([REDACTED])");
     }
 }
-
 
 mod keyring;
 pub(crate) use keyring::*;

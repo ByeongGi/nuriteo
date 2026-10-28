@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::s3_env::*;
-use super::materialization::*;
 use super::aws::*;
+use super::materialization::*;
+use super::s3_env::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -12,7 +12,6 @@ use std::fs;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -55,14 +54,18 @@ use nuriteo_server::workspace::StorageScopeId;
 
 use sha2::{Digest, Sha256};
 
+use super::{
+    ABORT_PROJECT, ACCESS_KEY, ATTACHED_PROJECT, BACKFILL_PROJECT, BUCKET,
+    COMPLETE_MISSING_PROJECT, COMPLETE_PROJECT, DATABASE_CA_ENV, DATABASE_URL_ENV,
+    FixtureEnvironment, KNOWN_PROJECT, MULTIPART_PROJECT, NORMAL_COMPLETE_PROJECT, OUTSIDER,
+    RACE_PROJECT, RACED_PROJECT, S3_CA_ENV, S3_ENDPOINT_ENV, SCOPE, SECRET_KEY, USER,
+};
 use sqlx::{Acquire, Executor};
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BUCKET, ACCESS_KEY, SECRET_KEY, USER, OUTSIDER, SCOPE, ABORT_PROJECT, MULTIPART_PROJECT, RACE_PROJECT, BACKFILL_PROJECT, ATTACHED_PROJECT, RACED_PROJECT, KNOWN_PROJECT, COMPLETE_PROJECT, COMPLETE_MISSING_PROJECT, NORMAL_COMPLETE_PROJECT, FixtureEnvironment};
-
-
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/save-cleanup/run.sh"]
-pub(crate) async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {    let pool = fixture_pool().await;
+pub(crate) async fn cleanup_is_bounded_persisted_redacted_and_restart_safe() {
+    let pool = fixture_pool().await;
     reset_and_seed(&pool).await;
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()

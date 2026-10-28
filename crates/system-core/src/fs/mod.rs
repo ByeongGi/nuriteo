@@ -5,6 +5,7 @@ mod inode;
 mod links;
 mod open_file;
 mod path;
+/// Serializable filesystem snapshots.
 pub mod snapshot;
 mod watch;
 
@@ -21,7 +22,8 @@ use path::AbsolutePath;
 pub use snapshot::{FsSnapshot, SnapshotEntry, SnapshotEntryKind, SnapshotError};
 pub use watch::{WatchEvent, WatchEventKind};
 
-#[derive(Debug, Clone)]
+/// In-memory filesystem rooted at `/`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SystemFs {
     nodes: BTreeMap<InodeId, Node>,
     next_inode: u64,
@@ -44,10 +46,22 @@ impl Default for SystemFs {
 }
 
 impl SystemFs {
+    /// Creates an empty instance with its default root state.
+    ///
+    /// # Panics
+    /// Panics if creating `/workspace` on that empty root fails. An empty root
+    /// has room for that directory.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates a directory at an absolute path.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `path` is not absolute,
+    /// [`FsError::AlreadyExists`] when the name is taken, [`FsError::NotDirectory`]
+    /// when a parent is not a directory, and [`FsError::NotFound`] when a parent is missing.
     pub fn mkdir(&mut self, path: &str) -> FsResult<()> {
         let path = AbsolutePath::parse(path)?;
         let (parent_parts, name) = path.parent_and_name()?;
@@ -68,6 +82,12 @@ impl SystemFs {
         }
     }
 
+    /// Returns metadata for a path, following the final symlink.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `path` is not absolute,
+    /// [`FsError::NotDirectory`] when a middle component is not a directory, and
+    /// [`FsError::NotFound`] when a component is missing.
     pub fn stat(&self, path: &str) -> FsResult<Metadata> {
         let path = AbsolutePath::parse(path)?;
         let inode = self.resolve_parts(path.parts())?;
@@ -77,6 +97,12 @@ impl SystemFs {
             .ok_or(FsError::NotFound)
     }
 
+    /// Returns metadata for a path without following the final symlink.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `path` is not absolute,
+    /// [`FsError::NotDirectory`] when a middle component is not a directory, and
+    /// [`FsError::NotFound`] when a component is missing.
     pub fn lstat(&self, path: &str) -> FsResult<Metadata> {
         let path = AbsolutePath::parse(path)?;
         let inode = self.resolve_parts_no_follow(path.parts())?;
@@ -86,6 +112,11 @@ impl SystemFs {
             .ok_or(FsError::NotFound)
     }
 
+    /// Returns the target stored in a symlink.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `path` is not absolute or does not
+    /// name a symlink, and [`FsError::NotFound`] when a component is missing.
     pub fn readlink(&self, path: &str) -> FsResult<String> {
         let path = AbsolutePath::parse(path)?;
         let inode = self.resolve_parts_no_follow(path.parts())?;
@@ -96,6 +127,12 @@ impl SystemFs {
         }
     }
 
+    /// Creates a symlink at `link_path` pointing at `target`.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `target` is not absolute,
+    /// [`FsError::AlreadyExists`] when the link name is taken, and the same path
+    /// errors as [`Self::mkdir`] for `link_path`.
     pub fn symlink(&mut self, target: &str, link_path: &str) -> FsResult<()> {
         if !target.starts_with('/') {
             return Err(FsError::InvalidInput);
@@ -114,6 +151,12 @@ impl SystemFs {
         Ok(())
     }
 
+    /// Adds another directory entry for an existing file.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when `existing` is not a regular file,
+    /// [`FsError::AlreadyExists`] when `new_path` is taken, and [`FsError::NotFound`]
+    /// when a component is missing.
     pub fn hardlink(&mut self, existing: &str, new_path: &str) -> FsResult<()> {
         let existing = AbsolutePath::parse(existing)?;
         let inode = self.resolve_parts(existing.parts())?;
@@ -134,6 +177,12 @@ impl SystemFs {
         Ok(())
     }
 
+    /// Moves a directory entry from one absolute path to another.
+    ///
+    /// # Errors
+    /// Returns [`FsError::NotFound`] when `from` or a parent is missing, and
+    /// [`FsError::NotDirectory`] when a parent is not a directory. An existing
+    /// `to` entry is replaced.
     pub fn rename(&mut self, from: &str, to: &str) -> FsResult<()> {
         let from = AbsolutePath::parse(from)?;
         let (from_parent_parts, from_name) = from.parent_and_name()?;
@@ -148,6 +197,11 @@ impl SystemFs {
         Ok(())
     }
 
+    /// Sets the byte length of a regular file.
+    ///
+    /// # Errors
+    /// Returns [`FsError::IsDirectory`] for a directory, [`FsError::NotFile`] for
+    /// a symlink, and [`FsError::NotFound`] when the path is missing.
     pub fn truncate(&mut self, path: &str, len: usize) -> FsResult<()> {
         let path = AbsolutePath::parse(path)?;
         let inode = self.resolve_parts(path.parts())?;
@@ -163,6 +217,11 @@ impl SystemFs {
         }
     }
 
+    /// Removes a directory entry and drops the node at link count zero.
+    ///
+    /// # Errors
+    /// Returns [`FsError::NotFound`] when the entry or a parent is missing, and
+    /// [`FsError::NotDirectory`] when a parent is not a directory.
     pub fn unlink(&mut self, path: &str) -> FsResult<()> {
         let path = AbsolutePath::parse(path)?;
         let (parent_parts, name) = path.parent_and_name()?;
@@ -177,10 +236,19 @@ impl SystemFs {
         Ok(())
     }
 
+    /// Returns recorded watch events and clears the queue.
+    #[must_use]
     pub fn drain_events(&mut self) -> Vec<WatchEvent> {
         std::mem::take(&mut self.events)
     }
 
+    /// Opens a path and returns a descriptor owned by `pid`.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidInput`] when neither read nor write is set, or
+    /// truncate is set without write. Returns [`FsError::IsDirectory`] for a
+    /// directory, [`FsError::NotFound`] when the path is missing and create is
+    /// off, and [`FsError::NotFile`] for a symlink that does not resolve to a file.
     pub fn open(&mut self, pid: Pid, path: &str, options: OpenOptions) -> FsResult<Fd> {
         if !options.read && !options.write {
             return Err(FsError::InvalidInput);
@@ -215,6 +283,12 @@ impl SystemFs {
         Ok(self.fd_table(pid).insert(open_file))
     }
 
+    /// Reads up to `len` bytes through a process descriptor.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidFd`] when `pid` has no such descriptor,
+    /// [`FsError::PermissionDenied`] when it is not readable, and
+    /// [`FsError::IsDirectory`] or [`FsError::NotFile`] when the inode is not a file.
     pub fn read(&mut self, pid: Pid, fd: Fd, len: usize) -> FsResult<Vec<u8>> {
         let table = self.fd_tables.get_mut(&pid).ok_or(FsError::InvalidFd)?;
         let open_file = table.get_mut(fd)?;
@@ -235,6 +309,12 @@ impl SystemFs {
         Ok(data[start..end].to_vec())
     }
 
+    /// Writes bytes through a process descriptor.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidFd`] when `pid` has no such descriptor,
+    /// [`FsError::PermissionDenied`] when it is not writable, and
+    /// [`FsError::IsDirectory`] or [`FsError::NotFile`] when the inode is not a file.
     pub fn write(&mut self, pid: Pid, fd: Fd, bytes: &[u8]) -> FsResult<usize> {
         let inode = {
             let table = self.fd_tables.get_mut(&pid).ok_or(FsError::InvalidFd)?;
@@ -265,12 +345,18 @@ impl SystemFs {
         Ok(bytes.len())
     }
 
+    /// Closes a descriptor owned by `pid`.
+    ///
+    /// # Errors
+    /// Returns [`FsError::InvalidFd`] when `pid` has no such descriptor.
     pub fn close(&mut self, pid: Pid, fd: Fd) -> FsResult<()> {
         let table = self.fd_tables.get_mut(&pid).ok_or(FsError::InvalidFd)?;
         table.remove(fd)?;
         Ok(())
     }
 
+    /// Copies the filesystem into a snapshot.
+    #[must_use]
     pub fn snapshot(&self) -> FsSnapshot {
         let entries = self
             .nodes
@@ -303,6 +389,11 @@ impl SystemFs {
         FsSnapshot::new(1, self.next_inode, entries)
     }
 
+    /// Rebuilds a filesystem from a verified snapshot.
+    ///
+    /// # Errors
+    /// Returns [`SnapshotError`] when the version, integrity hash, or root entry
+    /// does not match what this kernel can restore.
     pub fn restore(snapshot: &FsSnapshot) -> Result<Self, SnapshotError> {
         snapshot.verify()?;
         let mut nodes = BTreeMap::new();

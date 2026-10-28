@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::s3_env::*;
-use super::bounds::*;
 use super::aws::*;
+use super::bounds::*;
+use super::s3_env::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -12,7 +12,6 @@ use std::fs;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -55,14 +54,18 @@ use nuriteo_server::workspace::StorageScopeId;
 
 use sha2::{Digest, Sha256};
 
+use super::{
+    ABORT_PROJECT, ACCESS_KEY, ATTACHED_PROJECT, BACKFILL_PROJECT, BUCKET,
+    COMPLETE_MISSING_PROJECT, COMPLETE_PROJECT, DATABASE_CA_ENV, DATABASE_URL_ENV,
+    FixtureEnvironment, KNOWN_PROJECT, MULTIPART_PROJECT, NORMAL_COMPLETE_PROJECT, OUTSIDER,
+    RACE_PROJECT, RACED_PROJECT, S3_CA_ENV, S3_ENDPOINT_ENV, SCOPE, SECRET_KEY, USER,
+};
 use sqlx::{Acquire, Executor};
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BUCKET, ACCESS_KEY, SECRET_KEY, USER, OUTSIDER, SCOPE, ABORT_PROJECT, MULTIPART_PROJECT, RACE_PROJECT, BACKFILL_PROJECT, ATTACHED_PROJECT, RACED_PROJECT, KNOWN_PROJECT, COMPLETE_PROJECT, COMPLETE_MISSING_PROJECT, NORMAL_COMPLETE_PROJECT, FixtureEnvironment};
-
-
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/save-cleanup/run.sh"]
-pub(crate) async fn stale_canonical_materialization_aborts_persisted_multipart() {    let pool = fixture_pool().await;
+pub(crate) async fn stale_canonical_materialization_aborts_persisted_multipart() {
+    let pool = fixture_pool().await;
     reset_and_seed(&pool).await;
     InstanceSettingsRepository::new(pool.clone(), Duration::from_secs(5))
         .unwrap()
@@ -90,8 +93,8 @@ pub(crate) async fn stale_canonical_materialization_aborts_persisted_multipart()
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn prove_stale_canonical_multipart_is_aborted(    pool: &DatabasePool,
+pub(crate) async fn prove_stale_canonical_multipart_is_aborted(
+    pool: &DatabasePool,
     service: &CleanupService,
     store: &S3ObjectStore,
     endpoint: &str,
@@ -254,12 +257,12 @@ pub(crate) async fn prove_stale_canonical_multipart_is_aborted(    pool: &Databa
     assert!(!stale_ledger_exists);
 }
 
-
-pub(crate) fn scope() -> StorageScopeId {    StorageScopeId::from_str(SCOPE).unwrap()
+pub(crate) fn scope() -> StorageScopeId {
+    StorageScopeId::from_str(SCOPE).unwrap()
 }
 
-
-pub(crate) async fn seed_expired_sessions(pool: &DatabasePool, count: u16) {    for index in 0..count {
+pub(crate) async fn seed_expired_sessions(pool: &DatabasePool, count: u16) {
+    for index in 0..count {
         let suffix = 0x1000_u64 + u64::from(index);
         let project = format!("0199ee6c-c777-7000-8000-{suffix:012x}");
         let slug = format!("expiry-{index:03}");
@@ -297,8 +300,8 @@ pub(crate) async fn seed_expired_sessions(pool: &DatabasePool, count: u16) {    
         .unwrap();
 }
 
-
-pub(crate) async fn insert_session(    pool: &DatabasePool,
+pub(crate) async fn insert_session(
+    pool: &DatabasePool,
     project: &str,
     mode: &str,
     upload_id: Option<&str>,
@@ -347,16 +350,20 @@ pub(crate) async fn insert_session(    pool: &DatabasePool,
     session
 }
 
-
-pub(crate) async fn session_key(pool: &DatabasePool, session: SaveSessionId) -> String {    sqlx::query_scalar("SELECT staging_object_key FROM save_sessions WHERE id=$1::uuid")
+pub(crate) async fn session_key(pool: &DatabasePool, session: SaveSessionId) -> String {
+    sqlx::query_scalar("SELECT staging_object_key FROM save_sessions WHERE id=$1::uuid")
         .bind(session.to_string())
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn attach_upload_fixture(pool: &DatabasePool, session: SaveSessionId, upload_id: &str) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn attach_upload_fixture(
+    pool: &DatabasePool,
+    session: SaveSessionId,
+    upload_id: &str,
+) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
     let session_affected = sqlx::query(
         "UPDATE save_sessions SET multipart_upload_id=$2,state='uploading',\
@@ -385,8 +392,8 @@ pub(crate) async fn attach_upload_fixture(pool: &DatabasePool, session: SaveSess
     transaction.commit().await.unwrap();
 }
 
-
-pub(crate) async fn assert_multipart_finalized(    pool: &DatabasePool,
+pub(crate) async fn assert_multipart_finalized(
+    pool: &DatabasePool,
     session: SaveSessionId,
     expected_state: &str,
 ) {
@@ -405,8 +412,8 @@ pub(crate) async fn assert_multipart_finalized(    pool: &DatabasePool,
     assert_eq!(row, (expected_state.to_owned(), "cleaned".to_owned(), 0));
 }
 
-
-pub(crate) async fn mark_complete_unknown_fixture(pool: &DatabasePool, session: SaveSessionId) {    mark_complete_started_fixture(pool, session).await;
+pub(crate) async fn mark_complete_unknown_fixture(pool: &DatabasePool, session: SaveSessionId) {
+    mark_complete_started_fixture(pool, session).await;
     sqlx::query(
         "UPDATE multipart_lifecycles SET complete_status='unknown',\
                 updated_at=transaction_timestamp() \
@@ -419,8 +426,8 @@ pub(crate) async fn mark_complete_unknown_fixture(pool: &DatabasePool, session: 
     .unwrap();
 }
 
-
-pub(crate) async fn mark_complete_started_fixture(pool: &DatabasePool, session: SaveSessionId) {    sqlx::query(
+pub(crate) async fn mark_complete_started_fixture(pool: &DatabasePool, session: SaveSessionId) {
+    sqlx::query(
         "UPDATE multipart_lifecycles SET complete_status='completing',\
                 updated_at=transaction_timestamp() \
          WHERE save_session_id=$1::uuid AND create_status='ready' \
@@ -432,8 +439,8 @@ pub(crate) async fn mark_complete_started_fixture(pool: &DatabasePool, session: 
     .unwrap();
 }
 
-
-pub(crate) async fn mark_complete_finished_fixture(pool: &DatabasePool, session: SaveSessionId) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn mark_complete_finished_fixture(pool: &DatabasePool, session: SaveSessionId) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
     sqlx::query(
         "UPDATE save_sessions SET state='verifying',updated_at=transaction_timestamp() \
@@ -456,8 +463,8 @@ pub(crate) async fn mark_complete_finished_fixture(pool: &DatabasePool, session:
     transaction.commit().await.unwrap();
 }
 
-
-pub(crate) async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("ALTER TABLE save_sessions DISABLE TRIGGER save_sessions_update_invariants")
         .await
@@ -476,8 +483,8 @@ pub(crate) async fn force_expired(pool: &DatabasePool, session: SaveSessionId) {
         .unwrap();
 }
 
-
-pub(crate) async fn prove_forward_backfill(pool: &DatabasePool) {    let session = insert_session(pool, BACKFILL_PROJECT, "single", None).await;
+pub(crate) async fn prove_forward_backfill(pool: &DatabasePool) {
+    let session = insert_session(pool, BACKFILL_PROJECT, "single", None).await;
     let mut connection = pool.acquire().await.unwrap();
     connection
         .execute(
@@ -550,8 +557,8 @@ pub(crate) async fn prove_forward_backfill(pool: &DatabasePool) {    let session
         .unwrap();
 }
 
-
-pub(crate) async fn wait_for_count(pool: &DatabasePool, status: &str, expected: i64) {    for _ in 0..300 {
+pub(crate) async fn wait_for_count(pool: &DatabasePool, status: &str, expected: i64) {
+    for _ in 0..300 {
         let count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM save_cleanup_jobs WHERE status=$1")
                 .bind(status)
@@ -581,8 +588,8 @@ pub(crate) async fn wait_for_count(pool: &DatabasePool, status: &str, expected: 
     panic!("cleanup jobs did not reach {status}={expected}: {statuses:?} {running:?}");
 }
 
-
-pub(crate) async fn wait_for_job_absent(pool: &DatabasePool, session: SaveSessionId) {    for _ in 0..300 {
+pub(crate) async fn wait_for_job_absent(pool: &DatabasePool, session: SaveSessionId) {
+    for _ in 0..300 {
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM save_cleanup_jobs WHERE save_session_id=$1::uuid",
         )
@@ -598,8 +605,8 @@ pub(crate) async fn wait_for_job_absent(pool: &DatabasePool, session: SaveSessio
     panic!("cleanup job did not become absent");
 }
 
-
-pub(crate) async fn wait_for_absence_observation(pool: &DatabasePool, session: SaveSessionId) {    for _ in 0..300 {
+pub(crate) async fn wait_for_absence_observation(pool: &DatabasePool, session: SaveSessionId) {
+    for _ in 0..300 {
         let observed: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM save_cleanup_jobs \
              WHERE save_session_id=$1::uuid AND status='retry_wait' AND absence_count=1)",
@@ -616,8 +623,8 @@ pub(crate) async fn wait_for_absence_observation(pool: &DatabasePool, session: S
     panic!("cleanup job did not persist its first absence observation");
 }
 
-
-pub(crate) async fn reset_and_seed(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_and_seed(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("DROP SCHEMA public CASCADE")
         .await
@@ -652,8 +659,8 @@ pub(crate) async fn reset_and_seed(pool: &DatabasePool) {    let mut connection 
         .unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let url = env::var(DATABASE_URL_ENV).unwrap();
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let url = env::var(DATABASE_URL_ENV).unwrap();
     let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
     DatabasePool::connect(
         DatabasePoolConfig::new(
@@ -670,8 +677,8 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let url = env::var(DATAB
     .unwrap()
 }
 
-
-pub(crate) async fn object_store(endpoint: String, ca_file: String) -> S3ObjectStore {    let config =
+pub(crate) async fn object_store(endpoint: String, ca_file: String) -> S3ObjectStore {
+    let config =
         ObjectStorageConfig::load(&FixtureEnvironment { endpoint, ca_file }, &SystemFileReader)
             .unwrap();
     S3ObjectStore::new(
@@ -688,8 +695,8 @@ pub(crate) async fn object_store(endpoint: String, ca_file: String) -> S3ObjectS
     .unwrap()
 }
 
-
-pub(crate) async fn create_bucket(endpoint: &str, ca_file: &str) {    let client = aws_client(endpoint, ca_file);
+pub(crate) async fn create_bucket(endpoint: &str, ca_file: &str) {
+    let client = aws_client(endpoint, ca_file);
     if let Err(error) = client.create_bucket().bucket(BUCKET).send().await {
         let exists = error
             .as_service_error()
@@ -699,8 +706,8 @@ pub(crate) async fn create_bucket(endpoint: &str, ca_file: &str) {    let client
     }
 }
 
-
-pub(crate) async fn create_backend_multipart(endpoint: &str, ca_file: &str, key: &str) -> String {    aws_client(endpoint, ca_file)
+pub(crate) async fn create_backend_multipart(endpoint: &str, ca_file: &str, key: &str) -> String {
+    aws_client(endpoint, ca_file)
         .create_multipart_upload()
         .bucket(BUCKET)
         .key(key)
@@ -712,8 +719,13 @@ pub(crate) async fn create_backend_multipart(endpoint: &str, ca_file: &str, key:
         .to_owned()
 }
 
-
-pub(crate) async fn abort_backend_multipart(endpoint: &str, ca_file: &str, key: &str, upload_id: &str) {    aws_client(endpoint, ca_file)
+pub(crate) async fn abort_backend_multipart(
+    endpoint: &str,
+    ca_file: &str,
+    key: &str,
+    upload_id: &str,
+) {
+    aws_client(endpoint, ca_file)
         .abort_multipart_upload()
         .bucket(BUCKET)
         .key(key)
@@ -723,8 +735,13 @@ pub(crate) async fn abort_backend_multipart(endpoint: &str, ca_file: &str, key: 
         .unwrap();
 }
 
-
-pub(crate) async fn complete_backend_multipart(endpoint: &str, ca_file: &str, key: &str, upload_id: &str) {    let client = aws_client(endpoint, ca_file);
+pub(crate) async fn complete_backend_multipart(
+    endpoint: &str,
+    ca_file: &str,
+    key: &str,
+    upload_id: &str,
+) {
+    let client = aws_client(endpoint, ca_file);
     let uploaded = client
         .upload_part()
         .bucket(BUCKET)
@@ -757,8 +774,8 @@ pub(crate) async fn complete_backend_multipart(endpoint: &str, ca_file: &str, ke
         .unwrap();
 }
 
-
-pub(crate) async fn put_backend_object(endpoint: &str, ca_file: &str, key: &str) {    aws_client(endpoint, ca_file)
+pub(crate) async fn put_backend_object(endpoint: &str, ca_file: &str, key: &str) {
+    aws_client(endpoint, ca_file)
         .put_object()
         .bucket(BUCKET)
         .key(key)
@@ -770,8 +787,8 @@ pub(crate) async fn put_backend_object(endpoint: &str, ca_file: &str, key: &str)
         .unwrap();
 }
 
-
-pub(crate) async fn backend_multipart_exists(    endpoint: &str,
+pub(crate) async fn backend_multipart_exists(
+    endpoint: &str,
     ca_file: &str,
     key: &str,
     upload_id: &str,

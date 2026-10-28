@@ -6,7 +6,7 @@ use super::{
     open_file::OpenFile,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FdTable {
     next_fd: u32,
     entries: BTreeMap<Fd, OpenFile>,
@@ -14,14 +14,21 @@ pub struct FdTable {
 
 impl Default for FdTable {
     fn default() -> Self {
-        Self {
-            next_fd: 3,
-            entries: BTreeMap::new(),
-        }
+        Self::new()
     }
 }
 
 impl FdTable {
+    /// Creates a table whose first descriptor is [`Fd::FIRST_ISSUED`].
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            next_fd: Fd::FIRST_ISSUED,
+            entries: BTreeMap::new(),
+        }
+    }
+
+    /// Inserts an open file and returns its descriptor.
     pub fn insert(&mut self, open_file: OpenFile) -> Fd {
         let fd = Fd(self.next_fd);
         self.next_fd += 1;

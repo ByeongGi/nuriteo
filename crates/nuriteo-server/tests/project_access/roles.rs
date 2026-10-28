@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::races::*;
+use super::*;
 use std::env;
 
 use std::fs;
@@ -8,7 +8,6 @@ use std::fs;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
@@ -24,14 +23,18 @@ use sqlx::{Acquire, Executor, Postgres, Transaction};
 
 use tokio::sync::oneshot;
 
+use super::{
+    ADMIN_TEAM, ARCHIVED_ORGANIZATION_PROJECT, ARCHIVED_PERSONAL_PROJECT,
+    CONCURRENT_DELETE_PROJECT, DATABASE_CA_ENV, DATABASE_URL_ENV, DELETION_PROJECT, DISABLED,
+    MEMBER, ORGANIZATION, ORGANIZATION_PROJECT, ORGANIZATION_SCOPE, OUTSIDER, OWNER,
+    PERSONAL_PROJECT, PERSONAL_SCOPE, READ_TEAM, UNGRANTED, WRITE_TEAM,
+};
 use tokio::time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, OWNER, MEMBER, UNGRANTED, OUTSIDER, DISABLED, ORGANIZATION, PERSONAL_SCOPE, ORGANIZATION_SCOPE, PERSONAL_PROJECT, ARCHIVED_PERSONAL_PROJECT, ORGANIZATION_PROJECT, ARCHIVED_ORGANIZATION_PROJECT, DELETION_PROJECT, CONCURRENT_DELETE_PROJECT, READ_TEAM, WRITE_TEAM, ADMIN_TEAM};
-
-
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-project-access/run.sh"]
-pub(crate) async fn direct_project_roles_are_isolated_effective_and_serialized() {    let pool = fixture_pool().await;
+pub(crate) async fn direct_project_roles_are_isolated_effective_and_serialized() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
         &pool,
@@ -61,8 +64,8 @@ pub(crate) async fn direct_project_roles_are_isolated_effective_and_serialized()
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn verify_team_roles_compose_and_fail_closed(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_team_roles_compose_and_fail_closed(pool: &DatabasePool) {
+    execute(
         pool,
         "INSERT INTO teams (id,organization_id,slug,display_name) VALUES \
          ('0199ee6c-c777-7000-8000-000000005060'::uuid, \
@@ -215,8 +218,8 @@ pub(crate) async fn verify_team_roles_compose_and_fail_closed(pool: &DatabasePoo
     .await;
 }
 
-
-pub(crate) async fn delete_team_membership(pool: &DatabasePool, team_id: &str) {    sqlx::query(
+pub(crate) async fn delete_team_membership(pool: &DatabasePool, team_id: &str) {
+    sqlx::query(
         "DELETE FROM team_memberships \
          WHERE team_id=$1::uuid AND user_id=$2::uuid",
     )
@@ -227,8 +230,8 @@ pub(crate) async fn delete_team_membership(pool: &DatabasePool, team_id: &str) {
     .unwrap();
 }
 
-
-pub(crate) async fn verify_effective_roles_and_archived_access(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_effective_roles_and_archived_access(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
     for (project, user, expected) in [
         (PERSONAL_PROJECT, OWNER, EffectiveProjectRole::Admin),
@@ -335,8 +338,8 @@ pub(crate) async fn verify_effective_roles_and_archived_access(pool: &DatabasePo
     transaction.commit().await.unwrap();
 }
 
-
-pub(crate) async fn verify_owner_demotion_reactivates_direct_grant(pool: &DatabasePool) {    grant(pool, ORGANIZATION_PROJECT, OWNER, ProjectRole::Read).await;
+pub(crate) async fn verify_owner_demotion_reactivates_direct_grant(pool: &DatabasePool) {
+    grant(pool, ORGANIZATION_PROJECT, OWNER, ProjectRole::Read).await;
     execute(
         pool,
         "UPDATE organization_memberships SET role='owner', updated_at=CURRENT_TIMESTAMP \
@@ -375,8 +378,8 @@ pub(crate) async fn verify_owner_demotion_reactivates_direct_grant(pool: &Databa
     .await;
 }
 
-
-pub(crate) async fn verify_membership_role_and_effective_races(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_membership_role_and_effective_races(pool: &DatabasePool) {
+    execute(
         pool,
         "UPDATE organization_memberships SET role='owner', updated_at=CURRENT_TIMESTAMP \
          WHERE organization_id='0199ee6c-c777-7000-8000-000000005010'::uuid \
@@ -485,8 +488,8 @@ pub(crate) async fn verify_membership_role_and_effective_races(pool: &DatabasePo
     .await;
 }
 
-
-pub(crate) async fn verify_role_change_and_membership_removal_races(pool: &DatabasePool) {    let mut role_change_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_role_change_and_membership_removal_races(pool: &DatabasePool) {
+    let mut role_change_connection = pool.acquire().await.unwrap();
     let mut role_change = role_change_connection.begin().await.unwrap();
     let role_change_pid = backend_pid(&mut role_change).await;
     assert!(
@@ -606,8 +609,8 @@ pub(crate) async fn verify_role_change_and_membership_removal_races(pool: &Datab
     grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Write).await;
 }
 
-
-pub(crate) async fn verify_membership_delete_blocks_grant(pool: &DatabasePool) {    let mut removal_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_membership_delete_blocks_grant(pool: &DatabasePool) {
+    let mut removal_connection = pool.acquire().await.unwrap();
     let mut removal = removal_connection.begin().await.unwrap();
     let removal_pid = backend_pid(&mut removal).await;
     lock_organization_for_update(&mut removal).await;
@@ -656,8 +659,8 @@ pub(crate) async fn verify_membership_delete_blocks_grant(pool: &DatabasePool) {
     insert_membership(pool, UNGRANTED, "member").await;
 }
 
-
-pub(crate) async fn verify_concurrent_same_pair_grant(pool: &DatabasePool) {    let mut holder_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_concurrent_same_pair_grant(pool: &DatabasePool) {
+    let mut holder_connection = pool.acquire().await.unwrap();
     let mut holder = holder_connection.begin().await.unwrap();
     let holder_pid = backend_pid(&mut holder).await;
     ProjectAccessRepository::grant(

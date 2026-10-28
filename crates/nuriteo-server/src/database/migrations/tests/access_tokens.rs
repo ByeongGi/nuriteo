@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::forward_migrations::*;
 use super::schema_probes::*;
+use super::*;
 use std::borrow::Cow;
 
 use std::env;
@@ -10,11 +10,9 @@ use std::fs;
 
 use std::str::FromStr;
 
-
 use sqlx::migrate::{Migration, MigrationType};
 
 use sqlx::{Acquire, SqlSafeStr};
-
 
 use super::super::*;
 
@@ -30,12 +28,11 @@ use crate::published_example::{
     PublishedExampleState, PublishedExampleVisibility,
 };
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
 use crate::save::ProjectVersionId;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
 
-
-
-pub(crate) async fn verify_access_token_invariants(pool: &DatabasePool) {    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
+pub(crate) async fn verify_access_token_invariants(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
     const TOKEN: &str = "0199ee6c-c777-7000-8000-000000009101";
     const DISABLE_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009102";
     const PROJECT_TOKEN: &str = "0199ee6c-c777-7000-8000-000000009105";
@@ -235,8 +232,8 @@ pub(crate) async fn verify_access_token_invariants(pool: &DatabasePool) {    con
     );
 }
 
-
-pub(crate) async fn verify_access_token_runtime(pool: &DatabasePool, user: &str, project: &str) {    use crate::access_token::{
+pub(crate) async fn verify_access_token_runtime(pool: &DatabasePool, user: &str, project: &str) {
+    use crate::access_token::{
         AccessTokenAuthenticator, AccessTokenKind, AccessTokenPrincipal, AccessTokenRequest,
         AccessTokenScope, AccessTokenServiceError, ApiCategory, ApiIdempotencyRepository,
         IdempotencyReservation, generate_access_token,
@@ -479,8 +476,8 @@ pub(crate) async fn verify_access_token_runtime(pool: &DatabasePool, user: &str,
     transaction.commit().await.unwrap();
 }
 
-
-pub(crate) async fn verify_access_token_management(pool: &DatabasePool, user: &str, project: &str) {    use crate::access_token::{
+pub(crate) async fn verify_access_token_management(pool: &DatabasePool, user: &str, project: &str) {
+    use crate::access_token::{
         AccessTokenManagementError, AccessTokenManagementService, AccessTokenScope,
         AccessTokenTarget,
     };
@@ -687,27 +684,32 @@ pub(crate) async fn verify_access_token_management(pool: &DatabasePool, user: &s
     assert_eq!(notification_count, 4);
 }
 
-
-pub(crate) fn assert_constraint_rejected(result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>) {    let error = result.expect_err("constraint violation must be rejected");
+pub(crate) fn assert_constraint_rejected(
+    result: Result<sqlx::postgres::PgQueryResult, sqlx::Error>,
+) {
+    let error = result.expect_err("constraint violation must be rejected");
     assert_eq!(
         error.as_database_error().and_then(|error| error.code()),
         Some(Cow::Borrowed("23514"))
     );
 }
 
-
-pub(crate) fn options(lock_wait_timeout: Duration, execution_timeout: Duration) -> MigrationOptions {    MigrationOptions::new(lock_wait_timeout, execution_timeout)
+pub(crate) fn options(
+    lock_wait_timeout: Duration,
+    execution_timeout: Duration,
+) -> MigrationOptions {
+    MigrationOptions::new(lock_wait_timeout, execution_timeout)
         .unwrap_or_else(|error| panic!("test migration options must be valid: {error}"))
 }
 
-
-pub(crate) fn test_migrator(additional: Migration) -> Migrator {    let mut migrations: Vec<_> = embedded_migrator().iter().cloned().collect();
+pub(crate) fn test_migrator(additional: Migration) -> Migrator {
+    let mut migrations: Vec<_> = embedded_migrator().iter().cloned().collect();
     migrations.push(additional);
     migrator_without_driver_lock(migrations)
 }
 
-
-pub(crate) fn project_bundle_rollback_probe_migrator() -> Migrator {    let mut migrations: Vec<_> = embedded_migrator()
+pub(crate) fn project_bundle_rollback_probe_migrator() -> Migrator {
+    let mut migrations: Vec<_> = embedded_migrator()
         .iter()
         .filter(|migration| migration.version < 14)
         .cloned()
@@ -724,8 +726,8 @@ pub(crate) fn project_bundle_rollback_probe_migrator() -> Migrator {    let mut 
     migrator_without_driver_lock(migrations)
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::var(DATABASE_URL_ENV)
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV)
         .unwrap_or_else(|_| panic!("{DATABASE_URL_ENV} must be set by the fixture"));
     let ca_path = env::var(DATABASE_CA_ENV)
         .unwrap_or_else(|_| panic!("{DATABASE_CA_ENV} must be set by the fixture"));
@@ -747,8 +749,8 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::
         .unwrap_or_else(|error| panic!("fixture database must connect: {error}"))
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("fixture reset must acquire a connection: {error}"));
@@ -763,8 +765,8 @@ pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection =
     }
 }
 
-
-pub(crate) async fn migration_row_count(pool: &DatabasePool, version: i64) -> i64 {    let mut connection = pool
+pub(crate) async fn migration_row_count(pool: &DatabasePool, version: i64) -> i64 {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("history query must acquire a connection: {error}"));
@@ -775,8 +777,8 @@ pub(crate) async fn migration_row_count(pool: &DatabasePool, version: i64) -> i6
         .unwrap_or_else(|error| panic!("history count must succeed: {error}"))
 }
 
-
-pub(crate) async fn relation_exists(pool: &DatabasePool, relation: &str) -> bool {    let mut connection = pool
+pub(crate) async fn relation_exists(pool: &DatabasePool, relation: &str) -> bool {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("relation query must acquire a connection: {error}"));

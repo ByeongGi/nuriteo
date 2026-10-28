@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::authorization::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -34,7 +32,6 @@ use crate::project::{
     EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, ProjectId, ProjectRole,
 };
 
-
 use super::super::{
     NewTeam, Team, TeamAction, TeamAuthorization, TeamAuthorizationPrincipal, TeamConflict,
     TeamDisplayName, TeamId, TeamMemberPageKey, TeamMemberPageLimit, TeamMembership,
@@ -43,9 +40,10 @@ use super::super::{
     TeamProjectRolePageLimit, TeamProjectRoleVersion, TeamRepository, TeamRepositoryError,
     TeamRole, TeamSlug, TeamVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, TeamServicePolicy, TeamPrincipal, TeamAuditContext, TeamMutationResult, TeamServiceError, TeamService};
-
-
+use super::{
+    DEFAULT_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, TeamAuditContext,
+    TeamMutationResult, TeamPrincipal, TeamService, TeamServiceError, TeamServicePolicy,
+};
 
 impl super::TeamServicePolicy {
     pub fn new(operation_timeout: Duration) -> Result<Self, TeamServiceError> {
@@ -61,14 +59,13 @@ impl super::TeamServicePolicy {
     }
 }
 
-
-impl Default for TeamServicePolicy { fn default() -> Self {
+impl Default for TeamServicePolicy {
+    fn default() -> Self {
         Self {
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
         }
     }
 }
-
 
 impl TeamPrincipal {
     #[must_use]
@@ -78,7 +75,6 @@ impl TeamPrincipal {
         }
     }
 }
-
 
 impl TeamAuditContext {
     #[must_use]
@@ -99,8 +95,8 @@ impl TeamAuditContext {
     }
 }
 
-
-impl fmt::Debug for TeamAuditContext { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for TeamAuditContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("TeamAuditContext")
             .field("event_id", &self.event_id)
@@ -108,8 +104,8 @@ impl fmt::Debug for TeamAuditContext { fn fmt(&self, formatter: &mut fmt::Format
     }
 }
 
-
-impl fmt::Display for TeamServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for TeamServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "team input is invalid",
             Self::NotFound => "team was not found",
@@ -132,9 +128,7 @@ impl fmt::Display for TeamServiceError { fn fmt(&self, formatter: &mut fmt::Form
     }
 }
 
-
 impl std::error::Error for TeamServiceError {}
-
 
 impl TeamService {
     #[must_use]

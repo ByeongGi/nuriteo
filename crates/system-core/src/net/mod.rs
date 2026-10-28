@@ -1,5 +1,8 @@
+/// Bounded byte queues for network endpoints.
 pub mod buffer;
+/// Listener and connection identifiers.
 pub mod connection;
+/// Port map that accepts and connects in memory.
 pub mod port_table;
 
 pub use buffer::{NetBuffer, NetBufferError};

@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::connections::*;
+use super::*;
 
 use std::fmt;
 
@@ -9,7 +9,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -29,7 +28,6 @@ use url::Url;
 
 use uuid::Uuid;
 
-
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
     IntegrationRepository, SecretValue, ValidatedCaBundle, authorize_recent_admin,
@@ -39,12 +37,16 @@ pub(crate) use http_routes::openapi_router;
 
 pub use http_service::RegistryHttpService;
 
+use super::{
+    BoundedResponse, CREDENTIAL_KIND, DEFAULT_TIMEOUT, DNS_TIMEOUT, INSTANCE_ID, INTEGRATION_TYPE,
+    MAX_DNS_ADDRESSES, METADATA_LIMIT, PACKAGE_SEGMENT, PREFLIGHT_LIMIT, RegistryConnectionInput,
+    RegistryConnectionMetadata, RegistryError, RegistryGatewayService, RegistryPayload,
+    RegistryRuntime, RegistryState, map_integration_error,
+};
 pub(crate) use http_service::{RegistryAdminView, RegistryCollectionView};
-use super::{INTEGRATION_TYPE, CREDENTIAL_KIND, INSTANCE_ID, DEFAULT_TIMEOUT, DNS_TIMEOUT, MAX_DNS_ADDRESSES, PREFLIGHT_LIMIT, METADATA_LIMIT, PACKAGE_SEGMENT, RegistryState, RegistryConnectionInput, RegistryConnectionMetadata, RegistryPayload, RegistryGatewayService, RegistryRuntime, BoundedResponse, map_integration_error, RegistryError};
 
-
-
-pub(crate) async fn load_runtime_with_ca(    integrations: &IntegrationRepository,
+pub(crate) async fn load_runtime_with_ca(
+    integrations: &IntegrationRepository,
     tx: &mut Transaction<'_, Postgres>,
     metadata: RegistryConnectionMetadata,
     ca_override: Option<&ValidatedCaBundle>,
@@ -83,8 +85,8 @@ pub(crate) async fn load_runtime_with_ca(    integrations: &IntegrationRepositor
     })
 }
 
-
-pub(crate) fn validate_base_url(value: &str) -> Result<Url, RegistryError> {    let url = Url::parse(value).map_err(|_| RegistryError::InvalidInput)?;
+pub(crate) fn validate_base_url(value: &str) -> Result<Url, RegistryError> {
+    let url = Url::parse(value).map_err(|_| RegistryError::InvalidInput)?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || !url.username().is_empty()
@@ -99,8 +101,8 @@ pub(crate) fn validate_base_url(value: &str) -> Result<Url, RegistryError> {    
     Ok(url)
 }
 
-
-pub(crate) fn canonical_base_path(value: &str) -> Result<String, RegistryError> {    if value.contains("..") {
+pub(crate) fn canonical_base_path(value: &str) -> Result<String, RegistryError> {
+    if value.contains("..") {
         return Err(RegistryError::InvalidInput);
     }
     let value = value.trim_end_matches('/');
@@ -111,14 +113,14 @@ pub(crate) fn canonical_base_path(value: &str) -> Result<String, RegistryError> 
     })
 }
 
-
-pub(crate) fn normalized_base_url(url: &Url, path: &str) -> String {    let mut value = url.clone();
+pub(crate) fn normalized_base_url(url: &Url, path: &str) -> String {
+    let mut value = url.clone();
     value.set_path(path);
     value.to_string().trim_end_matches('/').to_owned()
 }
 
-
-pub(crate) fn validate_package(value: &str) -> Result<(), RegistryError> {    let valid = if let Some((scope, name)) = value.split_once('/') {
+pub(crate) fn validate_package(value: &str) -> Result<(), RegistryError> {
+    let valid = if let Some((scope, name)) = value.split_once('/') {
         validate_scope(scope).is_ok() && valid_package_part(name)
     } else {
         valid_package_part(value)
@@ -130,8 +132,8 @@ pub(crate) fn validate_package(value: &str) -> Result<(), RegistryError> {    le
     }
 }
 
-
-pub(crate) fn validate_scope(value: &str) -> Result<(), RegistryError> {    if (2..=65).contains(&value.len())
+pub(crate) fn validate_scope(value: &str) -> Result<(), RegistryError> {
+    if (2..=65).contains(&value.len())
         && value.starts_with('@')
         && value == value.to_ascii_lowercase()
         && value[1..].bytes().enumerate().all(|(index, byte)| {
@@ -146,8 +148,8 @@ pub(crate) fn validate_scope(value: &str) -> Result<(), RegistryError> {    if (
     }
 }
 
-
-pub(crate) fn valid_package_part(value: &str) -> bool {    !value.is_empty()
+pub(crate) fn valid_package_part(value: &str) -> bool {
+    !value.is_empty()
         && value.len() <= 128
         && value == value.to_ascii_lowercase()
         && value.bytes().enumerate().all(|(index, byte)| {
@@ -157,8 +159,8 @@ pub(crate) fn valid_package_part(value: &str) -> bool {    !value.is_empty()
         })
 }
 
-
-pub(crate) fn metadata_url(    connection: &RegistryConnectionMetadata,
+pub(crate) fn metadata_url(
+    connection: &RegistryConnectionMetadata,
     package: &str,
 ) -> Result<Url, RegistryError> {
     let encoded = utf8_percent_encode(package, PACKAGE_SEGMENT).to_string();
@@ -170,8 +172,8 @@ pub(crate) fn metadata_url(    connection: &RegistryConnectionMetadata,
     .map_err(|_| RegistryError::InvalidInput)
 }
 
-
-pub(crate) fn same_origin_and_path(connection: &RegistryConnectionMetadata, url: &Url) -> bool {    url.scheme() == "https"
+pub(crate) fn same_origin_and_path(connection: &RegistryConnectionMetadata, url: &Url) -> bool {
+    url.scheme() == "https"
         && url
             .host_str()
             .is_some_and(|host| host.eq_ignore_ascii_case(&connection.canonical_host))
@@ -183,8 +185,8 @@ pub(crate) fn same_origin_and_path(connection: &RegistryConnectionMetadata, url:
                 .starts_with(&format!("{}/", connection.base_path)))
 }
 
-
-pub(crate) async fn resolve_checked(    host: &str,
+pub(crate) async fn resolve_checked(
+    host: &str,
     port: u16,
     allow_test: bool,
 ) -> Result<Vec<SocketAddr>, RegistryError> {
@@ -205,8 +207,8 @@ pub(crate) async fn resolve_checked(    host: &str,
     Ok(addresses)
 }
 
-
-pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
+pub(crate) fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
         IpAddr::V4(ip) => {
             let [a, b, c, d] = ip.octets();
             !(a == 0
@@ -240,7 +242,6 @@ pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
     }
 }
 
-
 pub(crate) fn endpoint_binding(
     metadata: &RegistryConnectionMetadata,
 ) -> Result<CaEndpointBinding, RegistryError> {
@@ -254,8 +255,8 @@ pub(crate) fn endpoint_binding(
     .map_err(map_integration_error)
 }
 
-
-pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, RegistryError> {    CredentialIdentity::new(
+pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, RegistryError> {
+    CredentialIdentity::new(
         INSTANCE_ID,
         INTEGRATION_TYPE,
         id.to_string(),
@@ -264,15 +265,15 @@ pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, Regist
     .map_err(map_integration_error)
 }
 
-
-pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {    match ca {
+pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {
+    match ca {
         Some(ca) => Sha256::digest(ca.pem()).into(),
         None => Sha256::digest(b"nuriteo.registry.system-roots.v1").into(),
     }
 }
 
-
-pub(crate) async fn active_ca_fingerprint(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn active_ca_fingerprint(
+    tx: &mut Transaction<'_, Postgres>,
     binding: &CaEndpointBinding,
 ) -> Result<[u8; 32], RegistryError> {
     let rows:Vec<Vec<u8>> = sqlx::query_scalar("SELECT pem FROM integration_ca_bundles WHERE integration_type=$1 AND integration_id=$2 AND state='active' AND endpoint_fingerprint=$3")
@@ -285,8 +286,8 @@ pub(crate) async fn active_ca_fingerprint(    tx: &mut Transaction<'_, Postgres>
     }
 }
 
-
-pub(crate) async fn load_for_update(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_for_update(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     version: u64,
 ) -> Result<RegistryConnectionMetadata, RegistryError> {
@@ -299,7 +300,8 @@ pub(crate) async fn load_for_update(    tx: &mut Transaction<'_, Postgres>,
     Ok(value)
 }
 
-pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_metadata(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<RegistryConnectionMetadata, RegistryError> {
     let row=sqlx::query("SELECT id::text,display_name,base_url,canonical_host,canonical_port,base_path,status,is_default,config_version,credential_version,validated_at FROM registry_connections WHERE id=$1::uuid")
@@ -307,7 +309,8 @@ pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
     metadata_from_row(&row)
 }
 
-pub(crate) fn metadata_from_row(    row: &sqlx::postgres::PgRow,
+pub(crate) fn metadata_from_row(
+    row: &sqlx::postgres::PgRow,
 ) -> Result<RegistryConnectionMetadata, RegistryError> {
     Ok(RegistryConnectionMetadata {
         id: Uuid::from_str(row.get::<String, _>("id").as_str())
@@ -328,8 +331,8 @@ pub(crate) fn metadata_from_row(    row: &sqlx::postgres::PgRow,
     })
 }
 
-
-pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    tx: &mut Transaction<'_, Postgres>,
     actor: IntegrationAdminActor,
     action: &str,
     id: Uuid,
@@ -342,14 +345,15 @@ pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn valid_text(value: &str, max: usize) -> bool {    !value.is_empty()
+pub(crate) fn valid_text(value: &str, max: usize) -> bool {
+    !value.is_empty()
         && value.len() <= max
         && value.trim() == value
         && !value.chars().any(char::is_control)
 }
 
-pub(crate) fn validate_correlation(value: &str) -> Result<(), RegistryError> {    if (1..=128).contains(&value.len())
+pub(crate) fn validate_correlation(value: &str) -> Result<(), RegistryError> {
+    if (1..=128).contains(&value.len())
         && value
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
@@ -360,7 +364,8 @@ pub(crate) fn validate_correlation(value: &str) -> Result<(), RegistryError> {  
     }
 }
 
-pub(crate) fn map_database_error(error: sqlx::Error) -> RegistryError {    match error.as_database_error().and_then(|e| e.code()).as_deref() {
+pub(crate) fn map_database_error(error: sqlx::Error) -> RegistryError {
+    match error.as_database_error().and_then(|e| e.code()).as_deref() {
         Some("23505") => RegistryError::Conflict,
         Some("23514" | "P0001") => RegistryError::ValidationFailed,
         _ => RegistryError::Unavailable,
@@ -380,7 +385,8 @@ impl RegistryError {
     }
 }
 
-impl fmt::Display for RegistryError { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for RegistryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::AuthenticationFailed => "authentication failed",
             Self::Forbidden => "administrator access is required",

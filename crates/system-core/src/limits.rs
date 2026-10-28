@@ -1,34 +1,71 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
+
+/// Which resource quota a reservation exceeded.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LimitError {
+    /// The filesystem byte quota has no room for the reservation.
     VfsBytesExceeded,
+    /// The process count quota has no room for another process.
     ProcessCountExceeded,
+    /// The buffer byte quota has no room for the reservation.
     BufferBytesExceeded,
+    /// The connection count quota has no room for another connection.
     ConnectionCountExceeded,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl Display for LimitError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::VfsBytesExceeded => "vfs byte limit exceeded",
+            Self::ProcessCountExceeded => "process count limit exceeded",
+            Self::BufferBytesExceeded => "buffer byte limit exceeded",
+            Self::ConnectionCountExceeded => "connection count limit exceeded",
+        })
+    }
+}
+
+impl Error for LimitError {}
+
+/// Maximum counts the resource limiter will admit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceLimitConfig {
+    /// Most filesystem bytes a reservation may reach.
     pub max_vfs_bytes: usize,
+    /// Most processes a reservation may reach.
     pub max_processes: usize,
+    /// Most buffer bytes a reservation may reach.
     pub max_buffer_bytes: usize,
+    /// Most connections a reservation may reach.
     pub max_connections: usize,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+/// Resources currently reserved by the limiter.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ResourceUsage {
+    /// Filesystem bytes reserved so far.
     pub vfs_bytes: usize,
+    /// Process slots reserved so far.
     pub processes: usize,
+    /// Buffer bytes reserved so far.
     pub buffer_bytes: usize,
+    /// Connection slots reserved so far.
     pub connections: usize,
 }
 
-#[derive(Debug, Clone)]
+/// Counter that rejects reservations past a configured maximum.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ResourceLimiter {
     config: ResourceLimitConfig,
     usage: ResourceUsage,
 }
 
 impl ResourceLimiter {
+    /// Creates a limiter with zero usage and the given maxima.
+    #[must_use]
     pub fn new(config: ResourceLimitConfig) -> Self {
         Self {
             config,
@@ -36,10 +73,16 @@ impl ResourceLimiter {
         }
     }
 
+    /// Returns the resources reserved so far.
+    #[must_use]
     pub fn usage(&self) -> ResourceUsage {
         self.usage
     }
 
+    /// Reserves filesystem bytes or reports that the quota is full.
+    ///
+    /// # Errors
+    /// Returns [`LimitError::VfsBytesExceeded`] when `amount` does not fit in the remaining quota.
     pub fn reserve_vfs_bytes(&mut self, amount: usize) -> Result<(), LimitError> {
         self.reserve(
             amount,
@@ -49,10 +92,15 @@ impl ResourceLimiter {
         )
     }
 
+    /// Returns previously reserved filesystem bytes.
     pub fn release_vfs_bytes(&mut self, amount: usize) {
         self.usage.vfs_bytes = self.usage.vfs_bytes.saturating_sub(amount);
     }
 
+    /// Reserves one process slot or reports that the quota is full.
+    ///
+    /// # Errors
+    /// Returns [`LimitError::ProcessCountExceeded`] when no process slot remains.
     pub fn reserve_process(&mut self) -> Result<(), LimitError> {
         self.reserve(
             1,
@@ -62,10 +110,15 @@ impl ResourceLimiter {
         )
     }
 
+    /// Returns one reserved process slot.
     pub fn release_process(&mut self) {
         self.usage.processes = self.usage.processes.saturating_sub(1);
     }
 
+    /// Reserves buffer bytes or reports that the quota is full.
+    ///
+    /// # Errors
+    /// Returns [`LimitError::BufferBytesExceeded`] when `amount` does not fit in the remaining quota.
     pub fn reserve_buffer_bytes(&mut self, amount: usize) -> Result<(), LimitError> {
         self.reserve(
             amount,
@@ -75,10 +128,15 @@ impl ResourceLimiter {
         )
     }
 
+    /// Returns previously reserved buffer bytes.
     pub fn release_buffer_bytes(&mut self, amount: usize) {
         self.usage.buffer_bytes = self.usage.buffer_bytes.saturating_sub(amount);
     }
 
+    /// Reserves one connection slot or reports that the quota is full.
+    ///
+    /// # Errors
+    /// Returns [`LimitError::ConnectionCountExceeded`] when no connection slot remains.
     pub fn reserve_connection(&mut self) -> Result<(), LimitError> {
         self.reserve(
             1,
@@ -88,6 +146,7 @@ impl ResourceLimiter {
         )
     }
 
+    /// Returns one reserved connection slot.
     pub fn release_connection(&mut self) {
         self.usage.connections = self.usage.connections.saturating_sub(1);
     }

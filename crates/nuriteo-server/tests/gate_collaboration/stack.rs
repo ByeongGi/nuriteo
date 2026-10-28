@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::journey::*;
+use super::*;
 
 use std::ffi::OsString;
 
@@ -15,7 +15,6 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread::{self, JoinHandle};
 
 use std::time::{Duration, Instant};
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -40,10 +39,14 @@ use reqwest::{Client, Method, Response, StatusCode};
 
 use serde_json::{Value, json};
 
+use super::{
+    ACCESS_KEY, BOOTSTRAP_PASSWORD, BOOTSTRAP_PASSWORD_FILE_ENV, BUCKET, Browser,
+    CapturedProcessOutput, CapturedStream, ChildGuard, DATABASE_CA_ENV, DATABASE_URL_ENV,
+    GATE_PROJECT_RUNTIME_BROWSER_ENV, INVITEE_PASSWORD, MAX_PROCESS_OUTPUT_BYTES,
+    NODE_EXECUTABLE_ENV, S3_CA_ENV, S3_ENDPOINT_ENV, SAVE_IDEMPOTENCY_SECRET_FILE_ENV, SECRET_KEY,
+    StorageEnvironment,
+};
 use url::Url;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BOOTSTRAP_PASSWORD_FILE_ENV, SAVE_IDEMPOTENCY_SECRET_FILE_ENV, GATE_PROJECT_RUNTIME_BROWSER_ENV, NODE_EXECUTABLE_ENV, BOOTSTRAP_PASSWORD, INVITEE_PASSWORD, ACCESS_KEY, SECRET_KEY, BUCKET, MAX_PROCESS_OUTPUT_BYTES, Browser, CapturedProcessOutput, CapturedStream, ChildGuard, StorageEnvironment};
-
-
 
 impl super::ChildGuard {
     pub(crate) fn new(mut child: Child, forbidden: &[&str]) -> Self {
@@ -88,8 +91,8 @@ impl super::ChildGuard {
     }
 }
 
-
-impl Drop for ChildGuard { fn drop(&mut self) {
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
         if !self.reaped {
             let _ = self.child.kill();
             let _ = self.child.wait();
@@ -99,8 +102,8 @@ impl Drop for ChildGuard { fn drop(&mut self) {
     }
 }
 
-
-pub(crate) fn spawn_output_reader(    mut stream: impl Read + Send + 'static,
+pub(crate) fn spawn_output_reader(
+    mut stream: impl Read + Send + 'static,
     forbidden: Vec<Vec<u8>>,
 ) -> JoinHandle<std::io::Result<CapturedStream>> {
     thread::spawn(move || {
@@ -136,21 +139,21 @@ pub(crate) fn spawn_output_reader(    mut stream: impl Read + Send + 'static,
     })
 }
 
-
-pub(crate) fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {    !needle.is_empty()
+pub(crate) fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    !needle.is_empty()
         && haystack
             .windows(needle.len())
             .any(|window| window == needle)
 }
 
-
-pub(crate) fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<CapturedStream>>>) {    if let Some(reader) = reader {
+pub(crate) fn drain_output_reader(reader: Option<JoinHandle<std::io::Result<CapturedStream>>>) {
+    if let Some(reader) = reader {
         let _ = reader.join();
     }
 }
 
-
-pub(crate) fn read_output(    status: ExitStatus,
+pub(crate) fn read_output(
+    status: ExitStatus,
     stdout: JoinHandle<std::io::Result<CapturedStream>>,
     stderr: JoinHandle<std::io::Result<CapturedStream>>,
 ) -> CapturedProcessOutput {
@@ -164,9 +167,9 @@ pub(crate) fn read_output(    status: ExitStatus,
     }
 }
 
-
 #[test]
-pub(crate) fn process_output_scanner_reads_beyond_diagnostic_cap_and_across_chunks() {    let secret = b"nrt_inv_split-across-the-reader-boundary".to_vec();
+pub(crate) fn process_output_scanner_reads_beyond_diagnostic_cap_and_across_chunks() {
+    let secret = b"nrt_inv_split-across-the-reader-boundary".to_vec();
     let mut bytes = vec![b'x'; MAX_PROCESS_OUTPUT_BYTES + 8_175];
     bytes.extend_from_slice(&secret);
     let captured = spawn_output_reader(std::io::Cursor::new(bytes), vec![secret])
@@ -178,8 +181,8 @@ pub(crate) fn process_output_scanner_reads_beyond_diagnostic_cap_and_across_chun
     assert!(captured.secret_detected);
 }
 
-
-pub(crate) async fn wait_for_live(child: &mut ChildGuard, client: &Client, base: &str) {    let deadline = Instant::now() + Duration::from_secs(10);
+pub(crate) async fn wait_for_live(child: &mut ChildGuard, client: &Client, base: &str) {
+    let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         assert!(
             child.child.try_wait().unwrap().is_none(),
@@ -195,13 +198,13 @@ pub(crate) async fn wait_for_live(child: &mut ChildGuard, client: &Client, base:
     }
 }
 
-
-pub(crate) fn available_address() -> SocketAddr {    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+pub(crate) fn available_address() -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.local_addr().unwrap()
 }
 
-
-pub(crate) async fn database_pool(database_url: &str, ca_path: &str) -> DatabasePool {    let tls = DatabaseTlsConfig::verify_full(None, Some(fs::read(ca_path).unwrap()), None).unwrap();
+pub(crate) async fn database_pool(database_url: &str, ca_path: &str) -> DatabasePool {
+    let tls = DatabaseTlsConfig::verify_full(None, Some(fs::read(ca_path).unwrap()), None).unwrap();
     DatabasePool::connect(
         DatabasePoolConfig::new(
             database_url.to_owned(),
@@ -217,30 +220,30 @@ pub(crate) async fn database_pool(database_url: &str, ca_path: &str) -> Database
     .unwrap()
 }
 
-
-pub(crate) async fn reset_schema(pool: &DatabasePool) {    sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+pub(crate) async fn reset_schema(pool: &DatabasePool) {
+    sqlx::raw_sql("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
 }
 
-
-pub(crate) async fn active_administrator_count(pool: &DatabasePool) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_instance_admin AND status = 'active'")
+pub(crate) async fn active_administrator_count(pool: &DatabasePool) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE is_instance_admin AND status = 'active'")
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn activation_status(pool: &DatabasePool, id: &str) -> String {    sqlx::query_scalar("SELECT status FROM activation_invitations WHERE id = $1::uuid")
+pub(crate) async fn activation_status(pool: &DatabasePool, id: &str) -> String {
+    sqlx::query_scalar("SELECT status FROM activation_invitations WHERE id = $1::uuid")
         .bind(id)
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn expire_activation(pool: &DatabasePool, id: &str) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn expire_activation(pool: &DatabasePool, id: &str) {
+    let mut connection = pool.acquire().await.unwrap();
     sqlx::query(
         "ALTER TABLE activation_invitations DISABLE TRIGGER activation_invitations_forward_only_update",
     )
@@ -263,8 +266,8 @@ pub(crate) async fn expire_activation(pool: &DatabasePool, id: &str) {    let mu
     .unwrap();
 }
 
-
-pub(crate) async fn assert_required_audits(pool: &DatabasePool) {    for action in [
+pub(crate) async fn assert_required_audits(pool: &DatabasePool) {
+    for action in [
         "instance_admin.bootstrap_created",
         "auth.login_succeeded",
         "invitation.issue",
@@ -285,8 +288,8 @@ pub(crate) async fn assert_required_audits(pool: &DatabasePool) {    for action 
     }
 }
 
-
-pub(crate) async fn assert_durable_state_is_secret_free(pool: &DatabasePool, secrets: &[&str]) {    let durable: String = sqlx::query_scalar(
+pub(crate) async fn assert_durable_state_is_secret_free(pool: &DatabasePool, secrets: &[&str]) {
+    let durable: String = sqlx::query_scalar(
         "SELECT COALESCE((SELECT string_agg(row_to_json(a)::text, '') FROM audit_events a), '') || \
          COALESCE((SELECT string_agg(row_to_json(i)::text, '') FROM activation_invitations i), '') || \
          COALESCE((SELECT string_agg(row_to_json(i)::text, '') FROM organization_invitations i), '')",
@@ -302,8 +305,8 @@ pub(crate) async fn assert_durable_state_is_secret_free(pool: &DatabasePool, sec
     }
 }
 
-
-pub(crate) fn assert_process_output_secret_free(output: &Output, secrets: &[&str]) {    for stream in [&output.stdout, &output.stderr] {
+pub(crate) fn assert_process_output_secret_free(output: &Output, secrets: &[&str]) {
+    for stream in [&output.stdout, &output.stderr] {
         let stream = String::from_utf8_lossy(stream);
         for secret in secrets {
             assert!(
@@ -314,14 +317,14 @@ pub(crate) fn assert_process_output_secret_free(output: &Output, secrets: &[&str
     }
 }
 
-
-impl Environment for StorageEnvironment { fn entries(&self) -> Vec<(OsString, OsString)> {
+impl Environment for StorageEnvironment {
+    fn entries(&self) -> Vec<(OsString, OsString)> {
         self.0.clone()
     }
 }
 
-
-pub(crate) async fn object_store(endpoint: &str, ca_path: &str) -> S3ObjectStore {    let entries = [
+pub(crate) async fn object_store(endpoint: &str, ca_path: &str) -> S3ObjectStore {
+    let entries = [
         ("NURITEO_S3_ENDPOINT", endpoint),
         ("NURITEO_S3_REGION", "us-east-1"),
         ("NURITEO_S3_BUCKET", BUCKET),
@@ -341,8 +344,8 @@ pub(crate) async fn object_store(endpoint: &str, ca_path: &str) -> S3ObjectStore
         .unwrap()
 }
 
-
-pub(crate) fn fixture_s3_client(endpoint: &str, ca_pem: &[u8]) -> aws_sdk_s3::Client {    let mut trust_store = TrustStore::default();
+pub(crate) fn fixture_s3_client(endpoint: &str, ca_pem: &[u8]) -> aws_sdk_s3::Client {
+    let mut trust_store = TrustStore::default();
     trust_store.add_pem_certificate(ca_pem.to_vec());
     let context = TlsContext::builder()
         .with_trust_store(trust_store)
@@ -367,16 +370,16 @@ pub(crate) fn fixture_s3_client(endpoint: &str, ca_pem: &[u8]) -> aws_sdk_s3::Cl
     aws_sdk_s3::Client::from_conf(config)
 }
 
-
-pub(crate) async fn create_bucket(client: &aws_sdk_s3::Client) {    client.create_bucket().bucket(BUCKET).send().await.unwrap();
+pub(crate) async fn create_bucket(client: &aws_sdk_s3::Client) {
+    client.create_bucket().bucket(BUCKET).send().await.unwrap();
 }
 
-
-pub(crate) fn required_env(name: &str) -> String {    env::var(name).unwrap_or_else(|_| panic!("{name} must be set by the GATE-002 fixture"))
+pub(crate) fn required_env(name: &str) -> String {
+    env::var(name).unwrap_or_else(|_| panic!("{name} must be set by the GATE-002 fixture"))
 }
 
-
-pub(crate) fn assert_current_embedded_migrations(report: MigrationReport) {    let expected_latest = i64::try_from(report.known_migrations)
+pub(crate) fn assert_current_embedded_migrations(report: MigrationReport) {
+    let expected_latest = i64::try_from(report.known_migrations)
         .expect("embedded migration count must fit in a PostgreSQL migration version");
     assert!(
         expected_latest > 0,
@@ -388,4 +391,3 @@ pub(crate) fn assert_current_embedded_migrations(report: MigrationReport) {    l
         "the gate requires the complete, contiguous embedded migration set"
     );
 }
-

@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::exchange::*;
+use super::*;
 
 use std::fmt;
 
@@ -9,7 +9,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
 use std::time::{Duration, Instant};
-
 
 use base64::Engine;
 
@@ -41,15 +40,22 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
+use super::super::{
+    OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider,
+};
 
-use super::super::{OidcProviderError, OidcProviderMetadata, OidcProviderService, OidcRuntimeProvider};
-
+use super::{
+    Audience, AuthorizationRuntime, CLOCK_SKEW_SECONDS, CacheEntry, CacheKey, DEFAULT_CACHE_TTL,
+    DISCOVERY_LIMIT, DiscoveryDocument, IdTokenClaims, JWKS_LIMIT, JWT_LIMIT, JwkShape,
+    JwksDocument, JwtHeader, MAX_CACHE_ENTRIES, MAX_CACHE_TTL, MAX_DNS_ADDRESSES, MAX_DNS_TIMEOUT,
+    MAX_JWKS_KEYS, MAX_TIMEOUT, MAX_TOKEN_AGE_SECONDS, MIN_TIMEOUT, OidcEndpointValidator,
+    OidcValidationProof, RUNTIME_ACCESS, RuntimeAccess, TOKEN_RESPONSE_LIMIT, TokenResponse,
+    ValidationMaterial, VerificationJwk, VerificationJwks, VerifiedIdToken, ZeroizingRequestBody,
+};
 use crate::integration::{CaEndpointBinding, IntegrationAdminActor, ValidatedCaBundle};
-use super::{DISCOVERY_LIMIT, JWKS_LIMIT, MAX_JWKS_KEYS, MAX_CACHE_ENTRIES, DEFAULT_CACHE_TTL, MAX_CACHE_TTL, MIN_TIMEOUT, MAX_TIMEOUT, MAX_DNS_TIMEOUT, MAX_DNS_ADDRESSES, TOKEN_RESPONSE_LIMIT, JWT_LIMIT, MAX_TOKEN_AGE_SECONDS, CLOCK_SKEW_SECONDS, RuntimeAccess, RUNTIME_ACCESS, ZeroizingRequestBody, AuthorizationRuntime, VerifiedIdToken, OidcEndpointValidator, OidcValidationProof, DiscoveryDocument, JwksDocument, JwkShape, TokenResponse, VerificationJwks, VerificationJwk, JwtHeader, IdTokenClaims, Audience, CacheKey, CacheEntry, ValidationMaterial};
 
-
-
-pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
+pub(crate) fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
         IpAddr::V4(ip) => {
             let [a, b, c, d] = ip.octets();
             !(a == 0
@@ -93,7 +99,6 @@ pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
     }
 }
 
-
 pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {
     match ca {
         Some(bundle) => Sha256::digest(bundle.pem()).into(),
@@ -101,8 +106,8 @@ pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {
     }
 }
 
-
-pub(crate) fn cache_ttl(value: Option<&str>) -> Duration {    let Some(value) = value else {
+pub(crate) fn cache_ttl(value: Option<&str>) -> Duration {
+    let Some(value) = value else {
         return DEFAULT_CACHE_TTL;
     };
     for directive in value.split(',').map(str::trim) {
@@ -119,8 +124,8 @@ pub(crate) fn cache_ttl(value: Option<&str>) -> Duration {    let Some(value) = 
     DEFAULT_CACHE_TTL
 }
 
-
-pub(crate) fn validation_fingerprint(    provider_id: Uuid,
+pub(crate) fn validation_fingerprint(
+    provider_id: Uuid,
     candidate: &OidcProviderMetadata,
     material: &ValidationMaterial,
 ) -> [u8; 32] {
@@ -148,15 +153,15 @@ pub(crate) fn validation_fingerprint(    provider_id: Uuid,
     Sha256::digest(canonical).into()
 }
 
-
-pub(crate) fn bounded_protocol_value(value: &str, max: usize) -> bool {    !value.is_empty()
+pub(crate) fn bounded_protocol_value(value: &str, max: usize) -> bool {
+    !value.is_empty()
         && value.len() <= max
         && value.trim() == value
         && !value.chars().any(char::is_control)
 }
 
-
-pub(crate) async fn bounded_json_response(    mut response: reqwest::Response,
+pub(crate) async fn bounded_json_response(
+    mut response: reqwest::Response,
     limit: usize,
 ) -> Result<Vec<u8>, OidcProviderError> {
     if response.status() != StatusCode::OK
@@ -189,8 +194,8 @@ pub(crate) async fn bounded_json_response(    mut response: reqwest::Response,
     Ok(body)
 }
 
-
-pub(crate) fn verify_id_token(    compact: &str,
+pub(crate) fn verify_id_token(
+    compact: &str,
     jwks: &VerificationJwks,
     expected_issuer: &str,
     expected_client_id: &str,
@@ -309,8 +314,8 @@ pub(crate) fn verify_id_token(    compact: &str,
     })
 }
 
-
-pub(crate) fn valid_verified_email(value: &str) -> bool {    value == value.trim()
+pub(crate) fn valid_verified_email(value: &str) -> bool {
+    value == value.trim()
         && (3..=320).contains(&value.len())
         && value.contains('@')
         && !value.chars().any(char::is_control)

@@ -1,15 +1,14 @@
 #![allow(unused_imports)]
-use super::*;
-use super::secrets::*;
 use super::enrollment::*;
+use super::secrets::*;
 use super::sessions::*;
+use super::*;
 
 use std::future::Future;
 
 use std::sync::Arc;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -31,7 +30,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -42,17 +40,25 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::super::{
     DEFAULT_TIMEOUT, ENVELOPE_ALGORITHM, ENVELOPE_DOMAIN, MfaCredentialMetadata,
     MfaCredentialState, MfaRepository, MfaStorageError, RecoveryCode, TotpSecret, append_audit,
     insert_recovery_hashes, lock_local_user, validate_correlation, verify_recovery_code,
 };
-use super::{TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW, DEFAULT_FAILURE_THRESHOLD, DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, MIN_FAILURE_THRESHOLD, MAX_FAILURE_THRESHOLD, MIN_FAILURE_DURATION, MAX_FAILURE_DURATION, RECOVERY_CODE_COUNT, RECOVERY_CODE_BYTES, RECOVERY_CODE_ENCODED_BYTES, ARGON2_CONCURRENCY, RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, MAX_RECEIPTS_PER_USER, MfaIdempotencyKey, SecretBytes, SecretToken, EnrollmentStartReceipt, SessionReceipt, EnrollmentCompleteReceipt, TotpCode, MfaChallengePolicy, EnrollmentStart, EnrollmentComplete, MfaService, ReceiptBindingAuthority, ChallengeState, ChallengeAttempt, MfaPasswordExecutor, MfaPasswordAdmission, MfaServiceError};
+use super::{
+    ARGON2_CONCURRENCY, ChallengeAttempt, ChallengeState, DEFAULT_FAILURE_THRESHOLD,
+    DEFAULT_FAILURE_WINDOW, DEFAULT_LOCK_DURATION, EnrollmentComplete, EnrollmentCompleteReceipt,
+    EnrollmentStart, EnrollmentStartReceipt, MAX_FAILURE_DURATION, MAX_FAILURE_THRESHOLD,
+    MAX_RECEIPTS_PER_USER, MIN_FAILURE_DURATION, MIN_FAILURE_THRESHOLD, MfaChallengePolicy,
+    MfaIdempotencyKey, MfaPasswordAdmission, MfaPasswordExecutor, MfaService, MfaServiceError,
+    RECEIPT_DOMAIN, RECEIPT_REQUEST_DOMAIN, RECEIPT_TTL_MINUTES, RECOVERY_CODE_BYTES,
+    RECOVERY_CODE_COUNT, RECOVERY_CODE_ENCODED_BYTES, ReceiptBindingAuthority, SecretBytes,
+    SecretToken, SessionReceipt, TOTP_DIGITS, TOTP_MODULUS, TOTP_STEP_SECONDS, TOTP_WINDOW,
+    TotpCode,
+};
 
-
-
-impl super::MfaService { pub(crate) async fn load_receipt<T: DeserializeOwned>(
+impl super::MfaService {
+    pub(crate) async fn load_receipt<T: DeserializeOwned>(
         &self,
         token: &SessionToken,
         operation: &'static str,
@@ -313,7 +319,6 @@ impl super::MfaService { pub(crate) async fn load_receipt<T: DeserializeOwned>(
     }
 }
 
-
 impl EnrollmentStartReceipt {
     pub(crate) fn into_result(self) -> Result<EnrollmentStart, MfaServiceError> {
         Ok(EnrollmentStart {
@@ -330,7 +335,6 @@ impl EnrollmentStartReceipt {
     }
 }
 
-
 impl SessionReceipt {
     pub(crate) fn from_result(issued: &IssuedSession) -> Self {
         Self {
@@ -345,7 +349,6 @@ impl SessionReceipt {
         Ok(IssuedSession::from_parts(token, session))
     }
 }
-
 
 impl EnrollmentCompleteReceipt {
     pub(crate) fn from_result(issued: &IssuedSession, recovery_codes: &[RecoveryCode]) -> Self {
@@ -370,8 +373,8 @@ impl EnrollmentCompleteReceipt {
     }
 }
 
-
-pub(crate) fn receipt_binding_authority(    presented: &[u8; 32],
+pub(crate) fn receipt_binding_authority(
+    presented: &[u8; 32],
     original: &[u8; 32],
     rotated: Option<&[u8; 32]>,
 ) -> Result<ReceiptBindingAuthority, MfaServiceError> {
@@ -384,8 +387,8 @@ pub(crate) fn receipt_binding_authority(    presented: &[u8; 32],
     }
 }
 
-
-pub(crate) fn receipt_context<'a>(    binding: &'a [u8; 32],
+pub(crate) fn receipt_context<'a>(
+    binding: &'a [u8; 32],
     rotated_binding: Option<&'a [u8; 32]>,
     operation: &'a str,
     key: &'a MfaIdempotencyKey,
@@ -414,7 +417,6 @@ pub(crate) fn receipt_context<'a>(    binding: &'a [u8; 32],
     context.extend_from_slice(request_parts);
     context
 }
-
 
 impl MfaPasswordExecutor {
     pub(crate) fn new(concurrency: usize) -> Self {
@@ -490,8 +492,8 @@ impl MfaPasswordExecutor {
     }
 }
 
-
-pub(crate) async fn load_credential(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_credential(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     credential_id: Uuid,
     state: &str,
@@ -510,8 +512,8 @@ pub(crate) async fn load_credential(    tx: &mut Transaction<'_, Postgres>,
     .ok_or(MfaServiceError::Conflict)
 }
 
-
-pub(crate) async fn load_active_credential(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_active_credential(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
 ) -> Result<sqlx::postgres::PgRow, MfaServiceError> {
     sqlx::query(
@@ -525,8 +527,8 @@ pub(crate) async fn load_active_credential(    tx: &mut Transaction<'_, Postgres
     .ok_or(MfaServiceError::NotActive)
 }
 
-
-pub(crate) async fn assert_pending_generation(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn assert_pending_generation(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     credential_id: Uuid,
     secret_version: u64,
@@ -551,12 +553,12 @@ pub(crate) async fn assert_pending_generation(    tx: &mut Transaction<'_, Postg
     }
 }
 
-
-pub(crate) fn parse_credential_id(row: &sqlx::postgres::PgRow) -> Result<Uuid, MfaServiceError> {    Uuid::parse_str(&row.get::<String, _>("id")).map_err(|_| MfaServiceError::Unavailable)
+pub(crate) fn parse_credential_id(row: &sqlx::postgres::PgRow) -> Result<Uuid, MfaServiceError> {
+    Uuid::parse_str(&row.get::<String, _>("id")).map_err(|_| MfaServiceError::Unavailable)
 }
 
-
-pub(crate) async fn lock_challenge_state(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_challenge_state(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     credential_id: Uuid,
 ) -> Result<(), MfaServiceError> {
@@ -579,8 +581,8 @@ pub(crate) async fn lock_challenge_state(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn load_challenge_state(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_challenge_state(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
 ) -> Result<ChallengeState, MfaServiceError> {
     let row = sqlx::query(
@@ -600,8 +602,8 @@ pub(crate) async fn load_challenge_state(    tx: &mut Transaction<'_, Postgres>,
     })
 }
 
-
-pub(crate) async fn challenge_is_locked(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn challenge_is_locked(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
 ) -> Result<bool, MfaServiceError> {
     sqlx::query_scalar(
@@ -614,8 +616,8 @@ pub(crate) async fn challenge_is_locked(    tx: &mut Transaction<'_, Postgres>,
     .map_err(database_unavailable)
 }
 
-
-pub(crate) async fn record_challenge_failure(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn record_challenge_failure(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
     policy: MfaChallengePolicy,
     now: OffsetDateTime,
@@ -658,8 +660,8 @@ pub(crate) async fn record_challenge_failure(    tx: &mut Transaction<'_, Postgr
     Ok(())
 }
 
-
-pub(crate) async fn mark_challenge_success(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn mark_challenge_success(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
     counter: u64,
 ) -> Result<(), MfaServiceError> {
@@ -682,8 +684,8 @@ pub(crate) async fn mark_challenge_success(    tx: &mut Transaction<'_, Postgres
     }
 }
 
-
-pub(crate) async fn assert_challenge_counter_available(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn assert_challenge_counter_available(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
     counter: u64,
 ) -> Result<(), MfaServiceError> {
@@ -699,8 +701,8 @@ pub(crate) async fn assert_challenge_counter_available(    tx: &mut Transaction<
     Ok(())
 }
 
-
-pub(crate) async fn clear_challenge_failures(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn clear_challenge_failures(
+    tx: &mut Transaction<'_, Postgres>,
     credential_id: Uuid,
 ) -> Result<(), MfaServiceError> {
     sqlx::query(
@@ -714,8 +716,8 @@ pub(crate) async fn clear_challenge_failures(    tx: &mut Transaction<'_, Postgr
     Ok(())
 }
 
-
-pub(crate) fn matching_counter(    secret: &TotpSecret,
+pub(crate) fn matching_counter(
+    secret: &TotpSecret,
     code: &TotpCode,
     now: OffsetDateTime,
 ) -> Result<Option<u64>, MfaServiceError> {
@@ -738,8 +740,8 @@ pub(crate) fn matching_counter(    secret: &TotpSecret,
     Ok(matched)
 }
 
-
-pub(crate) fn hotp(secret: &[u8], counter: u64) -> Result<[u8; 6], MfaServiceError> {    let mut mac = <Hmac<Sha1> as KeyInit>::new_from_slice(secret)
+pub(crate) fn hotp(secret: &[u8], counter: u64) -> Result<[u8; 6], MfaServiceError> {
+    let mut mac = <Hmac<Sha1> as KeyInit>::new_from_slice(secret)
         .map_err(|_| MfaServiceError::Unavailable)?;
     mac.update(&counter.to_be_bytes());
     let digest = mac.finalize().into_bytes();
@@ -755,8 +757,9 @@ pub(crate) fn hotp(secret: &[u8], counter: u64) -> Result<[u8; 6], MfaServiceErr
         .map_err(|_| MfaServiceError::Unavailable)
 }
 
-
-pub(crate) fn generate_recovery_codes() -> Result<(Vec<RecoveryCode>, Vec<RecoveryCode>), MfaServiceError> {    let mut returned = Vec::with_capacity(RECOVERY_CODE_COUNT);
+pub(crate) fn generate_recovery_codes()
+-> Result<(Vec<RecoveryCode>, Vec<RecoveryCode>), MfaServiceError> {
+    let mut returned = Vec::with_capacity(RECOVERY_CODE_COUNT);
     let mut hashing = Vec::with_capacity(RECOVERY_CODE_COUNT);
     for _ in 0..RECOVERY_CODE_COUNT {
         let mut bytes = Zeroizing::new([0_u8; RECOVERY_CODE_BYTES]);
@@ -775,8 +778,8 @@ pub(crate) fn generate_recovery_codes() -> Result<(Vec<RecoveryCode>, Vec<Recove
     Ok((returned, hashing))
 }
 
-
-pub(crate) async fn require_recent_reauthentication(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_recent_reauthentication(
+    tx: &mut Transaction<'_, Postgres>,
     session: &Session,
 ) -> Result<(), MfaServiceError> {
     let fields = session.clone().into_fields();
@@ -804,8 +807,8 @@ pub(crate) async fn require_recent_reauthentication(    tx: &mut Transaction<'_,
     Ok(())
 }
 
-
-pub(crate) async fn transaction_time(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_time(
+    tx: &mut Transaction<'_, Postgres>,
 ) -> Result<OffsetDateTime, MfaServiceError> {
     sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **tx)

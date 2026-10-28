@@ -1,8 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::publication_requests::*;
+use super::*;
 use std::str::FromStr;
-
 
 use axum::{
     Json,
@@ -29,14 +28,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::{
     http::{FieldViolation, HttpError, RequestId},
     identity::{BrowserMethod, BrowserRequestHeaders, UserId},
     organization::OrganizationId,
     project::{ProjectId, ProjectOwner},
 };
-
 
 use super::super::{
     PublicPublishedExampleListView, PublicPublishedExampleView, PublishedExampleCreateView,
@@ -45,9 +42,15 @@ use super::super::{
     PublishedExamplePublicId, PublishedExampleVersionMutationView, PublishedExampleView,
     PublishedExampleVisibility,
 };
-use super::{COLLECTION, ITEM, VERSIONS, ACTIVE_VERSION, UNPUBLISH, REPUBLISH, PUBLIC_COLLECTION, PUBLIC_ITEM, PUBLIC_VERSION, PUBLIC_CONTENT, PUBLIC_VERSION_CONTENT, PUBLIC_FORKS, PUBLIC_VERSION_FORKS, MAX_BODY, DEFAULT_PUBLIC_LIMIT, ORIGIN, CSRF, IDEMPOTENCY_KEY, PREVIEW_ABUSE_KEY, PREVIEW_ABUSE_PROOF, CreateRequest, AddVersionRequest, SelectVersionRequest, VisibilityRequest, DeleteRequest, DestinationOwnerRequest, ForkRequest, PublicListQuery, ManagementPath, ManagementItemPath, PublishedExampleBundleBinary, BrowserHeaders};
-
-
+use super::{
+    ACTIVE_VERSION, AddVersionRequest, BrowserHeaders, COLLECTION, CSRF, CreateRequest,
+    DEFAULT_PUBLIC_LIMIT, DeleteRequest, DestinationOwnerRequest, ForkRequest, IDEMPOTENCY_KEY,
+    ITEM, MAX_BODY, ManagementItemPath, ManagementPath, ORIGIN, PREVIEW_ABUSE_KEY,
+    PREVIEW_ABUSE_PROOF, PUBLIC_COLLECTION, PUBLIC_CONTENT, PUBLIC_FORKS, PUBLIC_ITEM,
+    PUBLIC_VERSION, PUBLIC_VERSION_CONTENT, PUBLIC_VERSION_FORKS, PublicListQuery,
+    PublishedExampleBundleBinary, REPUBLISH, SelectVersionRequest, UNPUBLISH, VERSIONS,
+    VisibilityRequest,
+};
 
 pub(crate) fn openapi_router(
     document: utoipa::openapi::OpenApi,
@@ -69,7 +72,6 @@ pub(crate) fn openapi_router(
         .layer(DefaultBodyLimit::max(MAX_BODY))
 }
 
-
 #[utoipa::path(
     post, path = COLLECTION, tag = "published-examples",
     security(("projectSessionCookie" = [])),
@@ -86,7 +88,8 @@ pub(crate) fn openapi_router(
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn create(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn create(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id)): Path<ManagementPath>,
     request: Request,
@@ -125,7 +128,6 @@ pub(crate) async fn create(    State(service): State<PublishedExampleHttpService
     Ok(response)
 }
 
-
 #[utoipa::path(
     patch, path = ITEM, tag = "published-examples",
     security(("projectSessionCookie" = [])),
@@ -144,7 +146,8 @@ pub(crate) async fn create(    State(service): State<PublishedExampleHttpService
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn set_visibility(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn set_visibility(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<ManagementItemPath>,
     request: Request,
@@ -168,7 +171,6 @@ pub(crate) async fn set_visibility(    State(service): State<PublishedExampleHtt
     example_response(view, request_id, ITEM)
 }
 
-
 #[utoipa::path(
     post, path = VERSIONS, tag = "published-examples",
     security(("projectSessionCookie" = [])),
@@ -187,7 +189,8 @@ pub(crate) async fn set_visibility(    State(service): State<PublishedExampleHtt
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn add_version(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn add_version(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<ManagementItemPath>,
     request: Request,
@@ -219,7 +222,6 @@ pub(crate) async fn add_version(    State(service): State<PublishedExampleHttpSe
     Ok(response)
 }
 
-
 #[utoipa::path(
     post, path = ACTIVE_VERSION, tag = "published-examples",
     security(("projectSessionCookie" = [])),
@@ -238,7 +240,8 @@ pub(crate) async fn add_version(    State(service): State<PublishedExampleHttpSe
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn select_active_version(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn select_active_version(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<ManagementItemPath>,
     request: Request,
@@ -263,7 +266,6 @@ pub(crate) async fn select_active_version(    State(service): State<PublishedExa
     example_response(view, request_id, ACTIVE_VERSION)
 }
 
-
 #[utoipa::path(
     delete, path = ITEM, tag = "published-examples",
     security(("projectSessionCookie" = [])),
@@ -282,7 +284,8 @@ pub(crate) async fn select_active_version(    State(service): State<PublishedExa
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn delete(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn delete(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(path): Path<ManagementItemPath>,
     request: Request,
@@ -307,7 +310,6 @@ pub(crate) async fn delete(    State(service): State<PublishedExampleHttpService
     Ok(private_no_store(StatusCode::NO_CONTENT.into_response()))
 }
 
-
 #[utoipa::path(
     get, path = PUBLIC_COLLECTION, tag = "published-examples",
     params(("limit" = Option<u16>, Query, minimum = 1, maximum = 100)),
@@ -317,7 +319,8 @@ pub(crate) async fn delete(    State(service): State<PublishedExampleHttpService
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn list_public(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn list_public(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Query(query): Query<PublicListQuery>,
 ) -> Result<Response, HttpError> {
@@ -327,7 +330,6 @@ pub(crate) async fn list_public(    State(service): State<PublishedExampleHttpSe
         .map_err(|error| map_error(error, request_id, PUBLIC_COLLECTION))?;
     Ok(public_cache(Json(view).into_response()))
 }
-
 
 #[utoipa::path(
     get, path = PUBLIC_ITEM, tag = "published-examples",
@@ -339,13 +341,13 @@ pub(crate) async fn list_public(    State(service): State<PublishedExampleHttpSe
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn get_public(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn get_public(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(raw_public_id): Path<String>,
 ) -> Result<Response, HttpError> {
     public_response(service, raw_public_id, None, request_id, PUBLIC_ITEM).await
 }
-
 
 #[utoipa::path(
     get, path = PUBLIC_VERSION, tag = "published-examples",
@@ -357,7 +359,8 @@ pub(crate) async fn get_public(    State(service): State<PublishedExampleHttpSer
         (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn get_public_version(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn get_public_version(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((raw_public_id, version_number)): Path<(String, i64)>,
     headers: HeaderMap,
@@ -395,8 +398,8 @@ pub(crate) async fn get_public_version(    State(service): State<PublishedExampl
     Ok(public_cache(Json(view).into_response()))
 }
 
-
-impl utoipa::PartialSchema for PublishedExampleBundleBinary { fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+impl utoipa::PartialSchema for PublishedExampleBundleBinary {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
         use utoipa::openapi::schema::{KnownFormat, ObjectBuilder, Schema, SchemaFormat, Type};
 
         utoipa::openapi::RefOr::T(Schema::Object(
@@ -408,9 +411,7 @@ impl utoipa::PartialSchema for PublishedExampleBundleBinary { fn schema() -> uto
     }
 }
 
-
 impl ToSchema for PublishedExampleBundleBinary {}
-
 
 #[utoipa::path(
     get, path = PUBLIC_CONTENT, tag = "published-examples",
@@ -425,7 +426,8 @@ impl ToSchema for PublishedExampleBundleBinary {}
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn download_public_content(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn download_public_content(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(raw_public_id): Path<String>,
     request: Request,
@@ -441,7 +443,6 @@ pub(crate) async fn download_public_content(    State(service): State<PublishedE
     .await
 }
 
-
 #[utoipa::path(
     get, path = PUBLIC_VERSION_CONTENT, tag = "published-examples",
     params(("public_id" = String, Path), ("version_number" = i64, Path, minimum = 1)),
@@ -455,7 +456,8 @@ pub(crate) async fn download_public_content(    State(service): State<PublishedE
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn download_public_version_content(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn download_public_version_content(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((raw_public_id, version_number)): Path<(String, i64)>,
     request: Request,
@@ -470,7 +472,6 @@ pub(crate) async fn download_public_version_content(    State(service): State<Pu
     )
     .await
 }
-
 
 #[utoipa::path(
     post, path = PUBLIC_FORKS, tag = "published-examples",
@@ -496,7 +497,8 @@ pub(crate) async fn download_public_version_content(    State(service): State<Pu
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn fork_public(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn fork_public(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path(raw_public_id): Path<String>,
     request: Request,
@@ -511,7 +513,6 @@ pub(crate) async fn fork_public(    State(service): State<PublishedExampleHttpSe
     )
     .await
 }
-
 
 #[utoipa::path(
     post, path = PUBLIC_VERSION_FORKS, tag = "published-examples",
@@ -538,7 +539,8 @@ pub(crate) async fn fork_public(    State(service): State<PublishedExampleHttpSe
         (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")
     )
 )]
-pub(crate) async fn fork_public_version(    State(service): State<PublishedExampleHttpService>,
+pub(crate) async fn fork_public_version(
+    State(service): State<PublishedExampleHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((raw_public_id, version_number)): Path<(String, i64)>,
     request: Request,
@@ -554,8 +556,8 @@ pub(crate) async fn fork_public_version(    State(service): State<PublishedExamp
     .await
 }
 
-
-pub(crate) async fn fork_response(    service: PublishedExampleHttpService,
+pub(crate) async fn fork_response(
+    service: PublishedExampleHttpService,
     raw_public_id: String,
     version_number: Option<i64>,
     request_id: RequestId,
@@ -595,8 +597,8 @@ pub(crate) async fn fork_response(    service: PublishedExampleHttpService,
     fork_created_response(view, request_id, path)
 }
 
-
-pub(crate) fn fork_created_response(    view: PublishedExampleForkView,
+pub(crate) fn fork_created_response(
+    view: PublishedExampleForkView,
     request_id: RequestId,
     path: &str,
 ) -> Result<Response, HttpError> {
@@ -626,8 +628,8 @@ pub(crate) fn fork_created_response(    view: PublishedExampleForkView,
     Ok(response)
 }
 
-
-pub(crate) async fn public_content_response(    service: PublishedExampleHttpService,
+pub(crate) async fn public_content_response(
+    service: PublishedExampleHttpService,
     raw_public_id: String,
     version_number: Option<i64>,
     range_requested: bool,
@@ -680,8 +682,8 @@ pub(crate) async fn public_content_response(    service: PublishedExampleHttpSer
     Ok(response)
 }
 
-
-pub(crate) async fn public_response(    service: PublishedExampleHttpService,
+pub(crate) async fn public_response(
+    service: PublishedExampleHttpService,
     raw_public_id: String,
     version_number: Option<i64>,
     request_id: RequestId,
@@ -699,9 +701,12 @@ pub(crate) async fn public_response(    service: PublishedExampleHttpService,
     Ok(public_cache(Json(view).into_response()))
 }
 
-
 impl<'a> BrowserHeaders<'a> {
-    pub(crate) fn read(headers: &'a HeaderMap, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+    pub(crate) fn read(
+        headers: &'a HeaderMap,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<Self, HttpError> {
         Ok(Self {
             origins: header_values(headers, &ORIGIN, request_id, path)?,
             cookies: header_values(headers, &COOKIE, request_id, path)?,
@@ -719,8 +724,8 @@ impl<'a> BrowserHeaders<'a> {
     }
 }
 
-
-pub(crate) fn header_values<'a>(    headers: &'a HeaderMap,
+pub(crate) fn header_values<'a>(
+    headers: &'a HeaderMap,
     name: &HeaderName,
     request_id: &RequestId,
     path: &str,
@@ -736,8 +741,8 @@ pub(crate) fn header_values<'a>(    headers: &'a HeaderMap,
         .collect()
 }
 
-
-pub(crate) async fn json_body<T: DeserializeOwned>(    headers: &HeaderMap,
+pub(crate) async fn json_body<T: DeserializeOwned>(
+    headers: &HeaderMap,
     body: Body,
     request_id: &RequestId,
     path: &str,
@@ -759,8 +764,8 @@ pub(crate) async fn json_body<T: DeserializeOwned>(    headers: &HeaderMap,
     serde_json::from_slice(&bytes).map_err(|_| validation(request_id, path, "body"))
 }
 
-
-pub(crate) fn parse_management_item(    (owner_type, owner_id, project_id, example_id): ManagementItemPath,
+pub(crate) fn parse_management_item(
+    (owner_type, owner_id, project_id, example_id): ManagementItemPath,
     request_id: &RequestId,
     path: &str,
 ) -> Result<(ProjectOwner, ProjectId, PublishedExampleId), HttpError> {
@@ -771,8 +776,8 @@ pub(crate) fn parse_management_item(    (owner_type, owner_id, project_id, examp
     ))
 }
 
-
-pub(crate) fn parse_owner(    owner_type: &str,
+pub(crate) fn parse_owner(
+    owner_type: &str,
     owner_id: &str,
     request_id: &RequestId,
     path: &str,
@@ -788,8 +793,8 @@ pub(crate) fn parse_owner(    owner_type: &str,
     }
 }
 
-
-pub(crate) fn parse_destination_owner(    owner_type: &str,
+pub(crate) fn parse_destination_owner(
+    owner_type: &str,
     owner_id: &str,
     request_id: &RequestId,
     path: &str,

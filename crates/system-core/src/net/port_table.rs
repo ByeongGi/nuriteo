@@ -1,30 +1,61 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
 
 use super::{
     buffer::NetBufferError,
     connection::{Connection, ConnectionEndpoint, ConnectionId, ListenerId},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Why a port-table operation failed.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PortTableError {
+    /// A listener is already bound to the port.
     PortInUse,
+    /// No listener is bound to the port.
     PortNotFound,
+    /// The listener id is not in the table.
     ListenerNotFound,
+    /// The connection id is not in the table.
     ConnectionNotFound,
+    /// The endpoint is already closed.
     ConnectionClosed,
+    /// Accept found an empty backlog.
     NoPendingConnection,
+    /// The bounded buffer cannot take more bytes now.
     WouldBlock,
 }
 
+impl Display for PortTableError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::PortInUse => "port is already in use",
+            Self::PortNotFound => "port was not found",
+            Self::ListenerNotFound => "listener was not found",
+            Self::ConnectionNotFound => "connection was not found",
+            Self::ConnectionClosed => "connection is closed",
+            Self::NoPendingConnection => "no connection is pending",
+            Self::WouldBlock => "port operation would block",
+        })
+    }
+}
+
+impl Error for PortTableError {}
+
+/// Port-table operation result alias.
 pub type PortTableResult<T> = Result<T, PortTableError>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Listener {
     port: u16,
     pending: VecDeque<ConnectionId>,
 }
 
-#[derive(Debug, Clone)]
+/// In-memory map from ports to listeners and connections.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PortTable {
     next_listener: u32,
     next_connection: u32,
@@ -35,6 +66,8 @@ pub struct PortTable {
 }
 
 impl PortTable {
+    /// Creates an empty port table with the given connection capacity.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             next_listener: 1,
@@ -46,6 +79,10 @@ impl PortTable {
         }
     }
 
+    /// Binds a listener to `port`.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::PortInUse`] when `port` already has a listener.
     pub fn listen(&mut self, port: u16) -> PortTableResult<ListenerId> {
         if self.by_port.contains_key(&port) {
             return Err(PortTableError::PortInUse);
@@ -63,6 +100,10 @@ impl PortTable {
         Ok(id)
     }
 
+    /// Closes a listener and its pending accepts.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::ListenerNotFound`] when `id` is not bound.
     pub fn close_listener(&mut self, id: ListenerId) -> PortTableResult<()> {
         let listener = self
             .listeners
@@ -72,6 +113,10 @@ impl PortTable {
         Ok(())
     }
 
+    /// Opens a client connection to a listening port.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::PortNotFound`] when nothing listens on `port`.
     pub fn connect(&mut self, port: u16) -> PortTableResult<ConnectionId> {
         let listener_id = *self
             .by_port
@@ -89,6 +134,11 @@ impl PortTable {
         Ok(id)
     }
 
+    /// Accepts one pending connection on a listener.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::ListenerNotFound`] when `listener` is absent and
+    /// [`PortTableError::NoPendingConnection`] when its backlog is empty.
     pub fn accept(&mut self, listener: ListenerId) -> PortTableResult<ConnectionId> {
         self.listeners
             .get_mut(&listener)
@@ -98,6 +148,12 @@ impl PortTable {
             .ok_or(PortTableError::NoPendingConnection)
     }
 
+    /// Writes bytes into one side of a connection.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::ConnectionNotFound`] when `id` is absent,
+    /// [`PortTableError::ConnectionClosed`] when the peer has closed, and
+    /// [`PortTableError::WouldBlock`] when that direction's buffer is full.
     pub fn write(
         &mut self,
         id: ConnectionId,
@@ -130,6 +186,11 @@ impl PortTable {
         }
     }
 
+    /// Reads bytes from one side of a connection.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::ConnectionNotFound`] when `id` is absent.
+    /// An empty buffer returns an empty vector.
     pub fn read(
         &mut self,
         id: ConnectionId,
@@ -146,6 +207,10 @@ impl PortTable {
         })
     }
 
+    /// Closes one side of a connection.
+    ///
+    /// # Errors
+    /// Returns [`PortTableError::ConnectionNotFound`] when `id` is absent.
     pub fn close(&mut self, id: ConnectionId, endpoint: ConnectionEndpoint) -> PortTableResult<()> {
         let connection = self
             .connections

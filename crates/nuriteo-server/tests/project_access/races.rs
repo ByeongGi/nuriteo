@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::roles::*;
+use super::*;
 use std::env;
 
 use std::fs;
@@ -8,7 +8,6 @@ use std::fs;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, run_embedded_migrations,
@@ -24,12 +23,16 @@ use sqlx::{Acquire, Executor, Postgres, Transaction};
 
 use tokio::sync::oneshot;
 
+use super::{
+    ADMIN_TEAM, ARCHIVED_ORGANIZATION_PROJECT, ARCHIVED_PERSONAL_PROJECT,
+    CONCURRENT_DELETE_PROJECT, DATABASE_CA_ENV, DATABASE_URL_ENV, DELETION_PROJECT, DISABLED,
+    MEMBER, ORGANIZATION, ORGANIZATION_PROJECT, ORGANIZATION_SCOPE, OUTSIDER, OWNER,
+    PERSONAL_PROJECT, PERSONAL_SCOPE, READ_TEAM, UNGRANTED, WRITE_TEAM,
+};
 use tokio::time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, OWNER, MEMBER, UNGRANTED, OUTSIDER, DISABLED, ORGANIZATION, PERSONAL_SCOPE, ORGANIZATION_SCOPE, PERSONAL_PROJECT, ARCHIVED_PERSONAL_PROJECT, ORGANIZATION_PROJECT, ARCHIVED_ORGANIZATION_PROJECT, DELETION_PROJECT, CONCURRENT_DELETE_PROJECT, READ_TEAM, WRITE_TEAM, ADMIN_TEAM};
 
-
-
-pub(crate) async fn verify_typed_grant_revoke_and_constraints(pool: &DatabasePool) {    let granted = grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Read).await;
+pub(crate) async fn verify_typed_grant_revoke_and_constraints(pool: &DatabasePool) {
+    let granted = grant(pool, ORGANIZATION_PROJECT, MEMBER, ProjectRole::Read).await;
     assert_eq!(granted.role(), ProjectRole::Read);
     assert_eq!(granted.lock_version().get(), 1);
     assert_eq!(
@@ -168,8 +171,8 @@ pub(crate) async fn verify_typed_grant_revoke_and_constraints(pool: &DatabasePoo
     .await;
 }
 
-
-pub(crate) async fn verify_lifecycle_cascades(pool: &DatabasePool) {    grant(pool, DELETION_PROJECT, UNGRANTED, ProjectRole::Admin).await;
+pub(crate) async fn verify_lifecycle_cascades(pool: &DatabasePool) {
+    grant(pool, DELETION_PROJECT, UNGRANTED, ProjectRole::Admin).await;
     execute(
         pool,
         "DELETE FROM projects \
@@ -211,8 +214,8 @@ pub(crate) async fn verify_lifecycle_cascades(pool: &DatabasePool) {    grant(po
     );
 }
 
-
-pub(crate) async fn verify_concurrent_grant_and_membership_delete(pool: &DatabasePool) {    let mut holder_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_concurrent_grant_and_membership_delete(pool: &DatabasePool) {
+    let mut holder_connection = pool.acquire().await.unwrap();
     let mut holder = holder_connection.begin().await.unwrap();
     let holder_pid = backend_pid(&mut holder).await;
     ProjectAccessRepository::grant(
@@ -262,8 +265,8 @@ pub(crate) async fn verify_concurrent_grant_and_membership_delete(pool: &Databas
     );
 }
 
-
-pub(crate) async fn verify_effective_role_blocks_membership_delete(pool: &DatabasePool) {    grant(pool, ORGANIZATION_PROJECT, UNGRANTED, ProjectRole::Write).await;
+pub(crate) async fn verify_effective_role_blocks_membership_delete(pool: &DatabasePool) {
+    grant(pool, ORGANIZATION_PROJECT, UNGRANTED, ProjectRole::Write).await;
     let mut holder_connection = pool.acquire().await.unwrap();
     let mut holder = holder_connection.begin().await.unwrap();
     let holder_pid = backend_pid(&mut holder).await;
@@ -311,8 +314,8 @@ pub(crate) async fn verify_effective_role_blocks_membership_delete(pool: &Databa
     insert_membership(pool, UNGRANTED, "member").await;
 }
 
-
-pub(crate) async fn verify_concurrent_revoke_and_membership_delete(pool: &DatabasePool) {    let mut holder_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_concurrent_revoke_and_membership_delete(pool: &DatabasePool) {
+    let mut holder_connection = pool.acquire().await.unwrap();
     let mut holder = holder_connection.begin().await.unwrap();
     let holder_pid = backend_pid(&mut holder).await;
     assert!(
@@ -362,8 +365,8 @@ pub(crate) async fn verify_concurrent_revoke_and_membership_delete(pool: &Databa
     insert_membership(pool, MEMBER, "member").await;
 }
 
-
-pub(crate) async fn verify_concurrent_grant_and_project_delete(pool: &DatabasePool) {    let mut holder_connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_concurrent_grant_and_project_delete(pool: &DatabasePool) {
+    let mut holder_connection = pool.acquire().await.unwrap();
     let mut holder = holder_connection.begin().await.unwrap();
     let holder_pid = backend_pid(&mut holder).await;
     ProjectAccessRepository::grant(
@@ -415,8 +418,8 @@ pub(crate) async fn verify_concurrent_grant_and_project_delete(pool: &DatabasePo
     assert_eq!(tombstones, 1);
 }
 
-
-pub(crate) async fn grant(    pool: &DatabasePool,
+pub(crate) async fn grant(
+    pool: &DatabasePool,
     project: &str,
     user: &str,
     role: ProjectRole,
@@ -424,8 +427,8 @@ pub(crate) async fn grant(    pool: &DatabasePool,
     grant_result(pool, project, user, role).await.unwrap()
 }
 
-
-pub(crate) async fn grant_result(    pool: &DatabasePool,
+pub(crate) async fn grant_result(
+    pool: &DatabasePool,
     project: &str,
     user: &str,
     role: ProjectRole,
@@ -452,8 +455,8 @@ pub(crate) async fn grant_result(    pool: &DatabasePool,
     }
 }
 
-
-pub(crate) async fn revoke(pool: &DatabasePool, project: &str, user: &str) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn revoke(pool: &DatabasePool, project: &str, user: &str) {
+    let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
     assert!(
         ProjectAccessRepository::revoke(&mut transaction, project_id(project), user_id(user),)
@@ -463,8 +466,12 @@ pub(crate) async fn revoke(pool: &DatabasePool, project: &str, user: &str) {    
     transaction.commit().await.unwrap();
 }
 
-
-pub(crate) async fn effective(pool: &DatabasePool, project: &str, user: &str) -> EffectiveProjectRole {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn effective(
+    pool: &DatabasePool,
+    project: &str,
+    user: &str,
+) -> EffectiveProjectRole {
+    let mut connection = pool.acquire().await.unwrap();
     let mut transaction = connection.begin().await.unwrap();
     let role = ProjectAccessRepository::resolve_effective_role(
         &mut transaction,
@@ -477,23 +484,27 @@ pub(crate) async fn effective(pool: &DatabasePool, project: &str, user: &str) ->
     role
 }
 
-
-pub(crate) async fn backend_pid(transaction: &mut Transaction<'_, Postgres>) -> i32 {    sqlx::query_scalar("SELECT pg_backend_pid()")
+pub(crate) async fn backend_pid(transaction: &mut Transaction<'_, Postgres>) -> i32 {
+    sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut **transaction)
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn lock_organization_for_update(transaction: &mut Transaction<'_, Postgres>) {    sqlx::query("SELECT id FROM organizations WHERE id=$1::uuid FOR UPDATE")
+pub(crate) async fn lock_organization_for_update(transaction: &mut Transaction<'_, Postgres>) {
+    sqlx::query("SELECT id FROM organizations WHERE id=$1::uuid FOR UPDATE")
         .bind(ORGANIZATION)
         .fetch_one(&mut **transaction)
         .await
         .unwrap();
 }
 
-
-pub(crate) async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32, contender_pid: i32) -> bool {    let deadline = time::Instant::now() + Duration::from_secs(2);
+pub(crate) async fn wait_for_database_block(
+    pool: &DatabasePool,
+    holder_pid: i32,
+    contender_pid: i32,
+) -> bool {
+    let deadline = time::Instant::now() + Duration::from_secs(2);
     let mut observer = pool.acquire().await.unwrap();
     loop {
         let remaining = deadline.saturating_duration_since(time::Instant::now());
@@ -520,8 +531,8 @@ pub(crate) async fn wait_for_database_block(pool: &DatabasePool, holder_pid: i32
     }
 }
 
-
-pub(crate) async fn role_count(pool: &DatabasePool, project: &str, user: &str) -> i64 {    sqlx::query_scalar(
+pub(crate) async fn role_count(pool: &DatabasePool, project: &str, user: &str) -> i64 {
+    sqlx::query_scalar(
         "SELECT COUNT(*) FROM project_user_roles \
          WHERE project_id=$1::uuid AND user_id=$2::uuid",
     )
@@ -532,8 +543,8 @@ pub(crate) async fn role_count(pool: &DatabasePool, project: &str, user: &str) -
     .unwrap()
 }
 
-
-pub(crate) async fn seed_fixture(pool: &DatabasePool) {    for (id, label, status) in [
+pub(crate) async fn seed_fixture(pool: &DatabasePool) {
+    for (id, label, status) in [
         (OWNER, "owner", "active"),
         (MEMBER, "member", "active"),
         (UNGRANTED, "ungranted", "active"),
@@ -663,8 +674,8 @@ pub(crate) async fn seed_fixture(pool: &DatabasePool) {    for (id, label, statu
     }
 }
 
-
-pub(crate) async fn insert_membership(pool: &DatabasePool, user: &str, role: &str) {    sqlx::query(
+pub(crate) async fn insert_membership(pool: &DatabasePool, user: &str, role: &str) {
+    sqlx::query(
         "INSERT INTO organization_memberships (organization_id,user_id,role) \
          VALUES ($1::uuid,$2::uuid,$3)",
     )
@@ -676,8 +687,8 @@ pub(crate) async fn insert_membership(pool: &DatabasePool, user: &str, role: &st
     .unwrap();
 }
 
-
-pub(crate) async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {    assert!(
+pub(crate) async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {
+    assert!(
         sqlx::query(statement)
             .execute(&mut *pool.acquire().await.unwrap())
             .await
@@ -686,27 +697,27 @@ pub(crate) async fn assert_rejected(pool: &DatabasePool, statement: &'static str
     );
 }
 
-
-pub(crate) async fn execute(pool: &DatabasePool, statement: &'static str) {    sqlx::query(statement)
+pub(crate) async fn execute(pool: &DatabasePool, statement: &'static str) {
+    sqlx::query(statement)
         .execute(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap();
 }
 
-
-pub(crate) fn project_id(value: &str) -> ProjectId {    value.parse().unwrap()
+pub(crate) fn project_id(value: &str) -> ProjectId {
+    value.parse().unwrap()
 }
 
-
-pub(crate) fn user_id(value: &str) -> UserId {    value.parse().unwrap()
+pub(crate) fn user_id(value: &str) -> UserId {
+    value.parse().unwrap()
 }
 
-
-pub(crate) fn now() -> Timestamp {    Timestamp::from_str("2026-10-04T12:00:00Z").unwrap()
+pub(crate) fn now() -> Timestamp {
+    Timestamp::from_str("2026-10-04T12:00:00Z").unwrap()
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("DROP SCHEMA public CASCADE")
         .await
@@ -714,8 +725,8 @@ pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection =
     connection.execute("CREATE SCHEMA public").await.unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::var(DATABASE_URL_ENV).unwrap();
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV).unwrap();
     let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
     let tls = DatabaseTlsConfig::verify_full(None, Some(ca), None).unwrap();
     DatabasePool::connect(
@@ -732,4 +743,3 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::
     .await
     .unwrap()
 }
-

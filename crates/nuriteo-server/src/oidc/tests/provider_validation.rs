@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
+use super::super::*;
 use super::authorization_code::*;
 use super::identity_linking::*;
-use super::super::*;
-
+use super::*;
 
 use std::env;
 
@@ -15,13 +14,11 @@ use std::io;
 
 use std::path::Path;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use sha2::{Digest, Sha256};
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -45,13 +42,12 @@ use std::future::Future;
 
 use std::pin::Pin;
 
+use super::{ExactPreflight, NoFiles, TestEnvironment};
 use url::Url;
-use super::{ExactPreflight, TestEnvironment, NoFiles};
-
-
 
 #[test]
-pub(crate) fn validates_public_provider_fields_without_parsing_protocol_endpoints() {    assert!(OidcProviderInput::new("Corporate", "https://id.example.test", "client").is_ok());
+pub(crate) fn validates_public_provider_fields_without_parsing_protocol_endpoints() {
+    assert!(OidcProviderInput::new("Corporate", "https://id.example.test", "client").is_ok());
     assert_eq!(
         OidcProviderInput::new(" Corporate", "https://id.example.test", "client").unwrap_err(),
         OidcProviderError::InvalidInput
@@ -62,10 +58,10 @@ pub(crate) fn validates_public_provider_fields_without_parsing_protocol_endpoint
     );
 }
 
-
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-oidc-providers/run.sh"]
-pub(crate) async fn actual_runtime_resolver_is_version_bound_and_fail_closed() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_runtime_resolver_is_version_bound_and_fail_closed() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     run_embedded_migrations(
         &pool,
@@ -350,10 +346,10 @@ pub(crate) async fn actual_runtime_resolver_is_version_bound_and_fail_closed() {
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-oidc-protocol/run.sh"]
-pub(crate) async fn actual_protocol_validation_is_pinned_bounded_and_generation_fenced() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_protocol_validation_is_pinned_bounded_and_generation_fenced() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     run_embedded_migrations(
         &pool,

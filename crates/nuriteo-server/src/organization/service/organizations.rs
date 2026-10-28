@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::member_audit::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -30,14 +28,16 @@ use crate::identity::{Timestamp, UserId};
 
 use crate::workspace::{OrganizationStorageScopeRepository, StorageScopeRepositoryError};
 
-
 use super::super::{
     Organization, OrganizationFields, OrganizationId, OrganizationRole, OrganizationStatus,
     OrganizationVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, OrganizationServicePolicy, OrganizationPrincipal, OrganizationAuditContext, MembershipAddResult, MembershipChangeResult, MembershipRemoveResult, OrganizationServiceError, OrganizationService, OrganizationRow, AuthorizedOrganizationRow};
-
-
+use super::{
+    AuthorizedOrganizationRow, DEFAULT_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT,
+    MIN_OPERATION_TIMEOUT, MembershipAddResult, MembershipChangeResult, MembershipRemoveResult,
+    OrganizationAuditContext, OrganizationPrincipal, OrganizationRow, OrganizationService,
+    OrganizationServiceError, OrganizationServicePolicy,
+};
 
 impl super::OrganizationServicePolicy {
     pub fn new(operation_timeout: Duration) -> Result<Self, OrganizationServiceError> {
@@ -53,14 +53,13 @@ impl super::OrganizationServicePolicy {
     }
 }
 
-
-impl Default for OrganizationServicePolicy { fn default() -> Self {
+impl Default for OrganizationServicePolicy {
+    fn default() -> Self {
         Self {
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
         }
     }
 }
-
 
 impl OrganizationPrincipal {
     #[must_use]
@@ -70,7 +69,6 @@ impl OrganizationPrincipal {
         }
     }
 }
-
 
 impl OrganizationAuditContext {
     #[must_use]
@@ -91,8 +89,8 @@ impl OrganizationAuditContext {
     }
 }
 
-
-impl fmt::Debug for OrganizationAuditContext { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for OrganizationAuditContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("OrganizationAuditContext")
             .field("event_id", &self.event_id)
@@ -100,8 +98,8 @@ impl fmt::Debug for OrganizationAuditContext { fn fmt(&self, formatter: &mut fmt
     }
 }
 
-
-impl fmt::Display for OrganizationServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for OrganizationServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "organization input is invalid",
             Self::NotFound => "organization was not found",
@@ -121,9 +119,7 @@ impl fmt::Display for OrganizationServiceError { fn fmt(&self, formatter: &mut f
     }
 }
 
-
 impl std::error::Error for OrganizationServiceError {}
-
 
 impl OrganizationService {
     #[must_use]
@@ -245,7 +241,8 @@ impl OrganizationService {
         display_name: String,
         audit: &OrganizationAuditContext,
     ) -> Result<Organization, OrganizationServiceError> {
-        super::super::model::validate_slug(&slug).map_err(|_| OrganizationServiceError::InvalidInput)?;
+        super::super::model::validate_slug(&slug)
+            .map_err(|_| OrganizationServiceError::InvalidInput)?;
         super::super::model::validate_display_name(&display_name)
             .map_err(|_| OrganizationServiceError::InvalidInput)?;
         let mut connection = self.acquire().await?;
@@ -640,8 +637,8 @@ impl OrganizationService {
     }
 }
 
-
-pub(crate) async fn lock_and_authorize_owner(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_and_authorize_owner(
+    transaction: &mut Transaction<'_, Postgres>,
     principal: OrganizationPrincipal,
     organization_id: OrganizationId,
 ) -> Result<OrganizationRow, OrganizationServiceError> {
@@ -677,8 +674,8 @@ pub(crate) async fn lock_and_authorize_owner(    transaction: &mut Transaction<'
     Ok(organization)
 }
 
-
-pub(crate) async fn require_active_user(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_active_user(
+    transaction: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     require_admin: bool,
 ) -> Result<(), OrganizationServiceError> {
@@ -697,8 +694,8 @@ pub(crate) async fn require_active_user(    transaction: &mut Transaction<'_, Po
     Ok(())
 }
 
-
-pub(crate) async fn membership_role(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn membership_role(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     user_id: UserId,
 ) -> Result<Option<OrganizationRole>, OrganizationServiceError> {
@@ -714,8 +711,8 @@ pub(crate) async fn membership_role(    transaction: &mut Transaction<'_, Postgr
     role.map(|value| parse_role(&value)).transpose()
 }
 
-
-pub(crate) async fn lock_membership_admission(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_membership_admission(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationServiceError> {
     sqlx::query("SELECT pg_advisory_xact_lock(1314212943, hashtext($1))")
@@ -726,8 +723,8 @@ pub(crate) async fn lock_membership_admission(    transaction: &mut Transaction<
     Ok(())
 }
 
-
-pub(crate) async fn ensure_member_capacity(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn ensure_member_capacity(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationServiceError> {
     let members: i64 = sqlx::query_scalar(
@@ -744,8 +741,8 @@ pub(crate) async fn ensure_member_capacity(    transaction: &mut Transaction<'_,
     Ok(())
 }
 
-
-pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationServiceError {    if error.as_database_error().is_some_and(|database| {
+pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationServiceError {
+    if error.as_database_error().is_some_and(|database| {
         database.code().as_deref() == Some("23514")
             && database.constraint() == Some("organization_member_limit")
     }) {
@@ -755,8 +752,8 @@ pub(crate) fn membership_write_error(error: sqlx::Error) -> OrganizationServiceE
     }
 }
 
-
-pub(crate) async fn ensure_another_owner(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn ensure_another_owner(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationServiceError> {
     let owners: i64 = sqlx::query_scalar(
@@ -773,15 +770,15 @@ pub(crate) async fn ensure_another_owner(    transaction: &mut Transaction<'_, P
     Ok(())
 }
 
-
-pub(crate) fn ensure_active(row: &OrganizationRow) -> Result<(), OrganizationServiceError> {    if row.3 != "active" {
+pub(crate) fn ensure_active(row: &OrganizationRow) -> Result<(), OrganizationServiceError> {
+    if row.3 != "active" {
         return Err(OrganizationServiceError::Archived);
     }
     Ok(())
 }
 
-
-pub(crate) fn ensure_active_and_version(    row: &OrganizationRow,
+pub(crate) fn ensure_active_and_version(
+    row: &OrganizationRow,
     expected: OrganizationVersion,
 ) -> Result<(), OrganizationServiceError> {
     ensure_active(row)?;

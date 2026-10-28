@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
+use super::super::*;
 use super::challenge_replay::*;
 use super::database::*;
-use super::super::*;
-
+use super::*;
 
 use std::env;
 
@@ -17,11 +16,9 @@ use std::path::Path;
 
 use std::time::Instant;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -33,13 +30,12 @@ use crate::identity::{BrowserMethod, BrowserRequestHeaders, acquire_mfa_populati
 
 use crate::instance_settings::InstanceSettingsRepository;
 
+use super::{NoFiles, TestEnvironment};
 use crate::mfa::MfaHttpService;
-use super::{TestEnvironment, NoFiles};
-
-
 
 #[test]
-pub(crate) fn rfc_6238_sha1_window_and_redaction_are_stable() {    let secret = TotpSecret::new(b"12345678901234567890".to_vec()).unwrap();
+pub(crate) fn rfc_6238_sha1_window_and_redaction_are_stable() {
+    let secret = TotpSecret::new(b"12345678901234567890".to_vec()).unwrap();
     let code = TotpCode::parse(b"287082").unwrap();
     let now = OffsetDateTime::from_unix_timestamp(59).unwrap();
     assert_eq!(matching_counter(&secret, &code, now).unwrap(), Some(1));
@@ -50,9 +46,9 @@ pub(crate) fn rfc_6238_sha1_window_and_redaction_are_stable() {    let secret = 
     );
 }
 
-
 #[test]
-pub(crate) fn challenge_policy_is_bounded() {    assert!(MfaChallengePolicy::default().failure_threshold <= MAX_FAILURE_THRESHOLD);
+pub(crate) fn challenge_policy_is_bounded() {
+    assert!(MfaChallengePolicy::default().failure_threshold <= MAX_FAILURE_THRESHOLD);
     assert_eq!(
         MfaChallengePolicy::new(
             2,
@@ -65,10 +61,10 @@ pub(crate) fn challenge_policy_is_bounded() {    assert!(MfaChallengePolicy::def
     );
 }
 
-
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
-pub(crate) async fn actual_mfa_003_receipt_replays_for_old_and_rotated_sessions_only() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_mfa_003_receipt_replays_for_old_and_rotated_sessions_only() {
+    let pool = fixture_pool().await;
     prepare_fixture(&pool).await;
     let session_policy = SessionPolicy::default();
     let sessions = SessionService::new(pool.clone(), session_policy);
@@ -224,10 +220,10 @@ pub(crate) async fn actual_mfa_003_receipt_replays_for_old_and_rotated_sessions_
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
-pub(crate) async fn actual_mfa_003_policy_population_proof_fences_stale_apply() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_mfa_003_policy_population_proof_fences_stale_apply() {
+    let pool = fixture_pool().await;
     prepare_fixture(&pool).await;
     let session_policy = SessionPolicy::default();
     let sessions = SessionService::new(pool.clone(), session_policy);

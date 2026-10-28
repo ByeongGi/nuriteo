@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::organizations::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -30,16 +28,19 @@ use crate::identity::{Timestamp, UserId};
 
 use crate::workspace::{OrganizationStorageScopeRepository, StorageScopeRepositoryError};
 
-
 use super::super::{
     Organization, OrganizationFields, OrganizationId, OrganizationRole, OrganizationStatus,
     OrganizationVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, OrganizationServicePolicy, OrganizationPrincipal, OrganizationAuditContext, MembershipAddResult, MembershipChangeResult, MembershipRemoveResult, OrganizationServiceError, OrganizationService, OrganizationRow, AuthorizedOrganizationRow};
+use super::{
+    AuthorizedOrganizationRow, DEFAULT_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT,
+    MIN_OPERATION_TIMEOUT, MembershipAddResult, MembershipChangeResult, MembershipRemoveResult,
+    OrganizationAuditContext, OrganizationPrincipal, OrganizationRow, OrganizationService,
+    OrganizationServiceError, OrganizationServicePolicy,
+};
 
-
-
-pub(crate) async fn update_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn update_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     expected_version: OrganizationVersion,
     field: &str,
@@ -66,8 +67,8 @@ pub(crate) async fn update_organization(    transaction: &mut Transaction<'_, Po
     Ok(())
 }
 
-
-pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &OrganizationAuditContext,
     occurred_at: Timestamp,
     organization_id: OrganizationId,
@@ -87,8 +88,8 @@ pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>
     .await
 }
 
-
-pub(crate) async fn append_membership_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_membership_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &OrganizationAuditContext,
     occurred_at: Timestamp,
     organization_id: OrganizationId,
@@ -109,12 +110,12 @@ pub(crate) async fn append_membership_audit(    transaction: &mut Transaction<'_
     .await
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "audit fields are explicit security context"
 )]
-pub(crate) async fn append_audit_target(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit_target(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &OrganizationAuditContext,
     occurred_at: Timestamp,
     organization_id: OrganizationId,
@@ -156,15 +157,19 @@ pub(crate) async fn append_audit_target(    transaction: &mut Transaction<'_, Po
         .map_err(|_| OrganizationServiceError::AuditUnavailable)
 }
 
-
-pub(crate) async fn commit(transaction: Transaction<'_, Postgres>) -> Result<(), OrganizationServiceError> {    transaction
+pub(crate) async fn commit(
+    transaction: Transaction<'_, Postgres>,
+) -> Result<(), OrganizationServiceError> {
+    transaction
         .commit()
         .await
         .map_err(|_| OrganizationServiceError::DatabaseUnavailable)
 }
 
-
-pub(crate) fn decode_organization(row: OrganizationRow) -> Result<Organization, OrganizationServiceError> {    Organization::new(OrganizationFields {
+pub(crate) fn decode_organization(
+    row: OrganizationRow,
+) -> Result<Organization, OrganizationServiceError> {
+    Organization::new(OrganizationFields {
         id: row
             .0
             .parse()
@@ -191,23 +196,23 @@ pub(crate) fn decode_organization(row: OrganizationRow) -> Result<Organization, 
     .map_err(|_| OrganizationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn role_name(role: OrganizationRole) -> &'static str {    match role {
+pub(crate) fn role_name(role: OrganizationRole) -> &'static str {
+    match role {
         OrganizationRole::Owner => "owner",
         OrganizationRole::Member => "member",
     }
 }
 
-
-pub(crate) fn parse_role(role: &str) -> Result<OrganizationRole, OrganizationServiceError> {    match role {
+pub(crate) fn parse_role(role: &str) -> Result<OrganizationRole, OrganizationServiceError> {
+    match role {
         "owner" => Ok(OrganizationRole::Owner),
         "member" => Ok(OrganizationRole::Member),
         _ => Err(OrganizationServiceError::InvariantViolation),
     }
 }
 
-
-pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Timestamp, OrganizationServiceError> {
     let value: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)
@@ -216,6 +221,6 @@ pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgr
     Timestamp::from_datetime(value).map_err(|_| OrganizationServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn is_unique_violation(error: &sqlx::Error) -> bool {    matches!(error, sqlx::Error::Database(database) if database.is_unique_violation())
+pub(crate) fn is_unique_violation(error: &sqlx::Error) -> bool {
+    matches!(error, sqlx::Error::Database(database) if database.is_unique_violation())
 }

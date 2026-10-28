@@ -4,11 +4,14 @@ use std::collections::BTreeMap;
 
 use std::fmt;
 
-
+use super::{
+    BootstrapEnvironmentValue, BootstrapSettingOrigin, INSTANCE_SETTING_DEFINITIONS,
+    INSTANCE_SETTING_REGISTRY_VERSION, InstanceSettingBootstrap, InstanceSettingBootstrapError,
+    InstanceSettingDefinition, InstanceSettingValidationError, MFA_ENFORCEMENT, RUNTIME_NETWORK,
+    SMTP_SECURITY, SettingApplyMode, SettingConstraint, SettingSensitivity,
+    instance_setting_definition, policy_boolean, policy_unsigned, unsigned,
+};
 use serde_json::Value;
-use super::{INSTANCE_SETTING_REGISTRY_VERSION, SettingApplyMode, SettingSensitivity, SettingConstraint, InstanceSettingDefinition, InstanceSettingValidationError, MFA_ENFORCEMENT, RUNTIME_NETWORK, SMTP_SECURITY, unsigned, policy_unsigned, policy_boolean, INSTANCE_SETTING_DEFINITIONS, instance_setting_definition, BootstrapSettingOrigin, InstanceSettingBootstrap, BootstrapEnvironmentValue, InstanceSettingBootstrapError};
-
-
 
 impl super::InstanceSettingDefinition {
     /// Validates decoded JSON without ever rendering the supplied value in an error.
@@ -73,7 +76,6 @@ impl super::InstanceSettingDefinition {
     }
 }
 
-
 impl SettingConstraint {
     pub(crate) const fn reason(self) -> &'static str {
         match self {
@@ -98,8 +100,8 @@ impl SettingConstraint {
     }
 }
 
-
-pub(crate) fn valid_ascii_hostname(value: &str) -> bool {    value.len() <= 253
+pub(crate) fn valid_ascii_hostname(value: &str) -> bool {
+    value.len() <= 253
         && !value.starts_with('.')
         && !value.ends_with('.')
         && value.split('.').all(|label| {
@@ -113,8 +115,8 @@ pub(crate) fn valid_ascii_hostname(value: &str) -> bool {    value.len() <= 253
         })
 }
 
-
-pub(crate) fn valid_email_address(value: &str) -> bool {    let Some((local, domain)) = value.rsplit_once('@') else {
+pub(crate) fn valid_email_address(value: &str) -> bool {
+    let Some((local, domain)) = value.rsplit_once('@') else {
         return false;
     };
     !local.is_empty()
@@ -125,15 +127,13 @@ pub(crate) fn valid_email_address(value: &str) -> bool {    let Some((local, dom
         && valid_ascii_hostname(domain)
 }
 
-
-impl fmt::Display for InstanceSettingValidationError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for InstanceSettingValidationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "Instance setting {} {}", self.key, self.reason)
     }
 }
 
-
 impl std::error::Error for InstanceSettingValidationError {}
-
 
 impl BootstrapSettingOrigin {
     #[must_use]
@@ -145,7 +145,6 @@ impl BootstrapSettingOrigin {
         }
     }
 }
-
 
 impl InstanceSettingBootstrap {
     pub fn new(
@@ -245,8 +244,8 @@ impl InstanceSettingBootstrap {
     }
 }
 
-
-impl fmt::Debug for InstanceSettingBootstrap { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for InstanceSettingBootstrap {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("InstanceSettingBootstrap")
             .field("file_keys", &self.file.keys().collect::<Vec<_>>())
@@ -258,8 +257,8 @@ impl fmt::Debug for InstanceSettingBootstrap { fn fmt(&self, formatter: &mut fmt
     }
 }
 
-
-impl fmt::Display for InstanceSettingBootstrapError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for InstanceSettingBootstrapError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnknownKey => formatter.write_str("unknown Instance setting key"),
             Self::SecretSource { key } => {
@@ -276,11 +275,10 @@ impl fmt::Display for InstanceSettingBootstrapError { fn fmt(&self, formatter: &
     }
 }
 
-
 impl std::error::Error for InstanceSettingBootstrapError {}
 
-
-pub(crate) fn validate_bootstrap_map(    values: &BTreeMap<String, Value>,
+pub(crate) fn validate_bootstrap_map(
+    values: &BTreeMap<String, Value>,
 ) -> Result<(), InstanceSettingBootstrapError> {
     for (key, value) in values {
         let definition =
@@ -297,8 +295,8 @@ pub(crate) fn validate_bootstrap_map(    values: &BTreeMap<String, Value>,
     Ok(())
 }
 
-
-pub(crate) fn parse_environment_value(    definition: &'static InstanceSettingDefinition,
+pub(crate) fn parse_environment_value(
+    definition: &'static InstanceSettingDefinition,
     raw: &str,
 ) -> Result<Value, InstanceSettingBootstrapError> {
     let invalid = || {

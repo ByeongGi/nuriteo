@@ -1,13 +1,12 @@
 #![allow(unused_imports)]
-use super::*;
-use super::working_head::*;
 use super::postgres::*;
+use super::working_head::*;
+use super::*;
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
@@ -16,12 +15,11 @@ use nuriteo_server::database::{
 
 use sqlx::{Acquire, Executor};
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV};
 use tokio::time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV};
 
-
-
-pub(crate) async fn verify_scope_reference_and_metadata_constraints(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_scope_reference_and_metadata_constraints(pool: &DatabasePool) {
+    execute(
         pool,
         "INSERT INTO project_bundle_refs \
         (id,project_id,storage_scope_id,bundle_id,kind,version_name,actor_user_id) VALUES \
@@ -114,8 +112,8 @@ pub(crate) async fn verify_scope_reference_and_metadata_constraints(pool: &Datab
     }
 }
 
-
-pub(crate) async fn verify_multipart_expiry_and_staging_gc(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_multipart_expiry_and_staging_gc(pool: &DatabasePool) {
+    execute(
         pool,
         "INSERT INTO save_sessions \
         (id,project_id,storage_scope_id,actor_user_id,expected_project_version, \
@@ -225,8 +223,10 @@ pub(crate) async fn verify_multipart_expiry_and_staging_gc(pool: &DatabasePool) 
     .await;
 }
 
-
-pub(crate) async fn verify_project_delete_enqueues_without_dangling_references(pool: &DatabasePool) {    execute(
+pub(crate) async fn verify_project_delete_enqueues_without_dangling_references(
+    pool: &DatabasePool,
+) {
+    execute(
         pool,
         "DELETE FROM projects \
         WHERE id='0199ee6c-c777-7000-8000-000000006030'",
@@ -252,8 +252,8 @@ pub(crate) async fn verify_project_delete_enqueues_without_dangling_references(p
     assert!(queued, "Project deletion must leave a bounded GC candidate");
 }
 
-
-pub(crate) async fn verify_bundle_persistence_truncate_is_rejected(pool: &DatabasePool) {    for (relation, statement) in [
+pub(crate) async fn verify_bundle_persistence_truncate_is_rejected(pool: &DatabasePool) {
+    for (relation, statement) in [
         ("bundles", "TRUNCATE TABLE bundles CASCADE"),
         ("save_sessions", "TRUNCATE TABLE save_sessions CASCADE"),
         (
@@ -281,8 +281,8 @@ pub(crate) async fn verify_bundle_persistence_truncate_is_rejected(pool: &Databa
     }
 }
 
-
-pub(crate) async fn verify_schema_shape(pool: &DatabasePool) {    for relation in [
+pub(crate) async fn verify_schema_shape(pool: &DatabasePool) {
+    for relation in [
         "bundles",
         "save_sessions",
         "storage_reservations",
@@ -769,8 +769,8 @@ pub(crate) async fn verify_schema_shape(pool: &DatabasePool) {    for relation i
     }
 }
 
-
-pub(crate) async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {    assert!(
+pub(crate) async fn assert_rejected(pool: &DatabasePool, statement: &'static str, contract: &str) {
+    assert!(
         sqlx::query(statement)
             .execute(&mut *pool.acquire().await.unwrap())
             .await

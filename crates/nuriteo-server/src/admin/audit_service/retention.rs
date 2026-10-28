@@ -1,10 +1,9 @@
 #![allow(unused_imports)]
-use super::*;
 use super::events::*;
+use super::*;
 use std::net::IpAddr;
 
 use std::str::FromStr;
-
 
 use base64::Engine as _;
 
@@ -20,7 +19,6 @@ use time::OffsetDateTime;
 
 use utoipa::ToSchema;
 
-
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
     AuditScope, AuditTarget, AuditWriter, ScopeType,
@@ -28,15 +26,22 @@ use crate::audit::{
 
 use crate::identity::{BrowserRequestHeaders, Timestamp, UserId};
 
-
-use super::super::http_service::{AdminRuntime, AdminSession, AuditActorIdentity, authorize_recent_admin};
+use super::super::http_service::{
+    AdminRuntime, AdminSession, AuditActorIdentity, authorize_recent_admin,
+};
 
 use super::super::{AdminHttpService, AdminHttpServiceError};
-use super::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_EXPORT_EVENTS, MAX_EXPORT_BYTES, MAX_PRUNE_LIMIT, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS, SHORT_RETENTION_WARNING_DAYS, MAX_CURSOR_BYTES, AdminAuditListInput, AdminAuditExportFormat, AdminAuditExportInput, AdminAuditEventView, AdminAuditEventCollectionView, AdminAuditRetentionPreview, AdminAuditRetentionPruneView, AdminAuditExportView, AuditCursor, DecodedCursor, AuditPage, AUDIT_SELECT_BY_ID, AUDIT_LIST_QUERY};
+use super::{
+    AUDIT_LIST_QUERY, AUDIT_SELECT_BY_ID, AdminAuditEventCollectionView, AdminAuditEventView,
+    AdminAuditExportFormat, AdminAuditExportInput, AdminAuditExportView, AdminAuditListInput,
+    AdminAuditRetentionPreview, AdminAuditRetentionPruneView, AuditCursor, AuditPage,
+    DEFAULT_PAGE_SIZE, DecodedCursor, MAX_CURSOR_BYTES, MAX_EXPORT_BYTES, MAX_EXPORT_EVENTS,
+    MAX_PAGE_SIZE, MAX_PRUNE_LIMIT, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS,
+    SHORT_RETENTION_WARNING_DAYS,
+};
 
-
-
-pub(crate) async fn retention_preview(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn retention_preview(
+    transaction: &mut Transaction<'_, Postgres>,
     retention_days: Option<u16>,
 ) -> Result<AdminAuditRetentionPreview, AdminHttpServiceError> {
     let Some(days) = retention_days else {
@@ -77,8 +82,8 @@ pub(crate) async fn retention_preview(    transaction: &mut Transaction<'_, Post
     })
 }
 
-
-pub(crate) async fn current_retention_days(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn current_retention_days(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Option<u16>, AdminHttpServiceError> {
     let raw: Option<String> = sqlx::query_scalar(
         "SELECT value::text FROM instance_settings WHERE key = 'audit.retention_days' FOR SHARE",
@@ -100,8 +105,8 @@ pub(crate) async fn current_retention_days(    transaction: &mut Transaction<'_,
     }
 }
 
-
-pub(crate) fn validate_retention(retention_days: Option<u16>) -> Result<(), AdminHttpServiceError> {    if retention_days
+pub(crate) fn validate_retention(retention_days: Option<u16>) -> Result<(), AdminHttpServiceError> {
+    if retention_days
         .is_some_and(|value| !(MIN_RETENTION_DAYS..=MAX_RETENTION_DAYS).contains(&value))
     {
         return Err(AdminHttpServiceError::InvalidAuditQuery);
@@ -109,8 +114,8 @@ pub(crate) fn validate_retention(retention_days: Option<u16>) -> Result<(), Admi
     Ok(())
 }
 
-
-pub(crate) async fn append_operation_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_operation_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     actor: &AuditActorIdentity,
     correlation_id: &str,
     action_code: &str,
@@ -148,8 +153,8 @@ pub(crate) async fn append_operation_audit(    transaction: &mut Transaction<'_,
         .map_err(|_| AdminHttpServiceError::AuditUnavailable)
 }
 
-
-pub(crate) fn optional_timestamp(    value: Option<OffsetDateTime>,
+pub(crate) fn optional_timestamp(
+    value: Option<OffsetDateTime>,
 ) -> Result<Option<String>, AdminHttpServiceError> {
     value
         .map(Timestamp::from_datetime)

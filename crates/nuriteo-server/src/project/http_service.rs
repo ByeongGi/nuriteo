@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use std::time::Duration;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -26,7 +25,6 @@ use tokio::time as tokio_time;
 use url::Url;
 
 use utoipa::ToSchema;
-
 
 use crate::access_token::{
     AccessTokenAuthenticator, AccessTokenPrincipal, AccessTokenRequest, AccessTokenScope,
@@ -57,7 +55,6 @@ use crate::save::{
     PromoteHistoricalReference, RecoveryCheckpoint,
 };
 
-
 use super::{
     DirectProjectRoleGrant, Project, ProjectAuditContext, ProjectDeleteConfirmation, ProjectId,
     ProjectName, ProjectOwner, ProjectPageKey, ProjectPageLimit, ProjectRepository, ProjectRole,
@@ -65,7 +62,6 @@ use super::{
     ProjectServiceError, ProjectServicePolicy, ProjectSlug, ProjectState, ProjectTemplate,
     ProjectVersion,
 };
-
 
 const CURSOR_PREFIX: &str = "nrt_project_cursor_";
 
@@ -75,12 +71,10 @@ const CURSOR_KEY_BYTES: usize = 32;
 
 const MAX_CURSOR_BYTES: usize = 2048;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectHttpPolicy {
     operation_timeout: Duration,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectHttpError {
@@ -99,14 +93,12 @@ pub enum ProjectHttpError {
     Internal,
 }
 
-
 #[derive(Clone)]
 pub struct ProjectHttpService {
     runtime: Option<Arc<Runtime>>,
 }
 
-
-struct Runtime {
+pub(crate) struct Runtime {
     pool: DatabasePool,
     operation_timeout: Duration,
     sessions: SessionService,
@@ -119,14 +111,12 @@ struct Runtime {
     history: ProjectHistoryService,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RoleOperation {
     Grant,
     Change,
     Revoke,
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SaveProjectContext {
@@ -136,12 +126,10 @@ pub(crate) struct SaveProjectContext {
     pub(crate) project_version: ProjectVersion,
 }
 
-
-struct BrowserIdentity {
+pub(crate) struct BrowserIdentity {
     user_id: UserId,
     display_name: String,
 }
-
 
 pub(crate) enum ProjectAccessTokenIdentity {
     User {
@@ -152,7 +140,6 @@ pub(crate) enum ProjectAccessTokenIdentity {
         bound_project_id: ProjectId,
     },
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -171,14 +158,12 @@ pub(crate) struct ProjectView {
     pub(crate) version: i64,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectListView {
     pub(crate) items: Vec<ProjectView>,
     pub(crate) next_cursor: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -192,14 +177,12 @@ pub(crate) struct ProjectRoleView {
     version: i64,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectRoleListView {
     pub(crate) items: Vec<ProjectRoleView>,
     pub(crate) next_cursor: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -208,7 +191,6 @@ pub(crate) struct ProjectRoleMutationView {
     pub(crate) grant: Option<ProjectRoleView>,
     pub(crate) project_version: i64,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -227,7 +209,6 @@ pub(crate) struct ProjectVersionView {
     format: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectVersionCreateView {
@@ -235,14 +216,12 @@ pub(crate) struct ProjectVersionCreateView {
     pub(crate) idempotent_retry: bool,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ProjectVersionListView {
     pub(crate) items: Vec<ProjectVersionView>,
     pub(crate) next_cursor: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -260,13 +239,11 @@ pub(crate) struct RecoveryCheckpointView {
     format: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RecoveryCheckpointListView {
     pub(crate) items: Vec<RecoveryCheckpointView>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -280,12 +257,10 @@ pub(crate) struct HistoricalPromotionView {
     idempotent_retry: bool,
 }
 
-
 #[derive(Clone)]
 struct CursorSigner {
     key: [u8; CURSOR_KEY_BYTES],
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CursorClaims {
@@ -305,7 +280,6 @@ struct CursorClaims {
     after_version_id: Option<String>,
 }
 
-
 struct CursorBinding {
     kind: &'static str,
     actor_id: String,
@@ -316,13 +290,11 @@ struct CursorBinding {
     page_size: u16,
 }
 
-
 enum CursorPosition {
     Project { slug: String, id: String },
     Role { user_id: String },
     Version { created_at: i128, id: String },
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -358,7 +330,6 @@ mod tests {
         assert!(signer.decode_project(&encoded, &wrong, now).is_err());
     }
 }
-
 
 mod project_api;
 pub(crate) use project_api::*;

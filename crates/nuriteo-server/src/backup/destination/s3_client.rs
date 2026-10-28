@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::credential::*;
 use super::verified_objects::*;
+use super::*;
 use std::collections::BTreeMap;
 
 use std::ffi::OsString;
@@ -17,7 +17,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::Client;
 
@@ -53,30 +52,39 @@ use uuid::Uuid;
 
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-
 use crate::config::{Environment, FileReader, SecretString, load_secret};
 
+use super::{
+    BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_ADDRESSING_STYLE, BACKUP_BUCKET,
+    BACKUP_CA_FILE, BACKUP_ENDPOINT, BACKUP_KMS_KEY_ID, BACKUP_PREFIX, BACKUP_REGION,
+    BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN,
+    BACKUP_SESSION_TOKEN_FILE, BACKUP_SSE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestination,
+    BackupDestinationConfig, BackupDestinationConfigError, BackupDestinationError,
+    BackupDestinationPreflight, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse,
+    BackupStoredObject, BackupWriterCredential, MAX_BUFFERED_BACKUP_OBJECT_BYTES, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_TIMEOUT, MIN_TIMEOUT, PROBE_BODY,
+};
 use crate::integration::{CredentialIdentity, IntegrationError, SecretValue};
-use super::{PROBE_BODY, MIN_TIMEOUT, MAX_TIMEOUT, MAX_CA_BYTES, MAX_CA_CERTIFICATES, MAX_BUFFERED_BACKUP_OBJECT_BYTES, BACKUP_ENDPOINT, BACKUP_REGION, BACKUP_BUCKET, BACKUP_PREFIX, BACKUP_ADDRESSING_STYLE, BACKUP_SSE, BACKUP_KMS_KEY_ID, BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN, BACKUP_SESSION_TOKEN_FILE, BACKUP_CA_FILE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse, BackupWriterCredential, BackupDestinationConfig, BackupDestinationConfigError, BackupDestination, BackupStoredObject, BackupDestinationPreflight, BackupDestinationError};
 
-
-
-pub(crate) fn permission_denied(code: Option<&str>) -> bool {    matches!(code, Some("AccessDenied" | "Unauthorized" | "Forbidden"))
+pub(crate) fn permission_denied(code: Option<&str>) -> bool {
+    matches!(code, Some("AccessDenied" | "Unauthorized" | "Forbidden"))
 }
 
-
-pub(crate) fn missing_object(code: Option<&str>) -> bool {    matches!(code, Some("NoSuchKey" | "NotFound" | "404"))
+pub(crate) fn missing_object(code: Option<&str>) -> bool {
+    matches!(code, Some("NoSuchKey" | "NotFound" | "404"))
 }
 
-
-pub(crate) fn precondition_failed(code: Option<&str>) -> bool {    matches!(
+pub(crate) fn precondition_failed(code: Option<&str>) -> bool {
+    matches!(
         code,
         Some("PreconditionFailed" | "ConditionalRequestConflict" | "412" | "409")
     )
 }
 
-
-pub(crate) fn build_http_client(ca_pem: Option<&[u8]>) -> Result<PoolClient, BackupDestinationError> {    let mut trust_store = TrustStore::default();
+pub(crate) fn build_http_client(
+    ca_pem: Option<&[u8]>,
+) -> Result<PoolClient, BackupDestinationError> {
+    let mut trust_store = TrustStore::default();
     if let Some(pem) = ca_pem {
         trust_store.add_pem_certificate(pem.to_vec());
     }
@@ -93,8 +101,8 @@ pub(crate) fn build_http_client(ca_pem: Option<&[u8]>) -> Result<PoolClient, Bac
     PoolClient::new(&pool).map_err(|_| BackupDestinationError::TlsClient)
 }
 
-
-pub(crate) fn validate_ca_bundle(pem: &[u8]) -> Result<(), BackupDestinationConfigError> {    if pem.is_empty() || pem.len() > MAX_CA_BYTES {
+pub(crate) fn validate_ca_bundle(pem: &[u8]) -> Result<(), BackupDestinationConfigError> {
+    if pem.is_empty() || pem.len() > MAX_CA_BYTES {
         return Err(BackupDestinationConfigError::InvalidCa);
     }
     let mut reader = Cursor::new(pem);
@@ -122,8 +130,8 @@ pub(crate) fn validate_ca_bundle(pem: &[u8]) -> Result<(), BackupDestinationConf
         .ok_or(BackupDestinationConfigError::InvalidCa)
 }
 
-
-pub(crate) fn valid_bucket(value: &str) -> bool {    (3..=63).contains(&value.len())
+pub(crate) fn valid_bucket(value: &str) -> bool {
+    (3..=63).contains(&value.len())
         && value.bytes().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
         })

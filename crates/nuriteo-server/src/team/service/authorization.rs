@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::teams::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Transaction, pool::PoolConnection};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -34,7 +32,6 @@ use crate::project::{
     EffectiveProjectRole, ProjectAccessError, ProjectAccessRepository, ProjectId, ProjectRole,
 };
 
-
 use super::super::{
     NewTeam, Team, TeamAction, TeamAuthorization, TeamAuthorizationPrincipal, TeamConflict,
     TeamDisplayName, TeamId, TeamMemberPageKey, TeamMemberPageLimit, TeamMembership,
@@ -43,11 +40,13 @@ use super::super::{
     TeamProjectRolePageLimit, TeamProjectRoleVersion, TeamRepository, TeamRepositoryError,
     TeamRole, TeamSlug, TeamVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, TeamServicePolicy, TeamPrincipal, TeamAuditContext, TeamMutationResult, TeamServiceError, TeamService};
+use super::{
+    DEFAULT_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, TeamAuditContext,
+    TeamMutationResult, TeamPrincipal, TeamService, TeamServiceError, TeamServicePolicy,
+};
 
-
-
-pub(crate) async fn organization_authorization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn organization_authorization(
+    transaction: &mut Transaction<'_, Postgres>,
     principal: TeamPrincipal,
     organization_id: OrganizationId,
 ) -> Result<TeamAuthorization, TeamServiceError> {
@@ -81,8 +80,8 @@ pub(crate) async fn organization_authorization(    transaction: &mut Transaction
     Ok(TeamAuthorization::new(organization_id, status, principal))
 }
 
-
-pub(crate) async fn authorize_team(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_team(
+    transaction: &mut Transaction<'_, Postgres>,
     principal: TeamPrincipal,
     team: &Team,
     action: TeamAction,
@@ -129,8 +128,8 @@ pub(crate) async fn authorize_team(    transaction: &mut Transaction<'_, Postgre
     Ok(())
 }
 
-
-pub(crate) async fn lock_authorized_team(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_authorized_team(
+    transaction: &mut Transaction<'_, Postgres>,
     principal: TeamPrincipal,
     team_id: TeamId,
     action: TeamAction,
@@ -148,8 +147,8 @@ pub(crate) async fn lock_authorized_team(    transaction: &mut Transaction<'_, P
     Ok(team)
 }
 
-
-pub(crate) async fn lock_authorized_team_for_project(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_authorized_team_for_project(
+    transaction: &mut Transaction<'_, Postgres>,
     principal: TeamPrincipal,
     team_id: TeamId,
     project_id: ProjectId,
@@ -198,8 +197,8 @@ pub(crate) async fn lock_authorized_team_for_project(    transaction: &mut Trans
     Ok(team)
 }
 
-
-pub(crate) async fn lock_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), TeamServiceError> {
     let exists: Option<bool> = sqlx::query_scalar(
@@ -215,8 +214,8 @@ pub(crate) async fn lock_organization(    transaction: &mut Transaction<'_, Post
     Ok(())
 }
 
-
-pub(crate) async fn probe_team_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn probe_team_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     team_id: TeamId,
 ) -> Result<OrganizationId, TeamServiceError> {
     let value: String =
@@ -231,15 +230,18 @@ pub(crate) async fn probe_team_organization(    transaction: &mut Transaction<'_
         .map_err(|_| TeamServiceError::InvariantViolation)
 }
 
-
-pub(crate) fn ensure_team_version(team: &Team, expected: TeamVersion) -> Result<(), TeamServiceError> {    if team.lock_version() != expected {
+pub(crate) fn ensure_team_version(
+    team: &Team,
+    expected: TeamVersion,
+) -> Result<(), TeamServiceError> {
+    if team.lock_version() != expected {
         return Err(TeamServiceError::StaleVersion);
     }
     Ok(())
 }
 
-
-pub(crate) async fn lock_project(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_project(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     project_id: ProjectId,
 ) -> Result<(), TeamServiceError> {
@@ -259,8 +261,8 @@ pub(crate) async fn lock_project(    transaction: &mut Transaction<'_, Postgres>
     Ok(())
 }
 
-
-pub(crate) async fn lock_project_binding_mutations(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_project_binding_mutations(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), TeamServiceError> {
     sqlx::query("SELECT pg_advisory_xact_lock(1413827917, hashtext($1))")
@@ -271,8 +273,8 @@ pub(crate) async fn lock_project_binding_mutations(    transaction: &mut Transac
     Ok(())
 }
 
-
-pub(crate) async fn membership_version(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn membership_version(
+    transaction: &mut Transaction<'_, Postgres>,
     team_id: TeamId,
     user_id: UserId,
 ) -> Result<Option<i64>, TeamServiceError> {
@@ -286,8 +288,8 @@ pub(crate) async fn membership_version(    transaction: &mut Transaction<'_, Pos
     .map_err(map_sql_error)
 }
 
-
-pub(crate) async fn project_role_version(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn project_role_version(
+    transaction: &mut Transaction<'_, Postgres>,
     team_id: TeamId,
     project_id: ProjectId,
 ) -> Result<Option<i64>, TeamServiceError> {
@@ -301,16 +303,18 @@ pub(crate) async fn project_role_version(    transaction: &mut Transaction<'_, P
     .map_err(map_sql_error)
 }
 
-
-pub(crate) fn parse_organization_status(value: &str) -> Result<OrganizationStatus, TeamServiceError> {    match value {
+pub(crate) fn parse_organization_status(
+    value: &str,
+) -> Result<OrganizationStatus, TeamServiceError> {
+    match value {
         "active" => Ok(OrganizationStatus::Active),
         "archived" => Ok(OrganizationStatus::Archived),
         _ => Err(TeamServiceError::InvariantViolation),
     }
 }
 
-
-pub(crate) fn parse_membership(    organization_id: OrganizationId,
+pub(crate) fn parse_membership(
+    organization_id: OrganizationId,
     value: Option<&str>,
     status: OrganizationStatus,
 ) -> TeamOrganizationMembership {
@@ -332,20 +336,20 @@ pub(crate) fn parse_membership(    organization_id: OrganizationId,
     }
 }
 
-
-pub(crate) fn parse_team_role(value: &str) -> Result<TeamRole, TeamServiceError> {    match value {
+pub(crate) fn parse_team_role(value: &str) -> Result<TeamRole, TeamServiceError> {
+    match value {
         "maintainer" => Ok(TeamRole::Maintainer),
         "member" => Ok(TeamRole::Member),
         _ => Err(TeamServiceError::InvariantViolation),
     }
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "audit fields are explicit security context"
 )]
-pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     audit: &TeamAuditContext,
     occurred_at: Timestamp,
     team: &Team,
@@ -389,8 +393,8 @@ pub(crate) async fn append_audit(    transaction: &mut Transaction<'_, Postgres>
         .map_err(|_| TeamServiceError::AuditUnavailable)
 }
 
-
-pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transaction_now(
+    transaction: &mut Transaction<'_, Postgres>,
 ) -> Result<Timestamp, TeamServiceError> {
     let value: OffsetDateTime = sqlx::query_scalar("SELECT transaction_timestamp()")
         .fetch_one(&mut **transaction)
@@ -399,12 +403,12 @@ pub(crate) async fn transaction_now(    transaction: &mut Transaction<'_, Postgr
     Timestamp::from_datetime(value).map_err(|_| TeamServiceError::InvariantViolation)
 }
 
-
-pub(crate) async fn commit(transaction: Transaction<'_, Postgres>) -> Result<(), TeamServiceError> {    transaction.commit().await.map_err(map_sql_error)
+pub(crate) async fn commit(transaction: Transaction<'_, Postgres>) -> Result<(), TeamServiceError> {
+    transaction.commit().await.map_err(map_sql_error)
 }
 
-
-pub(crate) fn map_repository_error(error: TeamRepositoryError) -> TeamServiceError {    match error {
+pub(crate) fn map_repository_error(error: TeamRepositoryError) -> TeamServiceError {
+    match error {
         TeamRepositoryError::Conflict(TeamConflict::SlugUnavailable) => {
             TeamServiceError::DuplicateSlug
         }
@@ -426,8 +430,8 @@ pub(crate) fn map_repository_error(error: TeamRepositoryError) -> TeamServiceErr
     }
 }
 
-
-pub(crate) fn map_sql_error(error: sqlx::Error) -> TeamServiceError {    if error
+pub(crate) fn map_sql_error(error: sqlx::Error) -> TeamServiceError {
+    if error
         .as_database_error()
         .is_some_and(|database| matches!(database.code().as_deref(), Some("57014" | "55P03")))
     {
@@ -437,8 +441,8 @@ pub(crate) fn map_sql_error(error: sqlx::Error) -> TeamServiceError {    if erro
     }
 }
 
-
-pub(crate) fn map_project_access_error(error: ProjectAccessError) -> TeamServiceError {    match error {
+pub(crate) fn map_project_access_error(error: ProjectAccessError) -> TeamServiceError {
+    match error {
         ProjectAccessError::ProjectUnavailable
         | ProjectAccessError::ProjectNotOrganizationOwned => TeamServiceError::ProjectUnavailable,
         ProjectAccessError::MemberUnavailable => TeamServiceError::UserUnavailable,
@@ -448,4 +452,3 @@ pub(crate) fn map_project_access_error(error: ProjectAccessError) -> TeamService
         ProjectAccessError::InvalidPersistedState => TeamServiceError::InvariantViolation,
     }
 }
-

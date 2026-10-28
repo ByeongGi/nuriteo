@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::audit::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -12,7 +12,6 @@ use std::io;
 use std::path::Path;
 
 use std::time::Duration;
-
 
 use axum::Router;
 
@@ -62,14 +61,16 @@ use serde_json::{Value, json};
 
 use tower::ServiceExt;
 
+use super::{
+    Browser, DATABASE_CA_ENV, DATABASE_URL_ENV, NoFiles, ORIGIN_VALUE, PASSWORD, PASSWORD_HASH,
+    REQUEST_ID, SETTING_PATH, TestEnvironment,
+};
 use url::Url;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, ORIGIN_VALUE, REQUEST_ID, PASSWORD, PASSWORD_HASH, SETTING_PATH, Browser, TestEnvironment, NoFiles};
-
-
 
 #[tokio::test]
 #[ignore = "requires the pinned custom-CA PostgreSQL fixture; run tests/fixtures/postgres-admin-http/run.sh"]
-pub(crate) async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {    let pool = fixture_pool().await;
+pub(crate) async fn admin_settings_audit_and_operations_http_are_safe_and_transactional() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
         &pool,
@@ -435,8 +436,8 @@ pub(crate) async fn admin_settings_audit_and_operations_http_are_safe_and_transa
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) async fn verify_complete_snapshot_validation(    router: &Router,
+pub(crate) async fn verify_complete_snapshot_validation(
+    router: &Router,
     pool: &DatabasePool,
     admin: &Browser,
 ) {
@@ -524,8 +525,8 @@ pub(crate) async fn verify_complete_snapshot_validation(    router: &Router,
     assert_eq!(unchanged, ("336".into(), 2));
 }
 
-
-pub(crate) async fn verify_concurrent_cross_field_updates(    router: &Router,
+pub(crate) async fn verify_concurrent_cross_field_updates(
+    router: &Router,
     pool: &DatabasePool,
     admin: &Browser,
 ) {
@@ -582,8 +583,12 @@ pub(crate) async fn verify_concurrent_cross_field_updates(    router: &Router,
     );
 }
 
-
-pub(crate) async fn verify_setting_audit_rollback(router: &Router, pool: &DatabasePool, admin: &Browser) {    sqlx::query(
+pub(crate) async fn verify_setting_audit_rollback(
+    router: &Router,
+    pool: &DatabasePool,
+    admin: &Browser,
+) {
+    sqlx::query(
         "CREATE FUNCTION reject_setting_audit() RETURNS trigger LANGUAGE plpgsql AS $$ \
          BEGIN IF NEW.action_code = 'instance.setting_updated' THEN RAISE EXCEPTION 'fixture rejection'; \
          END IF; RETURN NEW; END $$",

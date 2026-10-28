@@ -1,8 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::project_http::*;
+use super::*;
 use std::str::FromStr;
-
 
 use axum::Json;
 
@@ -26,7 +25,6 @@ use utoipa::ToSchema;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-
 use crate::http::{FieldViolation, HttpError, RequestId};
 
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
@@ -37,7 +35,6 @@ use crate::save::{
     ContentDescriptor, HistoricalReferenceKind, IdempotencyKey, ProjectVersionName,
     ProjectVersionPageLimit,
 };
-
 
 use super::super::http_service::{
     HistoricalPromotionView, ProjectHttpError, ProjectHttpService, ProjectListView,
@@ -50,10 +47,14 @@ use super::super::{
     ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
 
+use super::{
+    ARCHIVE, BrowserHeaders, COLLECTION, CONTENT, CONTENT_DOWNLOAD, CSRF, ChangeRoleRequest,
+    CreateProjectRequest, CreateVersionRequest, DeleteProjectRequest, GrantRoleRequest,
+    HISTORY_RESTORE, IDEMPOTENCY_KEY, ITEM, ListQuery, MAX_AUTHORIZATION_BYTES, MAX_BODY,
+    MAX_QUERY, ORIGIN, ProjectBundleBinary, PromoteHistoryRequest, RECOVERY_CHECKPOINTS, RESTORE,
+    ROLE, ROLES, RenameProjectRequest, VERSIONS, VersionListQuery,
+};
 use crate::access_token::{AccessTokenScope, ApiCategory};
-use super::{COLLECTION, ITEM, ARCHIVE, RESTORE, ROLES, ROLE, CONTENT, CONTENT_DOWNLOAD, VERSIONS, RECOVERY_CHECKPOINTS, HISTORY_RESTORE, MAX_BODY, MAX_QUERY, MAX_AUTHORIZATION_BYTES, ORIGIN, CSRF, IDEMPOTENCY_KEY, CreateVersionRequest, PromoteHistoryRequest, ProjectBundleBinary, CreateProjectRequest, RenameProjectRequest, DeleteProjectRequest, GrantRoleRequest, ChangeRoleRequest, BrowserHeaders, ListQuery, VersionListQuery};
-
-
 
 #[utoipa::path(patch, path = ROLE, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)), request_body(content = ChangeRoleRequest, content_type = "application/json"), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -67,7 +68,8 @@ use super::{COLLECTION, ITEM, ARCHIVE, RESTORE, ROLES, ROLE, CONTENT, CONTENT_DO
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn change_role(    State(service): State<ProjectHttpService>,
+pub(crate) async fn change_role(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id, user_id)): Path<(String, String, String, String)>,
     request: Request,
@@ -89,7 +91,6 @@ pub(crate) async fn change_role(    State(service): State<ProjectHttpService>,
     .await
 }
 
-
 #[utoipa::path(delete, path = ROLE, tag = "project-roles", security(("projectSessionCookie" = [])), params(("owner_type" = String, Path), ("owner_id" = String, Path), ("project_id" = String, Path), ("user_id" = String, Path), ("If-Match" = String, Header), ("Origin" = String, Header), ("X-CSRF-Token" = String, Header)), responses((status = 200, body = ProjectRoleMutationView, headers(("ETag" = String))),
     (status = 401, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 403, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
@@ -100,7 +101,8 @@ pub(crate) async fn change_role(    State(service): State<ProjectHttpService>,
     (status = 428, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 503, body = crate::openapi::ProblemDetails, content_type = "application/problem+json"),
     (status = 504, body = crate::openapi::ProblemDetails, content_type = "application/problem+json")))]
-pub(crate) async fn revoke_role(    State(service): State<ProjectHttpService>,
+pub(crate) async fn revoke_role(
+    State(service): State<ProjectHttpService>,
     Extension(request_id): Extension<RequestId>,
     Path((owner_type, owner_id, project_id, user_id)): Path<(String, String, String, String)>,
     request: Request,
@@ -121,12 +123,12 @@ pub(crate) async fn revoke_role(    State(service): State<ProjectHttpService>,
     .await
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "role HTTP security inputs stay explicit"
 )]
-pub(crate) async fn role_mutation(    service: ProjectHttpService,
+pub(crate) async fn role_mutation(
+    service: ProjectHttpService,
     request_id: RequestId,
     (owner_type, owner_id, project_id): (String, String, String),
     headers: HeaderMap,
@@ -156,7 +158,12 @@ pub(crate) async fn role_mutation(    service: ProjectHttpService,
 }
 
 impl<'a> BrowserHeaders<'a> {
-    pub(crate) fn read(headers: &'a HeaderMap, request_id: &RequestId, path: &str) -> Result<Self, HttpError> { pub(crate) fn values<'a>(
+    pub(crate) fn read(
+        headers: &'a HeaderMap,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<Self, HttpError> {
+        pub(crate) fn values<'a>(
             headers: &'a HeaderMap,
             name: HeaderName,
             request_id: &RequestId,
@@ -188,8 +195,8 @@ impl<'a> BrowserHeaders<'a> {
     }
 }
 
-
-pub(crate) fn bearer_token<'a>(    headers: &'a HeaderMap,
+pub(crate) fn bearer_token<'a>(
+    headers: &'a HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<Option<&'a str>, HttpError> {
@@ -216,7 +223,11 @@ pub(crate) fn bearer_token<'a>(    headers: &'a HeaderMap,
 }
 
 impl ListQuery {
-    pub(crate) fn parse(raw: Option<&str>, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+    pub(crate) fn parse(
+        raw: Option<&str>,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<Self, HttpError> {
         let raw = raw.unwrap_or_default();
         if raw.len() > MAX_QUERY {
             return Err(validation(request_id, path, "query"));
@@ -296,9 +307,12 @@ impl ListQuery {
     }
 }
 
-
 impl VersionListQuery {
-    pub(crate) fn parse(raw: Option<&str>, request_id: &RequestId, path: &str) -> Result<Self, HttpError> {
+    pub(crate) fn parse(
+        raw: Option<&str>,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<Self, HttpError> {
         let raw = raw.unwrap_or_default();
         if raw.len() > MAX_QUERY {
             return Err(validation(request_id, path, "query"));
@@ -347,8 +361,8 @@ impl VersionListQuery {
     }
 }
 
-
-pub(crate) async fn json_body<T: DeserializeOwned>(    headers: &HeaderMap,
+pub(crate) async fn json_body<T: DeserializeOwned>(
+    headers: &HeaderMap,
     body: Body,
     request_id: &RequestId,
     path: &str,
@@ -370,8 +384,8 @@ pub(crate) async fn json_body<T: DeserializeOwned>(    headers: &HeaderMap,
     serde_json::from_slice(&bytes).map_err(|_| validation(request_id, path, "body"))
 }
 
-
-pub(crate) fn parse_owner(    owner_type: &str,
+pub(crate) fn parse_owner(
+    owner_type: &str,
     owner_id: &str,
     request_id: &RequestId,
     path: &str,
@@ -387,7 +401,8 @@ pub(crate) fn parse_owner(    owner_type: &str,
     }
 }
 
-pub(crate) fn parse_project_id(    value: &str,
+pub(crate) fn parse_project_id(
+    value: &str,
     request_id: &RequestId,
     path: &str,
 ) -> Result<ProjectId, HttpError> {
@@ -396,13 +411,18 @@ pub(crate) fn parse_project_id(    value: &str,
         .map_err(|_| validation(request_id, path, "projectId"))
 }
 
-pub(crate) fn parse_user_id(value: &str, request_id: &RequestId, path: &str) -> Result<UserId, HttpError> {    value
+pub(crate) fn parse_user_id(
+    value: &str,
+    request_id: &RequestId,
+    path: &str,
+) -> Result<UserId, HttpError> {
+    value
         .parse()
         .map_err(|_| validation(request_id, path, "userId"))
 }
 
-
-pub(crate) fn parse_if_match(    headers: &HeaderMap,
+pub(crate) fn parse_if_match(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<ProjectVersion, HttpError> {
@@ -429,8 +449,8 @@ pub(crate) fn parse_if_match(    headers: &HeaderMap,
     Ok(version)
 }
 
-
-pub(crate) fn parse_idempotency_key(    headers: &HeaderMap,
+pub(crate) fn parse_idempotency_key(
+    headers: &HeaderMap,
     request_id: &RequestId,
     path: &str,
 ) -> Result<IdempotencyKey, HttpError> {
@@ -445,8 +465,8 @@ pub(crate) fn parse_idempotency_key(    headers: &HeaderMap,
         .map_err(|_| validation(request_id, path, "Idempotency-Key"))
 }
 
-
-pub(crate) fn project_response(    status: StatusCode,
+pub(crate) fn project_response(
+    status: StatusCode,
     view: ProjectView,
     location: bool,
     request_id: RequestId,
@@ -473,14 +493,15 @@ pub(crate) fn project_response(    status: StatusCode,
     Ok(response)
 }
 
-
-pub(crate) fn private_no_store(mut response: Response) -> Response {    response
+pub(crate) fn private_no_store(mut response: Response) -> Response {
+    response
         .headers_mut()
         .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
     response
 }
 
-pub(crate) fn role_response(    status: StatusCode,
+pub(crate) fn role_response(
+    status: StatusCode,
     view: ProjectRoleMutationView,
     request_id: RequestId,
     path: &str,
@@ -491,7 +512,8 @@ pub(crate) fn role_response(    status: StatusCode,
     Ok(response)
 }
 
-pub(crate) fn insert_etag(    headers: &mut HeaderMap,
+pub(crate) fn insert_etag(
+    headers: &mut HeaderMap,
     version: i64,
     request_id: &RequestId,
     path: &str,
@@ -504,8 +526,8 @@ pub(crate) fn insert_etag(    headers: &mut HeaderMap,
     Ok(())
 }
 
-
-pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {    HttpError::validation(
+pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> HttpError {
+    HttpError::validation(
         request_id.clone(),
         path,
         [FieldViolation::new(
@@ -516,7 +538,8 @@ pub(crate) fn validation(request_id: &RequestId, path: &str, field: &str) -> Htt
     )
 }
 
-pub(crate) fn map_error(error: ProjectHttpError, request_id: RequestId, path: &str) -> HttpError {    match error {
+pub(crate) fn map_error(error: ProjectHttpError, request_id: RequestId, path: &str) -> HttpError {
+    match error {
         ProjectHttpError::AuthenticationFailed => HttpError::authentication(request_id, path),
         ProjectHttpError::Forbidden => HttpError::forbidden(request_id, path),
         ProjectHttpError::ConfirmationRequired => validation(&request_id, path, "name"),

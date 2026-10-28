@@ -1,10 +1,9 @@
 #![allow(unused_imports)]
-use super::*;
 use super::retention::*;
+use super::*;
 use std::net::IpAddr;
 
 use std::str::FromStr;
-
 
 use base64::Engine as _;
 
@@ -20,7 +19,6 @@ use time::OffsetDateTime;
 
 use utoipa::ToSchema;
 
-
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
     AuditScope, AuditTarget, AuditWriter, ScopeType,
@@ -28,15 +26,22 @@ use crate::audit::{
 
 use crate::identity::{BrowserRequestHeaders, Timestamp, UserId};
 
-
-use super::super::http_service::{AdminRuntime, AdminSession, AuditActorIdentity, authorize_recent_admin};
+use super::super::http_service::{
+    AdminRuntime, AdminSession, AuditActorIdentity, authorize_recent_admin,
+};
 
 use super::super::{AdminHttpService, AdminHttpServiceError};
-use super::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MAX_EXPORT_EVENTS, MAX_EXPORT_BYTES, MAX_PRUNE_LIMIT, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS, SHORT_RETENTION_WARNING_DAYS, MAX_CURSOR_BYTES, AdminAuditListInput, AdminAuditExportFormat, AdminAuditExportInput, AdminAuditEventView, AdminAuditEventCollectionView, AdminAuditRetentionPreview, AdminAuditRetentionPruneView, AdminAuditExportView, AuditCursor, DecodedCursor, AuditPage, AUDIT_SELECT_BY_ID, AUDIT_LIST_QUERY};
+use super::{
+    AUDIT_LIST_QUERY, AUDIT_SELECT_BY_ID, AdminAuditEventCollectionView, AdminAuditEventView,
+    AdminAuditExportFormat, AdminAuditExportInput, AdminAuditExportView, AdminAuditListInput,
+    AdminAuditRetentionPreview, AdminAuditRetentionPruneView, AuditCursor, AuditPage,
+    DEFAULT_PAGE_SIZE, DecodedCursor, MAX_CURSOR_BYTES, MAX_EXPORT_BYTES, MAX_EXPORT_EVENTS,
+    MAX_PAGE_SIZE, MAX_PRUNE_LIMIT, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS,
+    SHORT_RETENTION_WARNING_DAYS,
+};
 
-
-
-impl Default for super::AdminAuditListInput { fn default() -> Self {
+impl Default for super::AdminAuditListInput {
+    fn default() -> Self {
         Self {
             from: None,
             to: None,
@@ -53,7 +58,6 @@ impl Default for super::AdminAuditListInput { fn default() -> Self {
         }
     }
 }
-
 
 impl AdminHttpService {
     pub(crate) async fn list_audit_events(
@@ -223,8 +227,8 @@ impl AdminHttpService {
     }
 }
 
-
-pub(crate) async fn query_page(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn query_page(
+    transaction: &mut Transaction<'_, Postgres>,
     input: &AdminAuditListInput,
 ) -> Result<AuditPage, AdminHttpServiceError> {
     let cursor = input.cursor.as_deref().map(decode_cursor).transpose()?;
@@ -262,8 +266,8 @@ pub(crate) async fn query_page(    transaction: &mut Transaction<'_, Postgres>,
     Ok(AuditPage { items, next_cursor })
 }
 
-
-pub(crate) fn validate_input(    input: &AdminAuditListInput,
+pub(crate) fn validate_input(
+    input: &AdminAuditListInput,
     maximum_limit: u16,
 ) -> Result<(), AdminHttpServiceError> {
     if !(1..=maximum_limit).contains(&input.limit)
@@ -303,8 +307,8 @@ pub(crate) fn validate_input(    input: &AdminAuditListInput,
     Ok(())
 }
 
-
-pub(crate) fn validate_optional_enum(    value: Option<&str>,
+pub(crate) fn validate_optional_enum(
+    value: Option<&str>,
     allowed: &[&str],
 ) -> Result<(), AdminHttpServiceError> {
     if value.is_some_and(|value| !allowed.contains(&value)) {
@@ -313,8 +317,8 @@ pub(crate) fn validate_optional_enum(    value: Option<&str>,
     Ok(())
 }
 
-
-pub(crate) fn valid_code(value: &str, maximum: usize) -> bool {    let mut bytes = value.bytes();
+pub(crate) fn valid_code(value: &str, maximum: usize) -> bool {
+    let mut bytes = value.bytes();
     matches!(bytes.next(), Some(b'a'..=b'z'))
         && value.len() <= maximum
         && bytes.all(|byte| {
@@ -322,14 +326,14 @@ pub(crate) fn valid_code(value: &str, maximum: usize) -> bool {    let mut bytes
         })
 }
 
-
-pub(crate) fn valid_text(value: &str, maximum: usize) -> bool {    value == value.trim_matches(' ')
+pub(crate) fn valid_text(value: &str, maximum: usize) -> bool {
+    value == value.trim_matches(' ')
         && (1..=maximum).contains(&value.chars().count())
         && !value.chars().any(char::is_control)
 }
 
-
-pub(crate) fn decode_cursor(value: &str) -> Result<DecodedCursor, AdminHttpServiceError> {    if value.len() > MAX_CURSOR_BYTES || value.is_empty() {
+pub(crate) fn decode_cursor(value: &str) -> Result<DecodedCursor, AdminHttpServiceError> {
+    if value.len() > MAX_CURSOR_BYTES || value.is_empty() {
         return Err(AdminHttpServiceError::InvalidAuditQuery);
     }
     let bytes = URL_SAFE_NO_PAD
@@ -359,8 +363,8 @@ pub(crate) fn decode_cursor(value: &str) -> Result<DecodedCursor, AdminHttpServi
     Ok(DecodedCursor { occurred_at, id })
 }
 
-
-pub(crate) fn encode_cursor(event: &AdminAuditEventView) -> Result<String, AdminHttpServiceError> {    let cursor = AuditCursor {
+pub(crate) fn encode_cursor(event: &AdminAuditEventView) -> Result<String, AdminHttpServiceError> {
+    let cursor = AuditCursor {
         occurred_at: event.occurred_at.clone(),
         id: event.id.clone(),
     };
@@ -369,8 +373,10 @@ pub(crate) fn encode_cursor(event: &AdminAuditEventView) -> Result<String, Admin
         .map_err(|_| AdminHttpServiceError::Internal)
 }
 
-
-pub(crate) fn decode_event(row: &sqlx::postgres::PgRow) -> Result<AdminAuditEventView, AdminHttpServiceError> {    let id: String = row
+pub(crate) fn decode_event(
+    row: &sqlx::postgres::PgRow,
+) -> Result<AdminAuditEventView, AdminHttpServiceError> {
+    let id: String = row
         .try_get("id")
         .map_err(|_| AdminHttpServiceError::Internal)?;
     let event_id = id.parse().map_err(|_| AdminHttpServiceError::Internal)?;
@@ -498,8 +504,8 @@ pub(crate) fn decode_event(row: &sqlx::postgres::PgRow) -> Result<AdminAuditEven
     })
 }
 
-
-pub(crate) fn actor_type_from_str(value: &str) -> Result<ActorType, AdminHttpServiceError> {    match value {
+pub(crate) fn actor_type_from_str(value: &str) -> Result<ActorType, AdminHttpServiceError> {
+    match value {
         "user" => Ok(ActorType::User),
         "system" => Ok(ActorType::System),
         "bootstrap" => Ok(ActorType::Bootstrap),
@@ -509,8 +515,8 @@ pub(crate) fn actor_type_from_str(value: &str) -> Result<ActorType, AdminHttpSer
     }
 }
 
-
-pub(crate) fn scope_type_from_str(value: &str) -> Result<ScopeType, AdminHttpServiceError> {    match value {
+pub(crate) fn scope_type_from_str(value: &str) -> Result<ScopeType, AdminHttpServiceError> {
+    match value {
         "instance" => Ok(ScopeType::Instance),
         "workspace" => Ok(ScopeType::Workspace),
         "organization" => Ok(ScopeType::Organization),
@@ -520,8 +526,8 @@ pub(crate) fn scope_type_from_str(value: &str) -> Result<ScopeType, AdminHttpSer
     }
 }
 
-
-pub(crate) fn result_from_str(value: &str) -> Result<AuditResult, AdminHttpServiceError> {    match value {
+pub(crate) fn result_from_str(value: &str) -> Result<AuditResult, AdminHttpServiceError> {
+    match value {
         "succeeded" => Ok(AuditResult::Succeeded),
         "denied" => Ok(AuditResult::Denied),
         "failed" => Ok(AuditResult::Failed),
@@ -529,8 +535,8 @@ pub(crate) fn result_from_str(value: &str) -> Result<AuditResult, AdminHttpServi
     }
 }
 
-
-pub(crate) async fn authorize_admin(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_admin(
+    transaction: &mut Transaction<'_, Postgres>,
     session: AdminSession,
 ) -> Result<AuditActorIdentity, AdminHttpServiceError> {
     let row = sqlx::query(
@@ -562,8 +568,8 @@ pub(crate) async fn authorize_admin(    transaction: &mut Transaction<'_, Postgr
     })
 }
 
-
-pub(crate) fn encode_export(    events: &[AdminAuditEventView],
+pub(crate) fn encode_export(
+    events: &[AdminAuditEventView],
     format: AdminAuditExportFormat,
 ) -> Result<Vec<u8>, AdminHttpServiceError> {
     let mut output = Vec::new();
@@ -583,8 +589,8 @@ pub(crate) fn encode_export(    events: &[AdminAuditEventView],
     Ok(output)
 }
 
-
-pub(crate) fn encode_csv(    events: &[AdminAuditEventView],
+pub(crate) fn encode_csv(
+    events: &[AdminAuditEventView],
     output: &mut Vec<u8>,
 ) -> Result<(), AdminHttpServiceError> {
     output.extend_from_slice(b"id,occurred_at,actor_type,actor_id,actor_display_name,action_code,target_type,target_id,scope_type,scope_id,result,reason_code,correlation_id,source_ip,schema_version,changed_fields,metadata\r\n");
@@ -626,8 +632,8 @@ pub(crate) fn encode_csv(    events: &[AdminAuditEventView],
     Ok(())
 }
 
-
-pub(crate) fn csv_cell(value: &str) -> String {    let formula_safe = if value
+pub(crate) fn csv_cell(value: &str) -> String {
+    let formula_safe = if value
         .as_bytes()
         .first()
         .is_some_and(|byte| matches!(byte, b'=' | b'+' | b'-' | b'@'))
@@ -639,8 +645,8 @@ pub(crate) fn csv_cell(value: &str) -> String {    let formula_safe = if value
     format!("\"{}\"", formula_safe.replace('"', "\"\""))
 }
 
-
-pub(crate) async fn append_export_audit(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_export_audit(
+    transaction: &mut Transaction<'_, Postgres>,
     actor: &AuditActorIdentity,
     correlation_id: &str,
     format: AdminAuditExportFormat,
@@ -660,8 +666,8 @@ pub(crate) async fn append_export_audit(    transaction: &mut Transaction<'_, Po
     .await
 }
 
-
-pub(crate) async fn prune_retention(    runtime: &AdminRuntime,
+pub(crate) async fn prune_retention(
+    runtime: &AdminRuntime,
     session: AdminSession,
     limit: u16,
     correlation_id: &str,

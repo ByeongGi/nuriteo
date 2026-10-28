@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::access_tokens::*;
 use super::schema_probes::*;
+use super::*;
 use std::borrow::Cow;
 
 use std::env;
@@ -10,11 +10,9 @@ use std::fs;
 
 use std::str::FromStr;
 
-
 use sqlx::migrate::{Migration, MigrationType};
 
 use sqlx::{Acquire, SqlSafeStr};
-
 
 use super::super::*;
 
@@ -30,13 +28,12 @@ use crate::published_example::{
     PublishedExampleState, PublishedExampleVisibility,
 };
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
 use crate::save::ProjectVersionId;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
-
-
 
 #[test]
-pub(crate) fn validates_migration_deadlines() {    assert_eq!(
+pub(crate) fn validates_migration_deadlines() {
+    assert_eq!(
         MigrationOptions::new(Duration::from_millis(99), Duration::from_secs(1)),
         Err(MigrationError::InvalidLockWaitTimeout)
     );
@@ -46,9 +43,9 @@ pub(crate) fn validates_migration_deadlines() {    assert_eq!(
     );
 }
 
-
 #[test]
-pub(crate) fn embedded_baseline_is_forward_only_and_framework_scoped() {    let embedded = embedded_migrator();
+pub(crate) fn embedded_baseline_is_forward_only_and_framework_scoped() {
+    let embedded = embedded_migrator();
     let migrations: Vec<_> = embedded.iter().collect();
     assert_eq!(migrations.len(), 51);
     assert_eq!(
@@ -70,9 +67,9 @@ pub(crate) fn embedded_baseline_is_forward_only_and_framework_scoped() {    let 
     }
 }
 
-
 #[test]
-pub(crate) fn git_materialization_migration_preserves_destination_provenance_and_cleanup_ledger() {    assert!(
+pub(crate) fn git_materialization_migration_preserves_destination_provenance_and_cleanup_ledger() {
+    assert!(
         GIT_WORKING_HEAD_MATERIALIZATIONS_SQL
             .contains("fork.destination_bundle_id = NEW.bundle_id")
     );
@@ -87,9 +84,9 @@ pub(crate) fn git_materialization_migration_preserves_destination_provenance_and
     );
 }
 
-
 #[test]
-pub(crate) fn invitation_delivery_rotation_is_forward_only_and_guarded_in_database() {    for relation in ["activation_invitations", "organization_invitations"] {
+pub(crate) fn invitation_delivery_rotation_is_forward_only_and_guarded_in_database() {
+    for relation in ["activation_invitations", "organization_invitations"] {
         assert!(INVITATION_DELIVERY_TOKENS_SQL.contains(&format!(
             "ALTER TABLE {relation}\n    ADD COLUMN delivery_token_generation"
         )));
@@ -114,9 +111,9 @@ pub(crate) fn invitation_delivery_rotation_is_forward_only_and_guarded_in_databa
     );
 }
 
-
 #[test]
-pub(crate) fn migration_errors_expose_only_stable_categories() {    let error = MigrationError::ExecutionFailed {
+pub(crate) fn migration_errors_expose_only_stable_categories() {
+    let error = MigrationError::ExecutionFailed {
         version: Some(8),
         category: DatabaseErrorCategory::Internal,
     };
@@ -126,10 +123,10 @@ pub(crate) fn migration_errors_expose_only_stable_categories() {    let error = 
     assert_eq!(error.to_string(), "migration 8 execution failed (internal)");
 }
 
-
 #[tokio::test]
 #[ignore = "requires the pinned PostgreSQL TLS fixture; run tests/fixtures/postgres-migrations/run.sh"]
-pub(crate) async fn real_postgres_serializes_validates_rolls_back_and_retries() {    let pool = fixture_pool().await;
+pub(crate) async fn real_postgres_serializes_validates_rolls_back_and_retries() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let normal = options(Duration::from_secs(3), Duration::from_secs(10));
 
@@ -335,8 +332,8 @@ pub(crate) async fn real_postgres_serializes_validates_rolls_back_and_retries() 
         .unwrap_or_else(|error| panic!("fixture pool must close: {error}"));
 }
 
-
-pub(crate) async fn verify_invitation_delivery_rotation_invariants(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn verify_invitation_delivery_rotation_invariants(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     sqlx::query(
         "INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES
          ('0199ee6c-c777-7000-8000-000000009501','delivery-admin@example.test',
@@ -449,8 +446,8 @@ pub(crate) async fn verify_invitation_delivery_rotation_invariants(pool: &Databa
     );
 }
 
-
-pub(crate) async fn verify_published_example_lifecycle(pool: &DatabasePool) {    const USER: &str = "0199ee6c-c777-7000-8000-000000008001";
+pub(crate) async fn verify_published_example_lifecycle(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000008001";
     const SCOPE: &str = "0199ee6c-c777-7000-8000-000000008010";
     const PROJECT: &str = "0199ee6c-c777-7000-8000-000000008020";
     const BUNDLE_ONE: &str = "0199ee6c-c777-7000-8000-000000008030";
@@ -663,8 +660,8 @@ pub(crate) async fn verify_published_example_lifecycle(pool: &DatabasePool) {   
     assert_eq!(tombstones, 1);
 }
 
-
-pub(crate) async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
+pub(crate) async fn verify_save_upload_lease_delete_fence(pool: &DatabasePool) {
+    const USER: &str = "0199ee6c-c777-7000-8000-000000009001";
     const SCOPE: &str = "0199ee6c-c777-7000-8000-000000009010";
     const PROJECT: &str = "0199ee6c-c777-7000-8000-000000009020";
     const SESSION: &str = "0199ee6c-c777-7000-8000-000000009030";

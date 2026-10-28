@@ -20,3 +20,12 @@ debug = 0
 
 [profile.dev.package.system-wasm]
 debug = 0
+
+# Opt in from a crate with `[lints] workspace = true`. These denies stay off
+# `nuriteo-server` because `cargo clippy --workspace -- -D warnings` would
+# otherwise fail on that crate's existing public API.
+[workspace.lints.rust]
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+cast_possible_truncation = "deny"

@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::policy::*;
+use super::*;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
 use serde::{Serialize, Serializer};
@@ -27,7 +27,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -38,16 +37,19 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::super::{
     EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaIdempotencyKey, MfaService,
     MfaServiceError, RecoveryCode, TotpCode,
 };
-use super::{MAX_POLICY_TARGETS, ENROLLMENT_ISSUER, POLICY_POPULATION_DOMAIN, MfaHttpServiceError, MfaStatusView, MfaEnrollmentStartView, MfaEnrollmentCompleteView, MfaPolicyView, MfaPolicyImpactView, MfaResetTargetView, MfaResetTargetCollectionView, RotatedMfaResponse, SecretText, MfaHttpService, MfaHttpRuntime};
+use super::{
+    ENROLLMENT_ISSUER, MAX_POLICY_TARGETS, MfaEnrollmentCompleteView, MfaEnrollmentStartView,
+    MfaHttpRuntime, MfaHttpService, MfaHttpServiceError, MfaPolicyImpactView, MfaPolicyView,
+    MfaResetTargetCollectionView, MfaResetTargetView, MfaStatusView, POLICY_POPULATION_DOMAIN,
+    RotatedMfaResponse, SecretText,
+};
 
-
-
-impl fmt::Display for super::MfaHttpServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for super::MfaHttpServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::AuthenticationFailed => "MFA authentication failed",
             Self::Forbidden => "MFA operation is forbidden",
@@ -63,11 +65,10 @@ impl fmt::Display for super::MfaHttpServiceError { fn fmt(&self, formatter: &mut
     }
 }
 
-
 impl std::error::Error for MfaHttpServiceError {}
 
-
-impl fmt::Debug for MfaEnrollmentStartView { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for MfaEnrollmentStartView {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MfaEnrollmentStartView")
             .field("credential_id", &self.credential_id)
@@ -77,12 +78,11 @@ impl fmt::Debug for MfaEnrollmentStartView { fn fmt(&self, formatter: &mut fmt::
     }
 }
 
-
-impl fmt::Debug for MfaEnrollmentCompleteView { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for MfaEnrollmentCompleteView {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("MfaEnrollmentCompleteView { recovery_codes: [REDACTED] }")
     }
 }
-
 
 impl SecretText {
     pub(crate) fn new(value: String) -> Self {
@@ -94,8 +94,8 @@ impl SecretText {
     }
 }
 
-
-impl Serialize for SecretText { fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+impl Serialize for SecretText {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -103,21 +103,20 @@ impl Serialize for SecretText { fn serialize<S>(&self, serializer: S) -> Result<
     }
 }
 
-
-impl fmt::Debug for SecretText { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for SecretText {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SecretText([REDACTED])")
     }
 }
 
-
-impl fmt::Debug for MfaHttpService { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for MfaHttpService {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("MfaHttpService")
             .field("configured", &self.runtime.is_some())
             .finish()
     }
 }
-
 
 impl MfaHttpService {
     #[must_use]
@@ -520,7 +519,6 @@ impl MfaHttpService {
     }
 }
 
-
 impl MfaHttpRuntime {
     pub(crate) fn validate_browser(
         &self,
@@ -583,8 +581,8 @@ impl MfaHttpRuntime {
     }
 }
 
-
-pub(crate) fn enrollment_view(    started: EnrollmentStart,
+pub(crate) fn enrollment_view(
+    started: EnrollmentStart,
     account_email: &str,
 ) -> Result<MfaEnrollmentStartView, MfaHttpServiceError> {
     let secret = base32(started.secret.expose_to_http_adapter());
@@ -601,8 +599,8 @@ pub(crate) fn enrollment_view(    started: EnrollmentStart,
     })
 }
 
-
-pub(crate) fn base32(bytes: &[u8]) -> Zeroizing<String> {    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+pub(crate) fn base32(bytes: &[u8]) -> Zeroizing<String> {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     let mut output = String::with_capacity((bytes.len() * 8).div_ceil(5));
     let mut buffer = 0_u32;
     let mut bits = 0_u8;
@@ -620,8 +618,11 @@ pub(crate) fn base32(bytes: &[u8]) -> Zeroizing<String> {    const ALPHABET: &[u
     Zeroizing::new(output)
 }
 
-
-pub(crate) async fn require_admin(pool: &DatabasePool, user_id: UserId) -> Result<(), MfaHttpServiceError> {    let mut connection = pool
+pub(crate) async fn require_admin(
+    pool: &DatabasePool,
+    user_id: UserId,
+) -> Result<(), MfaHttpServiceError> {
+    let mut connection = pool
         .acquire()
         .await
         .map_err(|_| MfaHttpServiceError::Unavailable)?;
@@ -640,8 +641,8 @@ pub(crate) async fn require_admin(pool: &DatabasePool, user_id: UserId) -> Resul
     }
 }
 
-
-pub(crate) async fn ensure_user_requirement(    pool: &DatabasePool,
+pub(crate) async fn ensure_user_requirement(
+    pool: &DatabasePool,
     user_id: UserId,
 ) -> Result<(), MfaHttpServiceError> {
     let mut connection = pool
@@ -729,8 +730,8 @@ pub(crate) async fn ensure_user_requirement(    pool: &DatabasePool,
         .map_err(|_| MfaHttpServiceError::Unavailable)
 }
 
-
-pub(crate) async fn authorize_recent_admin(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_recent_admin(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     session_id: crate::identity::SessionId,
 ) -> Result<(), MfaHttpServiceError> {

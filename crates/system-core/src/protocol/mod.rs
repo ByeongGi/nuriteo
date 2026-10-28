@@ -1,16 +1,57 @@
+/// Wire constants produced from the protocol schema.
 pub mod generated;
+
+use std::{
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
 
 use generated::{ABI_VERSION, HEADER_LENGTH, MAGIC, MAX_PAYLOAD_LENGTH, errors, opcodes, status};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Why a guest frame was rejected.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WireError {
+    /// The frame bytes break a structural rule. The string is the guest sentence.
     BadMessage(&'static str),
+    /// The frame is structurally readable but not acceptable. The string is the guest sentence.
     Invalid(&'static str),
+    /// The opcode is outside the implemented set.
     NotImplemented(u16),
+    /// The declared payload is longer than the ABI maximum.
     PayloadTooLarge,
 }
 
+impl Display for WireError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadMessage(message) | Self::Invalid(message) => formatter.write_str(message),
+            Self::NotImplemented(opcode) => {
+                write!(formatter, "opcode {opcode} is not implemented")
+            }
+            Self::PayloadTooLarge => formatter.write_str("payload exceeds the maximum length"),
+        }
+    }
+}
+
+impl Error for WireError {}
+
 impl WireError {
+    /// Static guest sentence for this decode failure.
+    ///
+    /// [`WireError::NotImplemented`] keeps one stable generic sentence because
+    /// the opcode number is not a fixed string.
+    #[must_use]
+    pub const fn guest_message(&self) -> &'static str {
+        match self {
+            Self::BadMessage(message) | Self::Invalid(message) => message,
+            Self::PayloadTooLarge => "payload exceeds the maximum length",
+            Self::NotImplemented(_) => "invalid wire request",
+        }
+    }
+
+    /// Returns the numeric errno for this decode failure.
+    #[must_use]
     pub fn code(&self) -> u16 {
         match self {
             WireError::BadMessage(_) => errors::EBADMSG,
@@ -21,13 +62,20 @@ impl WireError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Decoded header fields and borrowed payload of one frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WireFrame<'a> {
+    /// Caller-chosen id copied into the response.
     pub request_id: u32,
+    /// Guest generation copied into the response.
     pub generation: u32,
+    /// Process the opcode runs as.
     pub pid: u32,
+    /// Operation selected from the opcode table.
     pub opcode: u16,
+    /// Request, success, or error status.
     pub status: u16,
+    /// Bytes after the fixed header. The frame borrows them from the input buffer.
     pub payload: &'a [u8],
 }
 
@@ -69,6 +117,14 @@ fn known_opcode(opcode: u16) -> bool {
     )
 }
 
+/// Decodes one header and payload, checking magic, ABI, and length.
+///
+/// # Errors
+/// Returns [`WireError::BadMessage`] when the buffer is shorter than the header,
+/// the magic or header length is wrong, the payload length does not match the
+/// buffer, or the reserved field is not zero. Returns [`WireError::Invalid`] for
+/// an unsupported ABI version, [`WireError::PayloadTooLarge`] above the ABI limit,
+/// and [`WireError::NotImplemented`] for an unknown opcode.
 pub fn decode_frame(bytes: &[u8]) -> Result<WireFrame<'_>, WireError> {
     if bytes.len() < HEADER_LENGTH {
         return Err(WireError::BadMessage("frame is shorter than header"));
@@ -76,9 +132,10 @@ pub fn decode_frame(bytes: &[u8]) -> Result<WireFrame<'_>, WireError> {
 
     let magic = read_u32(bytes, 0);
     let abi_version = read_u16(bytes, 4);
-    let header_length = read_u16(bytes, 6) as usize;
+    let header_length = usize::from(read_u16(bytes, 6));
     let opcode = read_u16(bytes, 20);
-    let payload_length = read_u32(bytes, 24) as usize;
+    let payload_length =
+        usize::try_from(read_u32(bytes, 24)).expect("wire payload length fits in usize");
     let reserved = read_u32(bytes, 28);
 
     if magic != MAGIC {
@@ -115,6 +172,11 @@ pub fn decode_frame(bytes: &[u8]) -> Result<WireFrame<'_>, WireError> {
     })
 }
 
+/// Decodes a frame and requires the request status.
+///
+/// # Errors
+/// Returns the same errors as [`decode_frame`], and [`WireError::BadMessage`]
+/// when the status is not a request.
 pub fn decode_request(bytes: &[u8]) -> Result<WireFrame<'_>, WireError> {
     let frame = decode_frame(bytes)?;
     if frame.status != status::REQUEST {
@@ -175,5 +237,13 @@ mod tests {
         let error = decode_request(&bytes).unwrap_err();
 
         assert_eq!(error.code(), errors::EINVAL);
+    }
+
+    #[test]
+    fn displays_the_wire_reason() {
+        let error = WireError::BadMessage("bad wire magic");
+        assert_eq!(error.to_string(), "bad wire magic");
+        let missing = WireError::NotImplemented(0xffff);
+        assert_eq!(missing.to_string(), "opcode 65535 is not implemented");
     }
 }

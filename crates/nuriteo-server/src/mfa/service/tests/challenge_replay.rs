@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::rfc6238::*;
-use super::database::*;
 use super::super::*;
-
+use super::database::*;
+use super::rfc6238::*;
+use super::*;
 
 use std::env;
 
@@ -17,11 +16,9 @@ use std::path::Path;
 
 use std::time::Instant;
 
-
 use base64::Engine;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
 
 use crate::config::{Environment, FileReader, InstanceSettingBootstrap};
 
@@ -33,14 +30,13 @@ use crate::identity::{BrowserMethod, BrowserRequestHeaders, acquire_mfa_populati
 
 use crate::instance_settings::InstanceSettingsRepository;
 
+use super::{NoFiles, TestEnvironment};
 use crate::mfa::MfaHttpService;
-use super::{TestEnvironment, NoFiles};
-
-
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/postgres-mfa-challenge/run.sh"]
-pub(crate) async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {    let pool = fixture_pool().await;
+pub(crate) async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_atomic() {
+    let pool = fixture_pool().await;
     reset_fixture(&pool).await;
     let report = run_embedded_migrations(
         &pool,
@@ -639,20 +635,20 @@ pub(crate) async fn actual_mfa_challenge_replay_lockout_recovery_and_reset_are_a
     pool.close(Duration::from_secs(2)).await.unwrap();
 }
 
-
-pub(crate) fn local_user() -> UserId {    "0199ee6c-c777-7000-8000-000000008001".parse().unwrap()
+pub(crate) fn local_user() -> UserId {
+    "0199ee6c-c777-7000-8000-000000008001".parse().unwrap()
 }
 
-
-pub(crate) fn admin_user() -> UserId {    "0199ee6c-c777-7000-8000-000000008002".parse().unwrap()
+pub(crate) fn admin_user() -> UserId {
+    "0199ee6c-c777-7000-8000-000000008002".parse().unwrap()
 }
 
-
-pub(crate) fn disabled_race_user() -> UserId {    "0199ee6c-c777-7000-8000-000000008003".parse().unwrap()
+pub(crate) fn disabled_race_user() -> UserId {
+    "0199ee6c-c777-7000-8000-000000008003".parse().unwrap()
 }
 
-
-pub(crate) async fn seed_users(pool: &DatabasePool) {    sqlx::query(
+pub(crate) async fn seed_users(pool: &DatabasePool) {
+    sqlx::query(
         "INSERT INTO users(id,email,normalized_email,display_name,is_instance_admin) VALUES
          ('0199ee6c-c777-7000-8000-000000008001','mfa2@example.test','mfa2@example.test','MFA User',FALSE),
          ('0199ee6c-c777-7000-8000-000000008002','mfa2-admin@example.test','mfa2-admin@example.test','MFA Admin',TRUE),
@@ -671,8 +667,8 @@ pub(crate) async fn seed_users(pool: &DatabasePool) {    sqlx::query(
     .unwrap();
 }
 
-
-pub(crate) async fn active_mfa_exists(pool: &DatabasePool, user_id: UserId) -> bool {    sqlx::query_scalar(
+pub(crate) async fn active_mfa_exists(pool: &DatabasePool, user_id: UserId) -> bool {
+    sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM mfa_totp_credentials
          WHERE user_id=$1::uuid AND state='active')",
     )
@@ -682,8 +678,8 @@ pub(crate) async fn active_mfa_exists(pool: &DatabasePool, user_id: UserId) -> b
     .unwrap()
 }
 
-
-pub(crate) async fn assert_population_proof_stale(    pool: &DatabasePool,
+pub(crate) async fn assert_population_proof_stale(
+    pool: &DatabasePool,
     http: &MfaHttpService,
     request: BrowserRequestHeaders<'_>,
 ) {

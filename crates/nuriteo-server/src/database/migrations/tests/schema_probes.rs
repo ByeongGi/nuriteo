@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
-use super::forward_migrations::*;
 use super::access_tokens::*;
+use super::forward_migrations::*;
+use super::*;
 use std::borrow::Cow;
 
 use std::env;
@@ -10,11 +10,9 @@ use std::fs;
 
 use std::str::FromStr;
 
-
 use sqlx::migrate::{Migration, MigrationType};
 
 use sqlx::{Acquire, SqlSafeStr};
-
 
 use super::super::*;
 
@@ -30,12 +28,11 @@ use crate::published_example::{
     PublishedExampleState, PublishedExampleVisibility,
 };
 
+use super::{DATABASE_CA_ENV, DATABASE_URL_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
 use crate::save::ProjectVersionId;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, TEST_MIGRATION_VERSION, TIMEOUT_MIGRATION_VERSION};
 
-
-
-pub(crate) async fn column_exists(pool: &DatabasePool, relation: &str, column: &str) -> bool {    let mut connection = pool
+pub(crate) async fn column_exists(pool: &DatabasePool, relation: &str, column: &str) -> bool {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("column query must acquire a connection: {error}"));
@@ -52,16 +49,16 @@ pub(crate) async fn column_exists(pool: &DatabasePool, relation: &str, column: &
     .unwrap_or_else(|error| panic!("column query must succeed: {error}"))
 }
 
-
-pub(crate) async fn constraint_exists(pool: &DatabasePool, constraint: &str) -> bool {    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)")
+pub(crate) async fn constraint_exists(pool: &DatabasePool, constraint: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)")
         .bind(constraint)
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn drop_transaction_probe(pool: &DatabasePool) {    let mut connection = pool
+pub(crate) async fn drop_transaction_probe(pool: &DatabasePool) {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("cleanup must acquire a connection: {error}"));
@@ -71,8 +68,8 @@ pub(crate) async fn drop_transaction_probe(pool: &DatabasePool) {    let mut con
         .unwrap_or_else(|error| panic!("probe table cleanup must succeed: {error}"));
 }
 
-
-pub(crate) async fn insert_unknown_history(pool: &DatabasePool, version: i64) {    let mut connection = pool
+pub(crate) async fn insert_unknown_history(pool: &DatabasePool, version: i64) {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("history insert must acquire a connection: {error}"));
@@ -88,8 +85,8 @@ pub(crate) async fn insert_unknown_history(pool: &DatabasePool, version: i64) { 
     .unwrap_or_else(|error| panic!("unknown history insert must succeed: {error}"));
 }
 
-
-pub(crate) async fn delete_history(pool: &DatabasePool, version: i64) {    let mut connection = pool
+pub(crate) async fn delete_history(pool: &DatabasePool, version: i64) {
+    let mut connection = pool
         .acquire()
         .await
         .unwrap_or_else(|error| panic!("history cleanup must acquire a connection: {error}"));
@@ -99,4 +96,3 @@ pub(crate) async fn delete_history(pool: &DatabasePool, version: i64) {    let m
         .await
         .unwrap_or_else(|error| panic!("history cleanup must succeed: {error}"));
 }
-

@@ -1,4 +1,8 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    error::Error,
+    fmt::{self, Display, Formatter},
+};
 
 use system_core::{
     fs::Fd,
@@ -10,11 +14,23 @@ use system_core::{
     },
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Numeric errno and guest-visible sentence for one rejected request.
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DispatchError {
+    /// Errno returned in the error payload.
     pub code: u16,
+    /// Sentence copied into the error payload after the errno.
     pub message: &'static str,
 }
+
+impl Display for DispatchError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{} ({})", self.message, self.code)
+    }
+}
+
+impl Error for DispatchError {}
 
 impl DispatchError {
     fn invalid(message: &'static str) -> Self {
@@ -40,7 +56,7 @@ impl From<IoError> for DispatchError {
         };
         Self {
             code,
-            message: "I/O dispatch failed",
+            message: error.reason(),
         }
     }
 }
@@ -60,7 +76,7 @@ impl From<ProcessError> for DispatchError {
                 | ProcessError::InvalidSession
                 | ProcessError::InvalidTransition => errors::EINVAL,
             },
-            message: "process dispatch failed",
+            message: error.reason(),
         }
     }
 }
@@ -69,18 +85,35 @@ impl From<WireError> for DispatchError {
     fn from(error: WireError) -> Self {
         Self {
             code: error.code(),
-            message: "invalid wire request",
+            message: error.guest_message(),
         }
     }
 }
 
-#[derive(Debug, Default)]
+/// Process table and descriptor kernel for one guest instance.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct SystemDispatcher {
     io: KernelIo,
     processes: ProcessTable,
 }
 
 impl SystemDispatcher {
+    /// Creates a dispatcher with an empty process table and filesystem.
+    ///
+    /// # Panics
+    /// Panics if the embedded filesystem cannot create `/workspace`.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Runs one decoded request and returns the response payload.
+    ///
+    /// # Errors
+    /// Returns [`DispatchError`] when the opcode is unsupported or the payload
+    /// does not match that opcode. Filesystem, PTY, and process failures keep
+    /// the errno already chosen for that cause and copy the inner `reason` text
+    /// into [`DispatchError::message`].
     pub fn dispatch(&mut self, frame: &WireFrame<'_>) -> Result<Vec<u8>, DispatchError> {
         match frame.opcode {
             opcodes::PING => Ok(frame.payload.to_vec()),
@@ -152,9 +185,9 @@ impl SystemDispatcher {
         let slave_pid = Pid(payload.u32()?);
         self.processes.get(slave_pid)?;
         let limits = PtyLimits::new(
-            payload.u32()? as usize,
-            payload.u32()? as usize,
-            payload.u32()? as usize,
+            guest_usize(payload.u32()?),
+            guest_usize(payload.u32()?),
+            guest_usize(payload.u32()?),
         )?;
         payload.finish()?;
         let pair = self
@@ -170,7 +203,7 @@ impl SystemDispatcher {
     fn read(&mut self, pid: Pid, payload: &[u8]) -> Result<Vec<u8>, DispatchError> {
         let mut payload = Payload::new(payload);
         let fd = Fd(payload.u32()?);
-        let max_bytes = payload.u32()? as usize;
+        let max_bytes = guest_usize(payload.u32()?);
         payload.finish()?;
         let read = self.io.read(pid, fd, max_bytes)?;
         let mut response = Vec::with_capacity(read.bytes.len() + 1);
@@ -183,7 +216,9 @@ impl SystemDispatcher {
         let mut payload = Payload::new(payload);
         let fd = Fd(payload.u32()?);
         let written = self.io.write(pid, fd, payload.remaining())?;
-        Ok((written as u32).to_le_bytes().to_vec())
+        let written = u32::try_from(written)
+            .map_err(|_| DispatchError::invalid("write length exceeds u32"))?;
+        Ok(written.to_le_bytes().to_vec())
     }
 
     fn close(&mut self, pid: Pid, payload: &[u8]) -> Result<Vec<u8>, DispatchError> {
@@ -256,8 +291,10 @@ impl SystemDispatcher {
         let id = PtyId(payload.u32()?);
         payload.finish()?;
         let deliveries = self.io.dispatch_terminal_event(&mut self.processes, id)?;
+        let count = u32::try_from(deliveries.len())
+            .map_err(|_| DispatchError::invalid("signal delivery count exceeds u32"))?;
         let mut response = Vec::with_capacity(4 + deliveries.len() * 9);
-        push_u32(&mut response, deliveries.len() as u32);
+        push_u32(&mut response, count);
         for delivery in deliveries {
             push_u32(&mut response, delivery.pid.0);
             push_u32(&mut response, delivery.generation.0);
@@ -303,6 +340,11 @@ fn signal_code(signal: VirtualSignal) -> u8 {
         VirtualSignal::Kill => 3,
         VirtualSignal::WindowChanged => 4,
     }
+}
+
+/// Converts a guest length. A `u32` fits in `usize` on every target this crate builds.
+fn guest_usize(value: u32) -> usize {
+    usize::try_from(value).expect("guest u32 length fits in usize")
 }
 
 fn push_u32(bytes: &mut Vec<u8>, value: u32) {
@@ -375,6 +417,8 @@ impl<'a> Payload<'a> {
     }
 }
 
+/// Returns the ping opcode used by dispatch tests and guests.
+#[must_use]
 pub fn ping_opcode() -> u16 {
     opcodes::PING
 }

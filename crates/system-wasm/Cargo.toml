@@ -12,3 +12,6 @@ path = "src/lib.rs"
 
 [dependencies]
 system-core = { path = "../system-core" }
+
+[lints]
+workspace = true

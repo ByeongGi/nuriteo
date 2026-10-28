@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::providers::*;
+use super::*;
 
 use std::collections::BTreeMap;
 
@@ -11,7 +11,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -29,16 +28,19 @@ use url::Url;
 
 use uuid::Uuid;
 
-
+use super::{
+    DEFAULT_TIMEOUT, DNS_TIMEOUT, GitPreflightProof, GitProviderError, GitProviderInput,
+    GitProviderKind, GitProviderMetadata, GitProviderService, GitProviderState, GitProviderUpdate,
+    GitProviderValidator, INTEGRATION_TYPE, MAX_DNS_ADDRESSES, MAX_TIMEOUT, MIN_TIMEOUT,
+    RESPONSE_LIMIT, map_integration_error,
+};
 use crate::integration::{
     CaEndpointBinding, IntegrationAdminActor, IntegrationError, IntegrationRepository,
     ValidatedCaBundle, authorize_recent_admin,
 };
-use super::{INTEGRATION_TYPE, DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT, DNS_TIMEOUT, MAX_DNS_ADDRESSES, RESPONSE_LIMIT, GitProviderKind, GitProviderState, GitProviderInput, GitProviderUpdate, GitProviderMetadata, GitProviderService, GitProviderValidator, GitPreflightProof, map_integration_error, GitProviderError};
 
-
-
-pub(crate) fn valid_host(value: &str) -> bool {    !value.is_empty()
+pub(crate) fn valid_host(value: &str) -> bool {
+    !value.is_empty()
         && value.len() <= 253
         && value == value.trim()
         && value == value.to_ascii_lowercase()
@@ -52,15 +54,15 @@ pub(crate) fn valid_host(value: &str) -> bool {    !value.is_empty()
             .is_some_and(|host| host == value)
 }
 
-
-pub(crate) fn valid_text(value: &str, max: usize) -> bool {    !value.is_empty()
+pub(crate) fn valid_text(value: &str, max: usize) -> bool {
+    !value.is_empty()
         && value.len() <= max
         && value.trim() == value
         && !value.chars().any(char::is_control)
 }
 
-
-pub(crate) async fn resolve_checked(    host: &str,
+pub(crate) async fn resolve_checked(
+    host: &str,
     port: u16,
     allow_test: bool,
     deadline: Duration,
@@ -82,8 +84,8 @@ pub(crate) async fn resolve_checked(    host: &str,
     Ok(addresses)
 }
 
-
-pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
+pub(crate) fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
         IpAddr::V4(ip) => {
             let [a, b, c, d] = ip.octets();
             !(a == 0
@@ -118,8 +120,8 @@ pub(crate) fn is_public_ip(ip: IpAddr) -> bool {    match ip {
     }
 }
 
-
-pub(crate) fn endpoint_fingerprint(    candidate: &GitProviderMetadata,
+pub(crate) fn endpoint_fingerprint(
+    candidate: &GitProviderMetadata,
     addresses: &BTreeMap<String, Vec<SocketAddr>>,
 ) -> [u8; 32] {
     let mut digest = Sha256::new();
@@ -148,13 +150,12 @@ pub(crate) fn endpoint_fingerprint(    candidate: &GitProviderMetadata,
     digest.finalize().into()
 }
 
-
-pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {    match ca {
+pub(crate) fn trust_fingerprint(ca: Option<&ValidatedCaBundle>) -> [u8; 32] {
+    match ca {
         Some(bundle) => Sha256::digest(bundle.pem()).into(),
         None => Sha256::digest(b"nuriteo.git-provider.system-roots.v1").into(),
     }
 }
-
 
 pub(crate) fn endpoint_binding(
     provider: &GitProviderMetadata,
@@ -169,8 +170,8 @@ pub(crate) fn endpoint_binding(
     .map_err(map_integration_error)
 }
 
-
-pub(crate) async fn active_ca_fingerprint(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn active_ca_fingerprint(
+    tx: &mut Transaction<'_, Postgres>,
     binding: &CaEndpointBinding,
 ) -> Result<[u8; 32], GitProviderError> {
     let rows: Vec<Vec<u8>> = sqlx::query_scalar(
@@ -190,8 +191,8 @@ pub(crate) async fn active_ca_fingerprint(    tx: &mut Transaction<'_, Postgres>
     }
 }
 
-
-pub(crate) async fn load_metadata_for_update(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_metadata_for_update(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     expected_version: u64,
 ) -> Result<GitProviderMetadata, GitProviderError> {
@@ -213,8 +214,8 @@ pub(crate) async fn load_metadata_for_update(    tx: &mut Transaction<'_, Postgr
     Ok(metadata)
 }
 
-
-pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_metadata(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<GitProviderMetadata, GitProviderError> {
     let row = sqlx::query(
@@ -230,7 +231,6 @@ pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
     .ok_or(GitProviderError::NotFound)?;
     metadata_from_row(&row)
 }
-
 
 pub(crate) fn metadata_from_database_row(
     row: &sqlx::postgres::PgRow,
@@ -258,12 +258,14 @@ pub(crate) fn metadata_from_database_row(
     })
 }
 
-
-pub(crate) fn metadata_from_row(row: &sqlx::postgres::PgRow) -> Result<GitProviderMetadata, GitProviderError> {    metadata_from_database_row(row)
+pub(crate) fn metadata_from_row(
+    row: &sqlx::postgres::PgRow,
+) -> Result<GitProviderMetadata, GitProviderError> {
+    metadata_from_database_row(row)
 }
 
-
-pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    tx: &mut Transaction<'_, Postgres>,
     actor: IntegrationAdminActor,
     action: &str,
     id: Uuid,
@@ -288,8 +290,8 @@ pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn validate_correlation(value: &str) -> Result<(), GitProviderError> {    if (1..=128).contains(&value.len())
+pub(crate) fn validate_correlation(value: &str) -> Result<(), GitProviderError> {
+    if (1..=128).contains(&value.len())
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
@@ -300,8 +302,8 @@ pub(crate) fn validate_correlation(value: &str) -> Result<(), GitProviderError> 
     }
 }
 
-
-pub(crate) fn map_database_error(error: sqlx::Error) -> GitProviderError {    match error
+pub(crate) fn map_database_error(error: sqlx::Error) -> GitProviderError {
+    match error
         .as_database_error()
         .and_then(|database| database.code())
         .as_deref()
@@ -312,8 +314,8 @@ pub(crate) fn map_database_error(error: sqlx::Error) -> GitProviderError {    ma
     }
 }
 
-
-impl fmt::Display for GitProviderError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for GitProviderError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "Git provider input is invalid",
             Self::ReauthenticationRequired => "recent administrator authentication is required",
@@ -327,6 +329,5 @@ impl fmt::Display for GitProviderError { fn fmt(&self, formatter: &mut fmt::Form
         })
     }
 }
-
 
 impl std::error::Error for GitProviderError {}

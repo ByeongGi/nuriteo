@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::credential::*;
 use super::s3_client::*;
+use super::*;
 use std::collections::BTreeMap;
 
 use std::ffi::OsString;
@@ -17,7 +17,6 @@ use std::path::Path;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::Client;
 
@@ -53,13 +52,19 @@ use uuid::Uuid;
 
 use x509_parser::prelude::{FromDer, X509Certificate};
 
-
 use crate::config::{Environment, FileReader, SecretString, load_secret};
 
+use super::{
+    BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_ADDRESSING_STYLE, BACKUP_BUCKET,
+    BACKUP_CA_FILE, BACKUP_ENDPOINT, BACKUP_KMS_KEY_ID, BACKUP_PREFIX, BACKUP_REGION,
+    BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN,
+    BACKUP_SESSION_TOKEN_FILE, BACKUP_SSE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestination,
+    BackupDestinationConfig, BackupDestinationConfigError, BackupDestinationError,
+    BackupDestinationPreflight, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse,
+    BackupStoredObject, BackupWriterCredential, MAX_BUFFERED_BACKUP_OBJECT_BYTES, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_TIMEOUT, MIN_TIMEOUT, PROBE_BODY,
+};
 use crate::integration::{CredentialIdentity, IntegrationError, SecretValue};
-use super::{PROBE_BODY, MIN_TIMEOUT, MAX_TIMEOUT, MAX_CA_BYTES, MAX_CA_CERTIFICATES, MAX_BUFFERED_BACKUP_OBJECT_BYTES, BACKUP_ENDPOINT, BACKUP_REGION, BACKUP_BUCKET, BACKUP_PREFIX, BACKUP_ADDRESSING_STYLE, BACKUP_SSE, BACKUP_KMS_KEY_ID, BACKUP_ACCESS_KEY_ID, BACKUP_ACCESS_KEY_ID_FILE, BACKUP_SECRET_ACCESS_KEY, BACKUP_SECRET_ACCESS_KEY_FILE, BACKUP_SESSION_TOKEN, BACKUP_SESSION_TOKEN_FILE, BACKUP_CA_FILE, BACKUP_TIMEOUT_MS, BACKUP_VARIABLES, BackupDestinationRuntime, BackupDestinationRuntimeError, BackupSse, BackupWriterCredential, BackupDestinationConfig, BackupDestinationConfigError, BackupDestination, BackupStoredObject, BackupDestinationPreflight, BackupDestinationError};
-
-
 
 impl super::BackupDestination {
     pub fn new(
@@ -640,7 +645,9 @@ impl super::BackupDestination {
             .is_some_and(|suffix| suffix.starts_with('/') && safe_relative_key(&suffix[1..]))
     }
 
-    pub(crate) async fn verify_bucket_default_encryption(&self) -> Result<(), BackupDestinationError> {
+    pub(crate) async fn verify_bucket_default_encryption(
+        &self,
+    ) -> Result<(), BackupDestinationError> {
         let output = self
             .client
             .get_bucket_encryption()
@@ -676,8 +683,8 @@ impl super::BackupDestination {
     }
 }
 
-
-impl fmt::Debug for BackupStoredObject { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupStoredObject {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BackupStoredObject")
             .field("key", &"[REDACTED]")
@@ -688,8 +695,8 @@ impl fmt::Debug for BackupStoredObject { fn fmt(&self, formatter: &mut fmt::Form
     }
 }
 
-
-impl fmt::Debug for BackupDestinationPreflight { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for BackupDestinationPreflight {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("BackupDestinationPreflight")
             .field("probe_id", &self.probe_id)
@@ -707,8 +714,8 @@ impl fmt::Debug for BackupDestinationPreflight { fn fmt(&self, formatter: &mut f
     }
 }
 
-
-impl fmt::Display for BackupDestinationError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for BackupDestinationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::TlsClient => "backup TLS client could not be configured",
             Self::Authentication => "backup credential was rejected",
@@ -729,8 +736,8 @@ impl fmt::Display for BackupDestinationError { fn fmt(&self, formatter: &mut fmt
     }
 }
 
-
-pub(crate) fn safe_relative_key(value: &str) -> bool {    !value.is_empty()
+pub(crate) fn safe_relative_key(value: &str) -> bool {
+    !value.is_empty()
         && value.len() <= 768
         && !value.starts_with('/')
         && !value.contains('\\')
@@ -740,8 +747,8 @@ pub(crate) fn safe_relative_key(value: &str) -> bool {    !value.is_empty()
             .all(|part| !part.is_empty() && !matches!(part, "." | ".."))
 }
 
-
-pub(crate) fn hex_digest(value: [u8; 32]) -> String {    const HEX: &[u8; 16] = b"0123456789abcdef";
+pub(crate) fn hex_digest(value: [u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(64);
     for byte in value {
         output.push(char::from(HEX[usize::from(byte >> 4)]));
@@ -750,8 +757,8 @@ pub(crate) fn hex_digest(value: [u8; 32]) -> String {    const HEX: &[u8; 16] = 
     output
 }
 
-
-pub(crate) async fn verify_local_file(    source: &Path,
+pub(crate) async fn verify_local_file(
+    source: &Path,
     bytes: u64,
     digest: [u8; 32],
 ) -> Result<(), BackupDestinationError> {
@@ -783,11 +790,10 @@ pub(crate) async fn verify_local_file(    source: &Path,
     Ok(())
 }
 
-
 impl std::error::Error for BackupDestinationError {}
 
-
-pub(crate) fn apply_sse(    operation: aws_sdk_s3::operation::put_object::builders::PutObjectFluentBuilder,
+pub(crate) fn apply_sse(
+    operation: aws_sdk_s3::operation::put_object::builders::PutObjectFluentBuilder,
     sse: &BackupSse,
 ) -> aws_sdk_s3::operation::put_object::builders::PutObjectFluentBuilder {
     match sse {
@@ -799,8 +805,8 @@ pub(crate) fn apply_sse(    operation: aws_sdk_s3::operation::put_object::builde
     }
 }
 
-
-pub(crate) fn verify_sse(    actual: Option<&ServerSideEncryption>,
+pub(crate) fn verify_sse(
+    actual: Option<&ServerSideEncryption>,
     actual_key: Option<&str>,
     expected: &BackupSse,
 ) -> Result<(), BackupDestinationError> {
@@ -818,8 +824,8 @@ pub(crate) fn verify_sse(    actual: Option<&ServerSideEncryption>,
         .ok_or(BackupDestinationError::SseVerification)
 }
 
-
-pub(crate) fn classify(code: Option<&str>) -> BackupDestinationError {    match code {
+pub(crate) fn classify(code: Option<&str>) -> BackupDestinationError {
+    match code {
         Some("InvalidAccessKeyId" | "SignatureDoesNotMatch" | "InvalidToken" | "ExpiredToken") => {
             BackupDestinationError::Authentication
         }

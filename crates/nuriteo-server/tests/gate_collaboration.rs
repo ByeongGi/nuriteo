@@ -1,4 +1,8 @@
 #![cfg(unix)]
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 
 use std::env;
 
@@ -15,7 +19,6 @@ use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread::{self, JoinHandle};
 
 use std::time::{Duration, Instant};
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -41,7 +44,6 @@ use reqwest::{Client, Method, Response, StatusCode};
 use serde_json::{Value, json};
 
 use url::Url;
-
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 
@@ -71,13 +73,11 @@ const BUCKET: &str = "nuriteo-gate-002";
 
 const MAX_PROCESS_OUTPUT_BYTES: usize = 1024 * 1024;
 
-
 #[derive(Clone)]
 struct Browser {
     cookie: String,
     csrf: String,
 }
-
 
 struct CapturedProcessOutput {
     status: ExitStatus,
@@ -86,12 +86,10 @@ struct CapturedProcessOutput {
     secret_detected: bool,
 }
 
-
 struct CapturedStream {
     diagnostic: Vec<u8>,
     secret_detected: bool,
 }
-
 
 struct ChildGuard {
     child: Child,
@@ -99,7 +97,6 @@ struct ChildGuard {
     stderr: Option<JoinHandle<std::io::Result<CapturedStream>>>,
     stdout: Option<JoinHandle<std::io::Result<CapturedStream>>>,
 }
-
 
 struct StorageEnvironment(Vec<(OsString, OsString)>);
 

@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::projects::*;
 use super::authorization::*;
 use super::commit::*;
+use super::projects::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -16,7 +16,6 @@ use std::sync::{
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Transaction};
@@ -24,7 +23,6 @@ use sqlx::{Acquire, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time as tokio_time;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -39,16 +37,20 @@ use crate::organization::OrganizationId;
 
 use crate::workspace::StorageScopeId;
 
-
 use super::super::{
     DirectProjectRoleGrant, EffectiveProjectRole, NewProject, Project, ProjectAccessError,
     ProjectAccessRepository, ProjectConflict, ProjectId, ProjectName, ProjectOwner, ProjectPageKey,
     ProjectPageLimit, ProjectRepository, ProjectRepositoryError, ProjectRole, ProjectRoleVersion,
     ProjectSlug, ProjectState, ProjectTemplate, ProjectVersion,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MIN_DATABASE_TIMEOUT, DATABASE_TIMEOUT_RESOLUTION_MARGIN, COMMIT_RESOLUTION_GRACE, DEFAULT_PROJECT_ROLE_PAGE_SIZE, MAX_PROJECT_ROLE_PAGE_SIZE, ProjectRow, GrantRow, ProjectServicePolicy, ProjectAuditContext, ProjectListPage, ProjectRolePageLimit, ProjectRolePageKey, DirectProjectRolePage, ProjectDeleteConfirmation, ProjectRoleMutationResult, ProjectServiceError, ProjectService, MutationDeadline, ListAuthorization};
-
-
+use super::{
+    COMMIT_RESOLUTION_GRACE, DATABASE_TIMEOUT_RESOLUTION_MARGIN, DEFAULT_OPERATION_TIMEOUT,
+    DEFAULT_PROJECT_ROLE_PAGE_SIZE, DirectProjectRolePage, GrantRow, ListAuthorization,
+    MAX_OPERATION_TIMEOUT, MAX_PROJECT_ROLE_PAGE_SIZE, MIN_DATABASE_TIMEOUT, MIN_OPERATION_TIMEOUT,
+    MutationDeadline, ProjectAuditContext, ProjectDeleteConfirmation, ProjectListPage,
+    ProjectRoleMutationResult, ProjectRolePageKey, ProjectRolePageLimit, ProjectRow,
+    ProjectService, ProjectServiceError, ProjectServicePolicy,
+};
 
 impl super::ProjectServicePolicy {
     pub fn new(operation_timeout: Duration) -> Result<Self, ProjectServiceError> {
@@ -64,14 +66,13 @@ impl super::ProjectServicePolicy {
     }
 }
 
-
-impl Default for ProjectServicePolicy { fn default() -> Self {
+impl Default for ProjectServicePolicy {
+    fn default() -> Self {
         Self {
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
         }
     }
 }
-
 
 impl ProjectAuditContext {
     #[must_use]
@@ -112,15 +113,14 @@ impl ProjectAuditContext {
     }
 }
 
-
-impl fmt::Debug for ProjectAuditContext { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for ProjectAuditContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ProjectAuditContext")
             .field("event_id", &self.event_id)
             .finish_non_exhaustive()
     }
 }
-
 
 impl ProjectListPage {
     #[must_use]
@@ -139,7 +139,6 @@ impl ProjectListPage {
     }
 }
 
-
 impl ProjectRolePageLimit {
     pub fn new(value: u16) -> Result<Self, ProjectServiceError> {
         if !(1..=MAX_PROJECT_ROLE_PAGE_SIZE).contains(&value) {
@@ -154,12 +153,11 @@ impl ProjectRolePageLimit {
     }
 }
 
-
-impl Default for ProjectRolePageLimit { fn default() -> Self {
+impl Default for ProjectRolePageLimit {
+    fn default() -> Self {
         Self(DEFAULT_PROJECT_ROLE_PAGE_SIZE)
     }
 }
-
 
 impl ProjectRolePageKey {
     #[must_use]
@@ -172,7 +170,6 @@ impl ProjectRolePageKey {
         self.user_id
     }
 }
-
 
 impl DirectProjectRolePage {
     #[must_use]
@@ -191,7 +188,6 @@ impl DirectProjectRolePage {
     }
 }
 
-
 impl ProjectDeleteConfirmation {
     #[must_use]
     pub const fn new(name: ProjectName) -> Self {
@@ -199,8 +195,8 @@ impl ProjectDeleteConfirmation {
     }
 }
 
-
-impl fmt::Display for ProjectServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for ProjectServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "project input is invalid",
             Self::NotFound => "project was not found",
@@ -222,9 +218,7 @@ impl fmt::Display for ProjectServiceError { fn fmt(&self, formatter: &mut fmt::F
     }
 }
 
-
 impl std::error::Error for ProjectServiceError {}
-
 
 impl MutationDeadline {
     pub(crate) fn new(timeout: Duration) -> Self {

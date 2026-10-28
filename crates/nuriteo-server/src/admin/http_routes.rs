@@ -24,7 +24,6 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use uuid::Uuid;
 
-
 use crate::audit::AuditEventId;
 
 use crate::http::{FieldViolation, HttpError, RequestId};
@@ -32,7 +31,6 @@ use crate::http::{FieldViolation, HttpError, RequestId};
 use crate::identity::{BrowserMethod, BrowserRequestHeaders};
 
 use crate::policy::{PolicyCleanupPreview, PolicyImpactPreview};
-
 
 use super::{
     AdminAuditEventCollectionView, AdminAuditEventView, AdminAuditExportFormat,
@@ -43,7 +41,6 @@ use super::{
     AdminStatusView, AdminSupportBundleView, AdminUpdateApprovalView, AdminUpdateHistoryView,
     AdminUpdateReadinessView,
 };
-
 
 const SETTINGS: &str = "/api/v1/admin/settings";
 
@@ -89,14 +86,12 @@ const ORIGIN: HeaderName = HeaderName::from_static("origin");
 
 const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
 
-
 #[derive(Debug, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct BackupOperationsQuery {
+pub(crate) struct BackupOperationsQuery {
     cursor: Option<String>,
     limit: Option<u16>,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -104,20 +99,17 @@ struct UpdateSettingRequest {
     value: Value,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct PolicyImpactRequest {
     value: Value,
 }
 
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct PolicyCleanupPreviewQuery {
+pub(crate) struct PolicyCleanupPreviewQuery {
     batch_limit: Option<u16>,
 }
-
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -126,10 +118,9 @@ struct UpdateHistoryQuery {
     limit: Option<u16>,
 }
 
-
 #[derive(Debug, Default, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct AuditFilterRequest {
+pub(crate) struct AuditFilterRequest {
     from: Option<String>,
     to: Option<String>,
     actor_type: Option<String>,
@@ -144,7 +135,6 @@ struct AuditFilterRequest {
     limit: Option<u16>,
 }
 
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct AuditExportRequest {
@@ -153,20 +143,17 @@ struct AuditExportRequest {
     format: AdminAuditExportFormat,
 }
 
-
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct AuditRetentionPreviewQuery {
     retention_days: String,
 }
 
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct AuditRetentionPruneRequest {
     limit: Option<u16>,
 }
-
 
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -175,20 +162,17 @@ struct UpdateApprovalRequest {
     acknowledged: bool,
 }
 
-
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct MaintenanceRequest {
     enabled: bool,
 }
 
-
 struct BrowserHeaders<'a> {
     origins: Vec<&'a str>,
     cookies: Vec<&'a str>,
     csrf: Vec<&'a str>,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -206,7 +190,6 @@ mod tests {
         }
     }
 }
-
 
 mod console;
 pub(crate) use console::*;

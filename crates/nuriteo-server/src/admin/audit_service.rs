@@ -2,7 +2,6 @@ use std::net::IpAddr;
 
 use std::str::FromStr;
 
-
 use base64::Engine as _;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -17,7 +16,6 @@ use time::OffsetDateTime;
 
 use utoipa::ToSchema;
 
-
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
     AuditScope, AuditTarget, AuditWriter, ScopeType,
@@ -25,11 +23,9 @@ use crate::audit::{
 
 use crate::identity::{BrowserRequestHeaders, Timestamp, UserId};
 
-
 use super::http_service::{AdminRuntime, AdminSession, AuditActorIdentity, authorize_recent_admin};
 
 use super::{AdminHttpService, AdminHttpServiceError};
-
 
 const DEFAULT_PAGE_SIZE: u16 = 50;
 
@@ -49,7 +45,6 @@ const SHORT_RETENTION_WARNING_DAYS: u16 = 180;
 
 const MAX_CURSOR_BYTES: usize = 512;
 
-
 #[derive(Debug, Clone)]
 pub struct AdminAuditListInput {
     pub from: Option<Timestamp>,
@@ -66,7 +61,6 @@ pub struct AdminAuditListInput {
     pub limit: u16,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum AdminAuditExportFormat {
@@ -74,13 +68,11 @@ pub enum AdminAuditExportFormat {
     Csv,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct AdminAuditExportInput {
     pub query: AdminAuditListInput,
     pub format: AdminAuditExportFormat,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -104,14 +96,12 @@ pub struct AdminAuditEventView {
     pub metadata: Value,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminAuditEventCollectionView {
     pub items: Vec<AdminAuditEventView>,
     pub next_cursor: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -123,7 +113,6 @@ pub struct AdminAuditRetentionPreview {
     pub short_retention_warning: bool,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AdminAuditRetentionPruneView {
@@ -134,14 +123,12 @@ pub struct AdminAuditRetentionPruneView {
     pub more_expired_events: bool,
 }
 
-
 pub struct AdminAuditExportView {
     pub bytes: Vec<u8>,
     pub content_type: &'static str,
     pub filename: &'static str,
     pub next_cursor: Option<String>,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -150,24 +137,20 @@ struct AuditCursor {
     id: String,
 }
 
-
-struct DecodedCursor {
+pub(crate) struct DecodedCursor {
     occurred_at: Timestamp,
     id: AuditEventId,
 }
 
-
-struct AuditPage {
+pub(crate) struct AuditPage {
     items: Vec<AdminAuditEventView>,
     next_cursor: Option<String>,
 }
-
 
 const AUDIT_SELECT_BY_ID: &str = "SELECT id::text AS id, occurred_at, actor_type, actor_id, actor_user_id::text AS actor_user_id, \
     actor_display_name, action_code, target_type, target_id, scope_type, scope_id, result, \
     reason_code, correlation_id, host(source_ip) AS source_ip, schema_version, changed_fields, \
     metadata::text AS metadata FROM audit_events WHERE id = $1::uuid";
-
 
 const AUDIT_LIST_QUERY: &str = concat!(
     "SELECT id::text AS id, occurred_at, actor_type, actor_id, actor_user_id::text AS actor_user_id, ",
@@ -187,7 +170,6 @@ const AUDIT_LIST_QUERY: &str = concat!(
     "($11::timestamptz IS NULL OR (occurred_at, id) < ($11::timestamptz, $12::uuid)) ",
     "ORDER BY occurred_at DESC, id DESC LIMIT $13"
 );
-
 
 #[cfg(test)]
 mod tests {
@@ -233,7 +215,6 @@ mod tests {
         assert_eq!(csv_cell("safe"), "\"safe\"");
     }
 }
-
 
 mod events;
 pub(crate) use events::*;

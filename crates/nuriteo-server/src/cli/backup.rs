@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::instance_commands::*;
+use super::*;
 use std::ffi::{OsStr, OsString};
 
 use std::fs::{self, File, OpenOptions};
@@ -9,11 +9,9 @@ use std::io::{self, Read, Write};
 
 use std::path::{Path, PathBuf};
 
-
 use clap::error::ErrorKind;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-
 
 use crate::app::run_server;
 
@@ -48,12 +46,15 @@ use crate::storage_check;
 
 use crate::upgrade_preflight;
 
+use super::{
+    BINARY_NAME, BackupCommand, CliAction, MigrationCommandError, OperationalCommand,
+    RecoveryKitCliError, RecoveryKitCommand, backup_error_category, bootstrap_category,
+    is_successful_display,
+};
 use crate::{CommandStatus, VERSION};
-use super::{BINARY_NAME, BackupCommand, RecoveryKitCommand, OperationalCommand, CliAction, bootstrap_category, MigrationCommandError, backup_error_category, RecoveryKitCliError, is_successful_display};
 
-
-
-pub(crate) async fn backup_restore<O: Write, E: Write>(    command: BackupCommand,
+pub(crate) async fn backup_restore<O: Write, E: Write>(
+    command: BackupCommand,
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
@@ -203,8 +204,8 @@ pub(crate) async fn backup_restore<O: Write, E: Write>(    command: BackupComman
     }
 }
 
-
-pub(crate) async fn close_restore_pools(    source: DatabasePool,
+pub(crate) async fn close_restore_pools(
+    source: DatabasePool,
     source_config: &DatabaseRuntimeConfig,
     target: DatabasePool,
     target_runtime: &RestoreRuntime,
@@ -213,8 +214,8 @@ pub(crate) async fn close_restore_pools(    source: DatabasePool,
     let _ = target.close(target_runtime.database.close_timeout()).await;
 }
 
-
-pub(crate) async fn backup_read<O: Write, E: Write>(    command: BackupCommand,
+pub(crate) async fn backup_read<O: Write, E: Write>(
+    command: BackupCommand,
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
@@ -304,8 +305,8 @@ pub(crate) async fn backup_read<O: Write, E: Write>(    command: BackupCommand,
     }
 }
 
-
-pub(crate) async fn backup_create<O: Write, E: Write>(    stdout: &mut O,
+pub(crate) async fn backup_create<O: Write, E: Write>(
+    stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     let environment = SystemEnvironment;
@@ -397,8 +398,8 @@ pub(crate) async fn backup_create<O: Write, E: Write>(    stdout: &mut O,
     }
 }
 
-
-pub(crate) async fn postgres_major(pool: &DatabasePool) -> Result<i32, ()> {    let mut connection = pool.acquire().await.map_err(|_| ())?;
+pub(crate) async fn postgres_major(pool: &DatabasePool) -> Result<i32, ()> {
+    let mut connection = pool.acquire().await.map_err(|_| ())?;
     let version: String = sqlx::query_scalar("SHOW server_version_num")
         .fetch_one(&mut *connection)
         .await
@@ -408,13 +409,16 @@ pub(crate) async fn postgres_major(pool: &DatabasePool) -> Result<i32, ()> {    
     (14..=99).contains(&major).then_some(major).ok_or(())
 }
 
-
-pub(crate) fn backup_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {    writeln!(stderr, "{BINARY_NAME}: backup failed ({category})")?;
+pub(crate) fn backup_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: backup failed ({category})")?;
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) fn run_recovery_kit_command<O: Write, E: Write>(    command: RecoveryKitCommand,
+pub(crate) fn run_recovery_kit_command<O: Write, E: Write>(
+    command: RecoveryKitCommand,
     stdout: &mut O,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
@@ -489,8 +493,10 @@ pub(crate) fn run_recovery_kit_command<O: Write, E: Write>(    command: Recovery
     }
 }
 
-
-pub(crate) fn read_recovery_kit_passphrase(path: &Path) -> Result<RecoveryKitPassphrase, RecoveryKitError> {    let bytes = fs::read(path).map_err(|_| RecoveryKitError::InvalidPassphrase)?;
+pub(crate) fn read_recovery_kit_passphrase(
+    path: &Path,
+) -> Result<RecoveryKitPassphrase, RecoveryKitError> {
+    let bytes = fs::read(path).map_err(|_| RecoveryKitError::InvalidPassphrase)?;
     if bytes.len() > 4096 {
         return Err(RecoveryKitError::InvalidPassphrase);
     }
@@ -498,8 +504,8 @@ pub(crate) fn read_recovery_kit_passphrase(path: &Path) -> Result<RecoveryKitPas
     RecoveryKitPassphrase::new(value)
 }
 
-
-pub(crate) fn read_recovery_kit_artifact(path: &Path) -> Result<Vec<u8>, RecoveryKitCliError> {    let file = File::open(path).map_err(|_| RecoveryKitCliError::Input)?;
+pub(crate) fn read_recovery_kit_artifact(path: &Path) -> Result<Vec<u8>, RecoveryKitCliError> {
+    let file = File::open(path).map_err(|_| RecoveryKitCliError::Input)?;
     let mut artifact = Vec::new();
     file.take(1024 * 1024 + 1)
         .read_to_end(&mut artifact)
@@ -510,16 +516,16 @@ pub(crate) fn read_recovery_kit_artifact(path: &Path) -> Result<Vec<u8>, Recover
     Ok(artifact)
 }
 
-
-pub(crate) fn write_metadata<O: Write>(    output: &mut O,
+pub(crate) fn write_metadata<O: Write>(
+    output: &mut O,
     metadata: &crate::integration::recovery_kit::RecoveryKitMetadata,
 ) -> Result<(), RecoveryKitCliError> {
     serde_json::to_writer(&mut *output, metadata).map_err(|_| RecoveryKitCliError::Output)?;
     writeln!(output).map_err(|_| RecoveryKitCliError::Output)
 }
 
-
-pub(crate) fn write_restored_keyring(    output_dir: &Path,
+pub(crate) fn write_restored_keyring(
+    output_dir: &Path,
     verified: &crate::integration::recovery_kit::VerifiedRecoveryKit,
 ) -> Result<(), RecoveryKitCliError> {
     create_private_dir(output_dir)?;
@@ -542,8 +548,8 @@ pub(crate) fn write_restored_keyring(    output_dir: &Path,
     )
 }
 
-
-pub(crate) fn create_private_dir(path: &Path) -> Result<(), RecoveryKitCliError> {    let mut builder = fs::DirBuilder::new();
+pub(crate) fn create_private_dir(path: &Path) -> Result<(), RecoveryKitCliError> {
+    let mut builder = fs::DirBuilder::new();
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -554,8 +560,8 @@ pub(crate) fn create_private_dir(path: &Path) -> Result<(), RecoveryKitCliError>
         .map_err(|_| RecoveryKitCliError::Output)
 }
 
-
-pub(crate) fn write_private_new(path: &Path, value: &[u8]) -> Result<(), RecoveryKitCliError> {    let mut options = OpenOptions::new();
+pub(crate) fn write_private_new(path: &Path, value: &[u8]) -> Result<(), RecoveryKitCliError> {
+    let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
     {
@@ -570,12 +576,12 @@ pub(crate) fn write_private_new(path: &Path, value: &[u8]) -> Result<(), Recover
         .map_err(|_| RecoveryKitCliError::Output)
 }
 
-
-pub(crate) fn recovery_kit_error_category(error: RecoveryKitError) -> &'static str {    recovery_kit_cli_error_category(RecoveryKitCliError::Kit(error))
+pub(crate) fn recovery_kit_error_category(error: RecoveryKitError) -> &'static str {
+    recovery_kit_cli_error_category(RecoveryKitCliError::Kit(error))
 }
 
-
-pub(crate) fn recovery_kit_cli_error_category(error: RecoveryKitCliError) -> &'static str {    match error {
+pub(crate) fn recovery_kit_cli_error_category(error: RecoveryKitCliError) -> &'static str {
+    match error {
         RecoveryKitCliError::Input => "input",
         RecoveryKitCliError::Output => "output",
         RecoveryKitCliError::KeyConfiguration => "key-configuration",
@@ -591,13 +597,16 @@ pub(crate) fn recovery_kit_cli_error_category(error: RecoveryKitCliError) -> &'s
     }
 }
 
-
-pub(crate) fn recovery_kit_failure<E: Write>(stderr: &mut E, category: &str) -> io::Result<CommandStatus> {    writeln!(stderr, "{BINARY_NAME}: recovery-kit failed ({category})")?;
+pub(crate) fn recovery_kit_failure<E: Write>(
+    stderr: &mut E,
+    category: &str,
+) -> io::Result<CommandStatus> {
+    writeln!(stderr, "{BINARY_NAME}: recovery-kit failed ({category})")?;
     Ok(CommandStatus::Failure)
 }
 
-
-pub(crate) fn unavailable<E: Write>(    command: &OperationalCommand,
+pub(crate) fn unavailable<E: Write>(
+    command: &OperationalCommand,
     stderr: &mut E,
 ) -> io::Result<CommandStatus> {
     writeln!(

@@ -6,7 +6,6 @@ use std::net::IpAddr;
 
 use std::time::Duration;
 
-
 use serde_json::json;
 
 use sqlx::{Acquire, Postgres, Row, Transaction};
@@ -16,7 +15,6 @@ use time::OffsetDateTime;
 use tokio::time as tokio_time;
 
 use uuid::Uuid;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -29,14 +27,12 @@ use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, SessionId, Timest
 
 use crate::policy::EffectivePolicyEngine;
 
-
 use super::invitation::OrganizationInvitationTokenDigest;
 
 use super::{
     OrganizationId, OrganizationInvitation, OrganizationInvitationFields, OrganizationInvitationId,
     OrganizationInvitationStatus, OrganizationInvitationToken, OrganizationRole,
 };
-
 
 const DEFAULT_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -50,7 +46,6 @@ const MIN_REAUTHENTICATION_AGE: Duration = Duration::from_secs(60);
 
 const MAX_REAUTHENTICATION_AGE: Duration = Duration::from_secs(60 * 60);
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OrganizationInvitationPolicy {
     expiry: InvitationExpiryPolicy,
@@ -58,13 +53,11 @@ pub struct OrganizationInvitationPolicy {
     reauthentication_max_age: Duration,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OrganizationInvitationActor {
     user_id: UserId,
     session_id: SessionId,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrganizationInvitationInvitee {
@@ -72,7 +65,6 @@ pub struct OrganizationInvitationInvitee {
     session_id: SessionId,
     verified_email: NormalizedEmail,
 }
-
 
 #[derive(Clone)]
 pub struct OrganizationInvitationAuditContext {
@@ -83,20 +75,17 @@ pub struct OrganizationInvitationAuditContext {
     source_ip: Option<IpAddr>,
 }
 
-
 pub struct IssuedOrganizationInvitation {
     invitation: OrganizationInvitation,
     token: OrganizationInvitationToken,
     email_delivery_queued: bool,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OrganizationInvitationRevokeResult {
     Revoked,
     AlreadyInactive,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -119,7 +108,6 @@ pub enum OrganizationInvitationServiceError {
     InvariantViolation,
 }
 
-
 #[derive(Clone)]
 pub struct OrganizationInvitationService {
     pool: DatabasePool,
@@ -127,8 +115,7 @@ pub struct OrganizationInvitationService {
     live_default_expiry: bool,
 }
 
-
-struct PendingInsert<'a> {
+pub(crate) struct PendingInsert<'a> {
     id: OrganizationInvitationId,
     organization_id: OrganizationId,
     invitee_user_id: UserId,
@@ -140,26 +127,22 @@ struct PendingInsert<'a> {
     expires_at: Timestamp,
 }
 
-
-struct AuditInput {
+pub(crate) struct AuditInput {
     action: &'static str,
     result: AuditResult,
     reason: Option<&'static str>,
     changed_fields: &'static [&'static str],
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PendingState {
+pub(crate) enum PendingState {
     Pending,
     Expired,
     Inactive,
 }
 
-
 #[cfg(test)]
 mod tests;
-
 
 mod membership_invites;
 pub(crate) use membership_invites::*;

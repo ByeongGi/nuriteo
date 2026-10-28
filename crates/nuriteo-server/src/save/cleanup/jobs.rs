@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
-use super::*;
 use super::backend::*;
 use super::worker::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -9,7 +9,6 @@ use std::future::Future;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use sqlx::{Acquire, Postgres, Transaction};
 
@@ -20,7 +19,6 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{self, Instant};
 
 use uuid::Uuid;
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -37,12 +35,17 @@ use crate::project::{
 
 use crate::quota::{QuotaRepository, SaveSessionId};
 
+use super::{
+    AbortSaveSession, AbortSaveSessionResult, CanonicalMaterializationDisposition, ClaimedJob,
+    CleanupBackend, CleanupBackendOutcome, CleanupError, CleanupKind, CleanupService,
+    CleanupTarget, CleanupWorker, CleanupWorkerPolicy, Deadline, ExpirySweepReport, MAX_ATTEMPTS,
+    MAX_BATCH_SIZE, MAX_CONCURRENCY, ReconcilePreparation, SQL_TIMEOUT_MARGIN, WorkerShutdown,
+    canonical_materialization_disposition,
+};
 use crate::workspace::StorageScopeId;
-use super::{MAX_BATCH_SIZE, MAX_CONCURRENCY, MAX_ATTEMPTS, SQL_TIMEOUT_MARGIN, CleanupWorkerPolicy, CleanupError, AbortSaveSession, AbortSaveSessionResult, ExpirySweepReport, WorkerShutdown, CleanupService, CleanupBackend, CleanupTarget, CleanupKind, CleanupBackendOutcome, CanonicalMaterializationDisposition, canonical_materialization_disposition, CleanupWorker, ClaimedJob, ReconcilePreparation, Deadline};
 
-
-
-impl<B: CleanupBackend> super::CleanupService<B> { pub(crate) async fn finish_known_multipart(
+impl<B: CleanupBackend> super::CleanupService<B> {
+    pub(crate) async fn finish_known_multipart(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         job: &ClaimedJob,
@@ -235,7 +238,11 @@ impl<B: CleanupBackend> super::CleanupService<B> { pub(crate) async fn finish_kn
         )
         .await
     }
-    pub(crate) async fn observe_absence(&self, owner: Uuid, job: ClaimedJob) -> Result<(), CleanupError> {
+    pub(crate) async fn observe_absence(
+        &self,
+        owner: Uuid,
+        job: ClaimedJob,
+    ) -> Result<(), CleanupError> {
         let attempts = u16::try_from(job.attempts).map_err(|_| CleanupError::InvariantViolation)?;
         if attempts >= self.policy.max_attempts {
             return self.fail_job(owner, job.session_id, "absent").await;
@@ -346,14 +353,13 @@ impl<B: CleanupBackend> super::CleanupService<B> { pub(crate) async fn finish_kn
     }
 }
 
-
-impl fmt::Debug for CleanupWorker { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for CleanupWorker {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CleanupWorker")
             .finish_non_exhaustive()
     }
 }
-
 
 impl CleanupWorker {
     pub async fn run_until<F>(mut self, shutdown: F, deadline: Duration) -> WorkerShutdown
@@ -395,15 +401,15 @@ impl CleanupWorker {
     }
 }
 
-
-impl Drop for CleanupWorker { fn drop(&mut self) {
+impl Drop for CleanupWorker {
+    fn drop(&mut self) {
         let _ = self.cancel.send(true);
         self.join.abort();
     }
 }
 
-
-pub(crate) fn decode_job(    row: (String, String, String, Option<String>, i16, i16),
+pub(crate) fn decode_job(
+    row: (String, String, String, Option<String>, i16, i16),
 ) -> Result<ClaimedJob, CleanupError> {
     let session_id = parse_session_id(&row.0)?;
     let kind = match row.1.as_str() {
@@ -435,8 +441,8 @@ pub(crate) fn decode_job(    row: (String, String, String, Option<String>, i16, 
     })
 }
 
-
-pub(crate) fn retry_delay(    policy: CleanupWorkerPolicy,
+pub(crate) fn retry_delay(
+    policy: CleanupWorkerPolicy,
     session_id: SaveSessionId,
     attempts: i16,
 ) -> Result<Duration, CleanupError> {
@@ -466,7 +472,6 @@ pub(crate) fn retry_delay(    policy: CleanupWorkerPolicy,
         .map_or(policy.max_backoff, |value| value.min(policy.max_backoff)))
 }
 
-
 impl Deadline {
     pub(crate) fn new(timeout: Duration) -> Self {
         Self(Instant::now() + timeout)
@@ -488,8 +493,8 @@ impl Deadline {
     }
 }
 
-
-pub(crate) async fn configure_transaction(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn configure_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
     deadline: Deadline,
 ) -> Result<(), CleanupError> {
     let timeout = deadline
@@ -510,8 +515,8 @@ pub(crate) async fn configure_transaction(    transaction: &mut Transaction<'_, 
     Ok(())
 }
 
-
-pub(crate) async fn lock_scope(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_scope(
+    transaction: &mut Transaction<'_, Postgres>,
     storage_scope_id: StorageScopeId,
     deadline: Deadline,
 ) -> Result<(), CleanupError> {
@@ -529,8 +534,8 @@ pub(crate) async fn lock_scope(    transaction: &mut Transaction<'_, Postgres>,
     }
 }
 
-
-pub(crate) async fn transition_session(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn transition_session(
+    transaction: &mut Transaction<'_, Postgres>,
     session_id: SaveSessionId,
     state: &'static str,
     deadline: Deadline,
@@ -544,8 +549,8 @@ pub(crate) async fn transition_session(    transaction: &mut Transaction<'_, Pos
     }
 }
 
-
-pub(crate) async fn active_relay_upload_exists(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn active_relay_upload_exists(
+    transaction: &mut Transaction<'_, Postgres>,
     session_id: SaveSessionId,
     deadline: Deadline,
 ) -> Result<bool, CleanupError> {
@@ -563,8 +568,8 @@ pub(crate) async fn active_relay_upload_exists(    transaction: &mut Transaction
         .map_err(map_sql_error)
 }
 
-
-pub(crate) async fn complete_claim(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn complete_claim(
+    transaction: &mut Transaction<'_, Postgres>,
     owner: Uuid,
     session_id: SaveSessionId,
     deadline: Deadline,
@@ -592,8 +597,8 @@ pub(crate) async fn complete_claim(    transaction: &mut Transaction<'_, Postgre
     }
 }
 
-
-pub(crate) async fn assert_active_claim(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn assert_active_claim(
+    transaction: &mut Transaction<'_, Postgres>,
     owner: Uuid,
     session_id: SaveSessionId,
     deadline: Deadline,
@@ -618,8 +623,8 @@ pub(crate) async fn assert_active_claim(    transaction: &mut Transaction<'_, Po
     }
 }
 
-
-pub(crate) async fn delete_claim(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn delete_claim(
+    transaction: &mut Transaction<'_, Postgres>,
     owner: Uuid,
     session_id: SaveSessionId,
     deadline: Deadline,
@@ -645,8 +650,8 @@ pub(crate) async fn delete_claim(    transaction: &mut Transaction<'_, Postgres>
     }
 }
 
-
-pub(crate) async fn commit(    transaction: Transaction<'_, Postgres>,
+pub(crate) async fn commit(
+    transaction: Transaction<'_, Postgres>,
     deadline: Deadline,
 ) -> Result<(), CleanupError> {
     match time::timeout_at(deadline.0, transaction.commit()).await {
@@ -656,28 +661,28 @@ pub(crate) async fn commit(    transaction: Transaction<'_, Postgres>,
     }
 }
 
-
-pub(crate) fn map_commit_error(error: sqlx::Error) -> CleanupError {    if error.as_database_error().is_none() {
+pub(crate) fn map_commit_error(error: sqlx::Error) -> CleanupError {
+    if error.as_database_error().is_none() {
         CleanupError::CommitOutcomeUnknown
     } else {
         map_sql_error(error)
     }
 }
 
-
-pub(crate) fn parse_session_id(value: &str) -> Result<SaveSessionId, CleanupError> {    let uuid = Uuid::parse_str(value).map_err(|_| CleanupError::InvariantViolation)?;
+pub(crate) fn parse_session_id(value: &str) -> Result<SaveSessionId, CleanupError> {
+    let uuid = Uuid::parse_str(value).map_err(|_| CleanupError::InvariantViolation)?;
     SaveSessionId::from_uuid(uuid).map_err(|_| CleanupError::InvariantViolation)
 }
 
-
-pub(crate) fn map_database_error(error: DatabaseError) -> CleanupError {    match error {
+pub(crate) fn map_database_error(error: DatabaseError) -> CleanupError {
+    match error {
         DatabaseError::AcquireTimeout => CleanupError::OperationTimeout,
         _ => CleanupError::DatabaseUnavailable,
     }
 }
 
-
-pub(crate) fn map_sql_error(error: sqlx::Error) -> CleanupError {    match error
+pub(crate) fn map_sql_error(error: sqlx::Error) -> CleanupError {
+    match error
         .as_database_error()
         .and_then(|error| error.code())
         .as_deref()
@@ -688,8 +693,8 @@ pub(crate) fn map_sql_error(error: sqlx::Error) -> CleanupError {    match error
     }
 }
 
-
-pub(crate) fn map_project_access_error(error: ProjectAccessError) -> CleanupError {    match error {
+pub(crate) fn map_project_access_error(error: ProjectAccessError) -> CleanupError {
+    match error {
         ProjectAccessError::OperationTimeout => CleanupError::OperationTimeout,
         ProjectAccessError::PersistenceUnavailable => CleanupError::DatabaseUnavailable,
         ProjectAccessError::InvalidPersistedState => CleanupError::InvariantViolation,

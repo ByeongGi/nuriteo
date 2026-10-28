@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::admission::*;
+use super::*;
 use std::fmt;
 
 use std::future::Future;
@@ -8,7 +8,6 @@ use std::future::Future;
 use std::net::IpAddr;
 
 use std::time::Duration;
-
 
 use serde_json::json;
 
@@ -19,7 +18,6 @@ use time::OffsetDateTime;
 use tokio::time as tokio_time;
 
 use uuid::Uuid;
-
 
 use crate::audit::{
     ActorType, AuditActor, AuditEvent, AuditEventFields, AuditEventId, AuditMetadata, AuditResult,
@@ -32,16 +30,20 @@ use crate::identity::{InvitationExpiryPolicy, NormalizedEmail, SessionId, Timest
 
 use crate::policy::EffectivePolicyEngine;
 
-
 use super::super::invitation::OrganizationInvitationTokenDigest;
 
 use super::super::{
     OrganizationId, OrganizationInvitation, OrganizationInvitationFields, OrganizationInvitationId,
     OrganizationInvitationStatus, OrganizationInvitationToken, OrganizationRole,
 };
-use super::{DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, DEFAULT_REAUTHENTICATION_AGE, MIN_REAUTHENTICATION_AGE, MAX_REAUTHENTICATION_AGE, OrganizationInvitationPolicy, OrganizationInvitationActor, OrganizationInvitationInvitee, OrganizationInvitationAuditContext, IssuedOrganizationInvitation, OrganizationInvitationRevokeResult, OrganizationInvitationServiceError, OrganizationInvitationService, PendingInsert, AuditInput, PendingState};
-
-
+use super::{
+    AuditInput, DEFAULT_OPERATION_TIMEOUT, DEFAULT_REAUTHENTICATION_AGE,
+    IssuedOrganizationInvitation, MAX_OPERATION_TIMEOUT, MAX_REAUTHENTICATION_AGE,
+    MIN_OPERATION_TIMEOUT, MIN_REAUTHENTICATION_AGE, OrganizationInvitationActor,
+    OrganizationInvitationAuditContext, OrganizationInvitationInvitee,
+    OrganizationInvitationPolicy, OrganizationInvitationRevokeResult,
+    OrganizationInvitationService, OrganizationInvitationServiceError, PendingInsert, PendingState,
+};
 
 impl super::OrganizationInvitationPolicy {
     pub fn new(
@@ -63,8 +65,8 @@ impl super::OrganizationInvitationPolicy {
     }
 }
 
-
-impl Default for OrganizationInvitationPolicy { fn default() -> Self {
+impl Default for OrganizationInvitationPolicy {
+    fn default() -> Self {
         Self {
             expiry: InvitationExpiryPolicy::default(),
             operation_timeout: DEFAULT_OPERATION_TIMEOUT,
@@ -72,7 +74,6 @@ impl Default for OrganizationInvitationPolicy { fn default() -> Self {
         }
     }
 }
-
 
 impl OrganizationInvitationActor {
     #[must_use]
@@ -88,7 +89,6 @@ impl OrganizationInvitationActor {
         self.user_id
     }
 }
-
 
 impl OrganizationInvitationInvitee {
     #[must_use]
@@ -110,7 +110,6 @@ impl OrganizationInvitationInvitee {
     }
 }
 
-
 impl OrganizationInvitationAuditContext {
     #[must_use]
     pub fn new(
@@ -130,15 +129,14 @@ impl OrganizationInvitationAuditContext {
     }
 }
 
-
-impl fmt::Debug for OrganizationInvitationAuditContext { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for OrganizationInvitationAuditContext {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("OrganizationInvitationAuditContext")
             .field("event_id", &self.event_id)
             .finish_non_exhaustive()
     }
 }
-
 
 impl IssuedOrganizationInvitation {
     #[must_use]
@@ -162,8 +160,8 @@ impl IssuedOrganizationInvitation {
     }
 }
 
-
-impl fmt::Debug for IssuedOrganizationInvitation { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for IssuedOrganizationInvitation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("IssuedOrganizationInvitation")
             .field("invitation", &self.invitation)
@@ -172,8 +170,8 @@ impl fmt::Debug for IssuedOrganizationInvitation { fn fmt(&self, formatter: &mut
     }
 }
 
-
-impl fmt::Display for OrganizationInvitationServiceError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for OrganizationInvitationServiceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "organization invitation input is invalid",
             Self::AlreadyPending => "a pending organization invitation already exists",
@@ -195,9 +193,7 @@ impl fmt::Display for OrganizationInvitationServiceError { fn fmt(&self, formatt
     }
 }
 
-
 impl std::error::Error for OrganizationInvitationServiceError {}
-
 
 impl OrganizationInvitationService {
     #[must_use]
@@ -708,9 +704,11 @@ impl OrganizationInvitationService {
     }
 }
 
-
 impl AuditInput {
-    pub(crate) const fn success(action: &'static str, changed_fields: &'static [&'static str]) -> Self {
+    pub(crate) const fn success(
+        action: &'static str,
+        changed_fields: &'static [&'static str],
+    ) -> Self {
         Self {
             action,
             result: AuditResult::Succeeded,
@@ -729,8 +727,8 @@ impl AuditInput {
     }
 }
 
-
-pub(crate) async fn authorize_owner(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn authorize_owner(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
     actor: OrganizationInvitationActor,
     require_recent_reauthentication: bool,
@@ -774,8 +772,8 @@ pub(crate) async fn authorize_owner(    transaction: &mut Transaction<'_, Postgr
     Ok(())
 }
 
-
-pub(crate) async fn lock_organization(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_organization(
+    transaction: &mut Transaction<'_, Postgres>,
     organization_id: OrganizationId,
 ) -> Result<(), OrganizationInvitationServiceError> {
     let active: Option<bool> = sqlx::query_scalar(
@@ -791,8 +789,8 @@ pub(crate) async fn lock_organization(    transaction: &mut Transaction<'_, Post
     Ok(())
 }
 
-
-pub(crate) async fn require_active_invitee_by_id(    transaction: &mut Transaction<'_, Postgres>,
+pub(crate) async fn require_active_invitee_by_id(
+    transaction: &mut Transaction<'_, Postgres>,
     invitee_user_id: UserId,
 ) -> Result<NormalizedEmail, OrganizationInvitationServiceError> {
     let email: Option<String> = sqlx::query_scalar(

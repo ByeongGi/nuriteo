@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use std::time::Duration;
 
-
 use sqlx::{Acquire, Postgres, Transaction};
 
 use tokio::sync::watch;
@@ -16,7 +15,6 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::{self, Instant};
 
 use uuid::Uuid;
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -35,7 +33,6 @@ use crate::quota::{QuotaRepository, SaveSessionId};
 
 use crate::workspace::StorageScopeId;
 
-
 const MAX_BATCH_SIZE: u16 = 100;
 
 const MAX_CONCURRENCY: u16 = 16;
@@ -43,7 +40,6 @@ const MAX_CONCURRENCY: u16 = 16;
 const MAX_ATTEMPTS: u16 = 16;
 
 const SQL_TIMEOUT_MARGIN: Duration = Duration::from_millis(25);
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CleanupWorkerPolicy {
@@ -57,7 +53,6 @@ pub struct CleanupWorkerPolicy {
     base_backoff: Duration,
     max_backoff: Duration,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -75,7 +70,6 @@ pub enum CleanupError {
     InvariantViolation,
 }
 
-
 #[derive(Debug, Clone, Copy)]
 pub struct AbortSaveSession {
     pub storage_scope_id: StorageScopeId,
@@ -84,7 +78,6 @@ pub struct AbortSaveSession {
     pub actor_user_id: UserId,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbortSaveSessionResult {
     Aborted,
@@ -92,13 +85,11 @@ pub enum AbortSaveSessionResult {
     Expired,
 }
 
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ExpirySweepReport {
     pub expired: u16,
     pub failed: u16,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkerShutdown {
@@ -107,7 +98,6 @@ pub enum WorkerShutdown {
     WorkerFailed,
 }
 
-
 #[derive(Clone)]
 pub struct CleanupService<B = S3ObjectStore> {
     pool: DatabasePool,
@@ -115,11 +105,9 @@ pub struct CleanupService<B = S3ObjectStore> {
     policy: CleanupWorkerPolicy,
 }
 
-
 pub trait CleanupBackend: Clone + Send + Sync + 'static {
     fn cleanup(&self, target: CleanupTarget) -> impl Future<Output = CleanupBackendOutcome> + Send;
 }
-
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct CleanupTarget {
@@ -129,7 +117,6 @@ pub struct CleanupTarget {
     prior_absence: bool,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CleanupKind {
     ObjectDelete,
@@ -137,7 +124,6 @@ enum CleanupKind {
     MultipartReconcile,
     MultipartCompleteReconcile,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CleanupBackendOutcome {
@@ -149,14 +135,12 @@ pub enum CleanupBackendOutcome {
     Unknown,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CanonicalMaterializationDisposition {
     Finalize,
     EnqueueObject,
     AbortMultipartAndEnqueue,
 }
-
 
 const fn canonical_materialization_disposition(
     referenced: bool,
@@ -171,32 +155,27 @@ const fn canonical_materialization_disposition(
     }
 }
 
-
 pub struct CleanupWorker {
     cancel: watch::Sender<bool>,
     join: JoinHandle<Result<(), CleanupError>>,
 }
 
-
 #[derive(Clone)]
-struct ClaimedJob {
+pub(crate) struct ClaimedJob {
     session_id: SaveSessionId,
     target: CleanupTarget,
     attempts: i16,
     absence_count: i16,
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReconcilePreparation {
+pub(crate) enum ReconcilePreparation {
     Proceed,
     StaleReady,
 }
 
-
 #[derive(Clone, Copy)]
-struct Deadline(Instant);
-
+pub(crate) struct Deadline(Instant);
 
 #[cfg(test)]
 mod tests {
@@ -369,7 +348,6 @@ mod tests {
         );
     }
 }
-
 
 mod backend;
 pub(crate) use backend::*;

@@ -6,11 +6,9 @@ use std::io::{self, Read, Write};
 
 use std::path::{Path, PathBuf};
 
-
 use clap::error::ErrorKind;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-
 
 use crate::app::run_server;
 
@@ -47,9 +45,7 @@ use crate::upgrade_preflight;
 
 use crate::{CommandStatus, VERSION};
 
-
 const BINARY_NAME: &str = "nuriteo-server";
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BackupCommand {
@@ -78,7 +74,6 @@ pub enum BackupCommand {
     Prune,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryKitCommand {
     Export {
@@ -100,7 +95,6 @@ pub enum RecoveryKitCommand {
     },
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OperationalCommand {
     Serve,
@@ -114,13 +108,11 @@ pub enum OperationalCommand {
     RecoveryKit(RecoveryKitCommand),
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliAction {
     Version,
     Operational(OperationalCommand),
 }
-
 
 const fn bootstrap_category(category: BootstrapErrorCategory) -> &'static str {
     match category {
@@ -132,13 +124,11 @@ const fn bootstrap_category(category: BootstrapErrorCategory) -> &'static str {
     }
 }
 
-
-enum MigrationCommandError {
+pub(crate) enum MigrationCommandError {
     Readiness(SchemaReadiness),
     ReadinessQuery,
     Migration,
 }
-
 
 const fn backup_error_category(error: crate::backup::BackupEngineError) -> &'static str {
     use crate::backup::BackupEngineError;
@@ -156,20 +146,17 @@ const fn backup_error_category(error: crate::backup::BackupEngineError) -> &'sta
     }
 }
 
-
 #[derive(Debug)]
-enum RecoveryKitCliError {
+pub(crate) enum RecoveryKitCliError {
     Input,
     Output,
     KeyConfiguration,
     Kit(RecoveryKitError),
 }
 
-
 const fn is_successful_display(kind: ErrorKind) -> bool {
     matches!(kind, ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -394,8 +381,7 @@ mod tests {
     }
 }
 
-
 mod instance_commands;
 pub use instance_commands::*;
 mod backup;
-pub use backup::*;
+pub(crate) use backup::*;

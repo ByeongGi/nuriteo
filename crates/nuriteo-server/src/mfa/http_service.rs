@@ -24,7 +24,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -35,19 +34,16 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::{
     EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaIdempotencyKey, MfaService,
     MfaServiceError, RecoveryCode, TotpCode,
 };
-
 
 const MAX_POLICY_TARGETS: usize = 10_000;
 
 const ENROLLMENT_ISSUER: &str = "NURITEO";
 
 const POLICY_POPULATION_DOMAIN: &[u8] = b"nuriteo.mfa-policy-population.v1";
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MfaHttpServiceError {
@@ -62,7 +58,6 @@ pub enum MfaHttpServiceError {
     Unavailable,
     Internal,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -79,7 +74,6 @@ pub struct MfaStatusView {
     pub notification_state: String,
 }
 
-
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaEnrollmentStartView {
@@ -88,13 +82,11 @@ pub struct MfaEnrollmentStartView {
     pub provisioning_uri: SecretText,
 }
 
-
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaEnrollmentCompleteView {
     pub recovery_codes: Vec<SecretText>,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -106,7 +98,6 @@ pub struct MfaPolicyView {
     pub immediately_restricted_users: u64,
     pub enrolled_local_administrators: u64,
 }
-
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -121,7 +112,6 @@ pub struct MfaPolicyImpactView {
     pub population_proof: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaResetTargetView {
@@ -131,32 +121,27 @@ pub struct MfaResetTargetView {
     pub credential_generation: String,
 }
 
-
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaResetTargetCollectionView {
     pub items: Vec<MfaResetTargetView>,
 }
 
-
 pub(crate) struct RotatedMfaResponse<T> {
     pub(crate) view: T,
     pub(crate) cookies: IssuedBrowserCookies,
 }
 
-
 #[derive(ToSchema)]
 #[schema(value_type = String)]
 pub struct SecretText(Zeroizing<String>);
-
 
 #[derive(Clone)]
 pub struct MfaHttpService {
     runtime: Option<Arc<MfaHttpRuntime>>,
 }
 
-
-struct MfaHttpRuntime {
+pub(crate) struct MfaHttpRuntime {
     pool: DatabasePool,
     sessions: SessionService,
     cookies: BrowserCookieBoundary,

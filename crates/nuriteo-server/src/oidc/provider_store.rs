@@ -1,14 +1,13 @@
 #![allow(unused_imports)]
-use super::*;
 use super::provider_model::*;
 use super::providers::*;
+use super::*;
 
 use std::fmt;
 
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use ::time::OffsetDateTime;
 
@@ -17,7 +16,6 @@ use sqlx::{Acquire, Postgres, Row, Transaction};
 use tokio::time;
 
 use uuid::Uuid;
-
 
 use crate::integration::{
     CaEndpointBinding, CredentialIdentity, IntegrationAdminActor, IntegrationError,
@@ -38,18 +36,25 @@ pub(crate) use login::{OidcAuthorizationRequest, OidcCallbackInput, OidcLoginSer
 
 pub use protocol::OidcEndpointValidator;
 
+use super::{
+    ACTIVATION_ATTESTATION_DOMAIN, ActivationAttestationInput, CLIENT_SECRET_KIND, DEFAULT_TIMEOUT,
+    INSTANCE_ID, INTEGRATION_TYPE, MAX_TIMEOUT, MIN_TIMEOUT, OidcProviderError, OidcProviderInput,
+    OidcProviderMetadata, OidcProviderService, OidcProviderState, OidcProviderUpdate,
+    OidcRuntimeProvider, map_integration_error,
+};
 use protocol::{OidcValidationProof, trust_fingerprint};
-use super::{INSTANCE_ID, INTEGRATION_TYPE, CLIENT_SECRET_KIND, ACTIVATION_ATTESTATION_DOMAIN, DEFAULT_TIMEOUT, MIN_TIMEOUT, MAX_TIMEOUT, OidcProviderInput, OidcProviderUpdate, OidcProviderState, OidcProviderMetadata, OidcRuntimeProvider, OidcProviderService, ActivationAttestationInput, map_integration_error, OidcProviderError};
 
-
-
-pub(crate) fn fixed_digest(row: &sqlx::postgres::PgRow, column: &str) -> Result<[u8; 32], OidcProviderError> {    row.get::<Vec<u8>, _>(column)
+pub(crate) fn fixed_digest(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<[u8; 32], OidcProviderError> {
+    row.get::<Vec<u8>, _>(column)
         .try_into()
         .map_err(|_| OidcProviderError::ValidationFailed)
 }
 
-
-pub(crate) async fn lock_integration_ca(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_integration_ca(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<(), OidcProviderError> {
     sqlx::query("SELECT pg_advisory_xact_lock(1229870147, hashtext($1))")
@@ -60,8 +65,8 @@ pub(crate) async fn lock_integration_ca(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn assert_current_ca(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn assert_current_ca(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     expected: [u8; 32],
 ) -> Result<(), OidcProviderError> {
@@ -114,8 +119,8 @@ pub(crate) async fn assert_current_ca(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn lock_expected_version(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_expected_version(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
     expected_version: u64,
 ) -> Result<OidcProviderState, OidcProviderError> {
@@ -134,8 +139,8 @@ pub(crate) async fn lock_expected_version(    tx: &mut Transaction<'_, Postgres>
     OidcProviderState::parse(row.get("status"))
 }
 
-
-pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn load_metadata(
+    tx: &mut Transaction<'_, Postgres>,
     id: Uuid,
 ) -> Result<OidcProviderMetadata, OidcProviderError> {
     let row = sqlx::query(
@@ -167,8 +172,8 @@ pub(crate) async fn load_metadata(    tx: &mut Transaction<'_, Postgres>,
     })
 }
 
-
-pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, OidcProviderError> {    CredentialIdentity::new(
+pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, OidcProviderError> {
+    CredentialIdentity::new(
         INSTANCE_ID,
         INTEGRATION_TYPE,
         id.to_string(),
@@ -177,8 +182,8 @@ pub(crate) fn credential_identity(id: Uuid) -> Result<CredentialIdentity, OidcPr
     .map_err(map_integration_error)
 }
 
-
-pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    tx: &mut Transaction<'_, Postgres>,
     actor: IntegrationAdminActor,
     action: &str,
     id: Uuid,
@@ -197,15 +202,15 @@ pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn valid_text(value: &str, max: usize) -> bool {    !value.is_empty()
+pub(crate) fn valid_text(value: &str, max: usize) -> bool {
+    !value.is_empty()
         && value.len() <= max
         && value.trim() == value
         && !value.chars().any(char::is_control)
 }
 
-
-pub(crate) fn validate_correlation(value: &str) -> Result<(), OidcProviderError> {    if (1..=128).contains(&value.len())
+pub(crate) fn validate_correlation(value: &str) -> Result<(), OidcProviderError> {
+    if (1..=128).contains(&value.len())
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
@@ -216,8 +221,8 @@ pub(crate) fn validate_correlation(value: &str) -> Result<(), OidcProviderError>
     }
 }
 
-
-pub(crate) fn map_database_error(error: sqlx::Error) -> OidcProviderError {    match error
+pub(crate) fn map_database_error(error: sqlx::Error) -> OidcProviderError {
+    match error
         .as_database_error()
         .and_then(|database| database.code())
         .as_deref()
@@ -228,8 +233,8 @@ pub(crate) fn map_database_error(error: sqlx::Error) -> OidcProviderError {    m
     }
 }
 
-
-impl fmt::Display for OidcProviderError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for OidcProviderError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::AuthenticationFailed => "OIDC authentication failed",
             Self::Forbidden => "OIDC operation is forbidden",
@@ -247,6 +252,5 @@ impl fmt::Display for OidcProviderError { fn fmt(&self, formatter: &mut fmt::For
         })
     }
 }
-
 
 impl std::error::Error for OidcProviderError {}

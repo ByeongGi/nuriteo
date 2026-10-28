@@ -1,9 +1,8 @@
 #![allow(unused_imports)]
-use super::*;
-use super::keyring::*;
 use super::credential_identity::*;
 use super::error::*;
-
+use super::keyring::*;
+use super::*;
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -18,7 +17,6 @@ use std::pin::Pin;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 
@@ -48,7 +46,6 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 use zeroize::{Zeroize, Zeroizing};
 
-
 use crate::config::{Environment, FileReader, load_secret};
 
 use crate::database::DatabasePool;
@@ -57,10 +54,17 @@ use crate::identity::{SessionId, UserId};
 
 use crate::instance_settings::EffectiveInstanceSettings;
 
+use super::{
+    ALGORITHM, CaBundleMetadata, CaCandidatePreflight, CaEndpointBinding, CaPreflightProof,
+    CredentialIdentity, CredentialMetadata, DEFAULT_OPERATION_TIMEOUT, EncryptedSecretEnvelope,
+    IntegrationAdminActor, IntegrationAdminService, IntegrationAudit, IntegrationError,
+    IntegrationRepository, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, MAX_CA_BYTES,
+    MAX_CA_CERTIFICATES, MAX_OPERATION_TIMEOUT, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH,
+    MAX_SECRET_BYTES, MIN_OPERATION_TIMEOUT, MasterKey, MasterKeyring, NONCE_BYTES,
+    PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, PreviousKeyInput, RotationReport, Sealed,
+    SecretValue, StoredCa, ValidatedCaBundle,
+};
 use crate::smtp::{SmtpConfig, SmtpPublicSettings, SmtpSecurity};
-use super::{ALGORITHM, NONCE_BYTES, MAX_SECRET_BYTES, MAX_PREVIOUS_KEYS, MAX_ROTATION_BATCH, MAX_CA_BYTES, MAX_CA_CERTIFICATES, DEFAULT_OPERATION_TIMEOUT, MIN_OPERATION_TIMEOUT, MAX_OPERATION_TIMEOUT, MASTER_KEY, MASTER_KEY_FILE, MASTER_KEY_VERSION, PREVIOUS_MASTER_KEYS, PREVIOUS_MASTER_KEYS_FILE, SecretValue, MasterKey, MasterKeyring, EncryptedSecretEnvelope, PreviousKeyInput, CredentialIdentity, CredentialMetadata, RotationReport, IntegrationRepository, Sealed, ValidatedCaBundle, CaBundleMetadata, CaEndpointBinding, IntegrationAdminActor, IntegrationAdminService, CaPreflightProof, CaCandidatePreflight, StoredCa, IntegrationAudit, IntegrationError};
-
-
 
 impl super::IntegrationRepository {
     pub(crate) async fn stage_ca_candidate(
@@ -600,7 +604,11 @@ impl super::IntegrationRepository {
         .map_err(|_| IntegrationError::Unavailable)?
     }
 
-    pub(crate) async fn load_ca(&self, id: Uuid, state: &str) -> Result<Option<StoredCa>, IntegrationError> {
+    pub(crate) async fn load_ca(
+        &self,
+        id: Uuid,
+        state: &str,
+    ) -> Result<Option<StoredCa>, IntegrationError> {
         let row = sqlx::query("SELECT version,pem,certificate_count,fingerprints,earliest_expiry,endpoint_fingerprint FROM integration_ca_bundles WHERE id=$1::uuid AND state=$2")
             .bind(id.to_string()).bind(state)
             .fetch_optional(&mut *self.pool.acquire().await.map_err(|_| IntegrationError::Unavailable)?)
@@ -622,8 +630,8 @@ impl super::IntegrationRepository {
     }
 }
 
-
-pub(crate) async fn lock_and_validate_endpoint(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn lock_and_validate_endpoint(
+    tx: &mut Transaction<'_, Postgres>,
     expected: &CaEndpointBinding,
 ) -> Result<(), IntegrationError> {
     let current = match expected.integration_type() {
@@ -699,8 +707,10 @@ pub(crate) async fn lock_and_validate_endpoint(    tx: &mut Transaction<'_, Post
     Ok(())
 }
 
-
-pub(crate) fn validate_stored_ca(row: &sqlx::postgres::PgRow) -> Result<ValidatedCaBundle, IntegrationError> {    let parsed =
+pub(crate) fn validate_stored_ca(
+    row: &sqlx::postgres::PgRow,
+) -> Result<ValidatedCaBundle, IntegrationError> {
+    let parsed =
         ValidatedCaBundle::parse(row.get("pem")).map_err(|_| IntegrationError::InvalidCaBundle)?;
     let count: i16 = row.get("certificate_count");
     let fingerprints: Vec<String> = row.get("fingerprints");
@@ -713,7 +723,6 @@ pub(crate) fn validate_stored_ca(row: &sqlx::postgres::PgRow) -> Result<Validate
     }
     Ok(parsed)
 }
-
 
 pub(crate) async fn authorize_recent_admin(
     tx: &mut Transaction<'_, Postgres>,
@@ -742,8 +751,8 @@ pub(crate) async fn authorize_recent_admin(
     Ok(())
 }
 
-
-pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn append_audit(
+    tx: &mut Transaction<'_, Postgres>,
     user_id: UserId,
     event: IntegrationAudit<'_>,
 ) -> Result<(), IntegrationError> {
@@ -758,8 +767,8 @@ pub(crate) async fn append_audit(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) fn valid_name(value: &str, max: usize, lower_only: bool) -> bool {    if value.is_empty() || value.len() > max {
+pub(crate) fn valid_name(value: &str, max: usize, lower_only: bool) -> bool {
+    if value.is_empty() || value.len() > max {
         return false;
     }
     value.bytes().enumerate().all(|(index, byte)| {
@@ -780,8 +789,8 @@ pub(crate) fn valid_name(value: &str, max: usize, lower_only: bool) -> bool {   
     })
 }
 
-
-pub(crate) fn valid_endpoint_host(value: &str) -> bool {    (1..=253).contains(&value.len())
+pub(crate) fn valid_endpoint_host(value: &str) -> bool {
+    (1..=253).contains(&value.len())
         && value.is_ascii()
         && value.trim() == value
         && value
@@ -789,15 +798,15 @@ pub(crate) fn valid_endpoint_host(value: &str) -> bool {    (1..=253).contains(&
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b':'))
 }
 
-
-pub(crate) fn valid_correlation(value: &str) -> bool {    (1..=128).contains(&value.len())
+pub(crate) fn valid_correlation(value: &str) -> bool {
+    (1..=128).contains(&value.len())
         && value
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
 }
 
-
-pub(crate) fn map_ca_stage_error(error: sqlx::Error) -> IntegrationError {    if error
+pub(crate) fn map_ca_stage_error(error: sqlx::Error) -> IntegrationError {
+    if error
         .as_database_error()
         .is_some_and(|database| database.code().as_deref() == Some("23505"))
     {
@@ -807,8 +816,8 @@ pub(crate) fn map_ca_stage_error(error: sqlx::Error) -> IntegrationError {    if
     }
 }
 
-
-pub(crate) fn hex_lower(bytes: &[u8]) -> String {    const HEX: &[u8; 16] = b"0123456789abcdef";
+pub(crate) fn hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         out.push(HEX[(byte >> 4) as usize] as char);
@@ -817,8 +826,8 @@ pub(crate) fn hex_lower(bytes: &[u8]) -> String {    const HEX: &[u8; 16] = b"01
     out
 }
 
-
-impl fmt::Display for IntegrationError { fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Display for IntegrationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidInput => "integration input is invalid",
             Self::KeyConfiguration => "integration key configuration is invalid",

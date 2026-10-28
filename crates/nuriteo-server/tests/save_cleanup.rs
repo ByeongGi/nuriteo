@@ -1,3 +1,7 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use std::env;
 
 use std::ffi::OsString;
@@ -7,7 +11,6 @@ use std::fs;
 use std::str::FromStr;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -52,7 +55,6 @@ use sha2::{Digest, Sha256};
 
 use sqlx::{Acquire, Executor};
 
-
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 
 const DATABASE_CA_ENV: &str = "NURITEO_TEST_DATABASE_CA";
@@ -92,7 +94,6 @@ const COMPLETE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009027";
 const COMPLETE_MISSING_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009028";
 
 const NORMAL_COMPLETE_PROJECT: &str = "0199ee6c-c777-7000-8000-000000009029";
-
 
 struct FixtureEnvironment {
     endpoint: String,

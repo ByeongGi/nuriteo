@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-
 use axum::Json;
 
 use axum::body::{Body, to_bytes};
@@ -23,7 +22,6 @@ use utoipa::ToSchema;
 
 use utoipa_axum::{router::OpenApiRouter, routes};
 
-
 use crate::http::{FieldViolation, HttpError, RequestId};
 
 use crate::identity::{BrowserMethod, BrowserRequestHeaders, UserId};
@@ -34,7 +32,6 @@ use crate::save::{
     ContentDescriptor, HistoricalReferenceKind, IdempotencyKey, ProjectVersionName,
     ProjectVersionPageLimit,
 };
-
 
 use super::http_service::{
     HistoricalPromotionView, ProjectHttpError, ProjectHttpService, ProjectListView,
@@ -48,7 +45,6 @@ use super::{
 };
 
 use crate::access_token::{AccessTokenScope, ApiCategory};
-
 
 const COLLECTION: &str = "/api/v1/workspaces/{owner_type}/{owner_id}/projects";
 
@@ -88,13 +84,11 @@ const CSRF: HeaderName = HeaderName::from_static("x-csrf-token");
 
 const IDEMPOTENCY_KEY: HeaderName = HeaderName::from_static("idempotency-key");
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct CreateVersionRequest {
     name: String,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -103,9 +97,7 @@ struct PromoteHistoryRequest {
     reference_id: String,
 }
 
-
 struct ProjectBundleBinary;
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -116,20 +108,17 @@ struct CreateProjectRequest {
     template: ProjectTemplate,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct RenameProjectRequest {
     name: String,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct DeleteProjectRequest {
     name: String,
 }
-
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
@@ -138,20 +127,17 @@ struct GrantRoleRequest {
     role: ProjectRole,
 }
 
-
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 struct ChangeRoleRequest {
     role: ProjectRole,
 }
 
-
 struct BrowserHeaders<'a> {
     cookies: Vec<&'a str>,
     origins: Vec<&'a str>,
     csrf: Vec<&'a str>,
 }
-
 
 struct ListQuery {
     state: Option<ProjectState>,
@@ -160,12 +146,10 @@ struct ListQuery {
     cursor: Option<String>,
 }
 
-
 struct VersionListQuery {
     page_size: u16,
     cursor: Option<String>,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -276,7 +260,6 @@ mod tests {
         assert!(bearer_token(&duplicate, &request_id, ITEM).is_err());
     }
 }
-
 
 mod project_http;
 pub(crate) use project_http::*;

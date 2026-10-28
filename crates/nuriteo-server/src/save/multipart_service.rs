@@ -4,7 +4,6 @@ use std::future::Future;
 
 use std::time::Duration;
 
-
 use hmac::{Hmac, KeyInit, Mac};
 
 use sha2::Sha256;
@@ -14,7 +13,6 @@ use sqlx::{Acquire, PgConnection, Postgres, Transaction};
 use time::OffsetDateTime;
 
 use tokio::time::{self as tokio_time, Instant};
-
 
 use crate::database::{DatabaseError, DatabasePool};
 
@@ -37,12 +35,10 @@ use crate::quota::{
 
 use crate::workspace::StorageScopeId;
 
-
 use super::{
     CreateMultipartSession, IdempotencySecret, MultipartCompleteResult, MultipartPartCapability,
     MultipartPartPlan, MultipartPartReceipt, MultipartSession, MultipartSessionContext,
 };
-
 
 const MAX_MULTIPART_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
@@ -58,7 +54,6 @@ const SQL_TIMEOUT_MARGIN: Duration = Duration::from_millis(25);
 
 const MAX_ISSUE_BATCH: u16 = 16;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MultipartServicePolicy {
     operation_timeout: Duration,
@@ -67,7 +62,6 @@ pub struct MultipartServicePolicy {
     part_size_bytes: u64,
     issue_batch_limit: u16,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -96,7 +90,6 @@ pub enum MultipartServiceError {
     InvariantViolation,
 }
 
-
 pub trait MultipartStore: Clone + Send + Sync + 'static {
     type Error: Send;
 
@@ -122,7 +115,6 @@ pub trait MultipartStore: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 }
 
-
 #[derive(Clone)]
 pub struct MultipartService<S = S3ObjectStore> {
     pool: DatabasePool,
@@ -132,8 +124,7 @@ pub struct MultipartService<S = S3ObjectStore> {
     idempotency_secret: IdempotencySecret,
 }
 
-
-struct PersistedMultipart {
+pub(crate) struct PersistedMultipart {
     session_id: SaveSessionId,
     expires_at: OffsetDateTime,
     staging_object_key: String,
@@ -148,8 +139,7 @@ struct PersistedMultipart {
     remaining_captured_at: Instant,
 }
 
-
-struct ExistingMultipart {
+pub(crate) struct ExistingMultipart {
     id: String,
     state: String,
     expected_project_version: i64,
@@ -165,8 +155,7 @@ struct ExistingMultipart {
     create_status: String,
 }
 
-
-struct SessionRow {
+pub(crate) struct SessionRow {
     state: String,
     staging_object_key: String,
     multipart_upload_id: Option<String>,
@@ -174,8 +163,7 @@ struct SessionRow {
     remaining: Duration,
 }
 
-
-struct LoadedPart {
+pub(crate) struct LoadedPart {
     part_number: u16,
     expected_bytes: u64,
     expected_sha256: Sha256Checksum,
@@ -183,11 +171,9 @@ struct LoadedPart {
     e_tag: Option<String>,
 }
 
-
 type PartRow = (i16, i64, Vec<u8>, String, Option<String>);
 
-
-struct LoadedMultipart {
+pub(crate) struct LoadedMultipart {
     staging_object_key: String,
     upload_id: Option<String>,
     remaining: Duration,
@@ -195,17 +181,14 @@ struct LoadedMultipart {
     parts: Vec<LoadedPart>,
 }
 
-
-struct PreparedComplete {
+pub(crate) struct PreparedComplete {
     upload: MultipartUpload,
     parts: Vec<UploadedPart>,
     idempotent_retry: bool,
 }
 
-
 #[derive(Clone, Copy)]
-struct Deadline(Instant);
-
+pub(crate) struct Deadline(Instant);
 
 #[cfg(test)]
 mod tests {
@@ -295,7 +278,6 @@ mod tests {
         assert!(!format!("{receipt:?}").contains("private-etag-value"));
     }
 }
-
 
 mod upload_commands;
 pub(crate) use upload_commands::*;

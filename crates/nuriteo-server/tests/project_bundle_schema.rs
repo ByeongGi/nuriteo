@@ -1,9 +1,12 @@
+#![expect(
+    unused_imports,
+    reason = "imports are repeated for the split test modules"
+)]
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::database::{
     DatabasePool, DatabasePoolConfig, DatabaseTlsConfig, MigrationOptions, MigrationReport,
@@ -13,7 +16,6 @@ use nuriteo_server::database::{
 use sqlx::{Acquire, Executor};
 
 use tokio::time;
-
 
 const DATABASE_URL_ENV: &str = "NURITEO_TEST_DATABASE_URL";
 

@@ -1,12 +1,11 @@
 #![allow(unused_imports)]
-use super::*;
 use super::atomicity::*;
+use super::*;
 use std::env;
 
 use std::fs;
 
 use std::time::Duration;
-
 
 use nuriteo_server::audit::AuditEventId;
 
@@ -28,12 +27,14 @@ use nuriteo_server::project::{
 
 use sqlx::{Acquire, Executor, Postgres, Transaction};
 
+use super::{
+    DATABASE_CA_ENV, DATABASE_URL_ENV, DISABLED, MEMBER, MEMBER_TWO, ORGANIZATION,
+    ORGANIZATION_SCOPE, OUTSIDER, OWNER, PERSONAL_SCOPE,
+};
 use tokio::time as tokio_time;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, OWNER, MEMBER, MEMBER_TWO, OUTSIDER, DISABLED, ORGANIZATION, PERSONAL_SCOPE, ORGANIZATION_SCOPE};
 
-
-
-pub(crate) async fn verify_persistence_timeouts_remain_typed(    pool: &DatabasePool,
+pub(crate) async fn verify_persistence_timeouts_remain_typed(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     organization_owner: ProjectOwner,
@@ -115,8 +116,8 @@ pub(crate) async fn verify_persistence_timeouts_remain_typed(    pool: &Database
     holder.rollback().await.unwrap();
 }
 
-
-pub(crate) async fn verify_direct_service_query_timeout_remains_typed(    pool: &DatabasePool,
+pub(crate) async fn verify_direct_service_query_timeout_remains_typed(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
 ) {
@@ -183,8 +184,8 @@ pub(crate) async fn verify_direct_service_query_timeout_remains_typed(    pool: 
     );
 }
 
-
-pub(crate) async fn verify_same_version_role_mutations_serialize(    pool: &DatabasePool,
+pub(crate) async fn verify_same_version_role_mutations_serialize(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     member: UserId,
@@ -247,8 +248,8 @@ pub(crate) async fn verify_same_version_role_mutations_serialize(    pool: &Data
     );
 }
 
-
-pub(crate) async fn verify_update_authorization_blocks_without_lock_upgrade(    pool: &DatabasePool,
+pub(crate) async fn verify_update_authorization_blocks_without_lock_upgrade(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     organization_owner: ProjectOwner,
@@ -307,8 +308,8 @@ pub(crate) async fn verify_update_authorization_blocks_without_lock_upgrade(    
     assert_eq!(renamed.lock_version(), version(2));
 }
 
-
-pub(crate) async fn verify_get_reloads_after_archive_race(    pool: &DatabasePool,
+pub(crate) async fn verify_get_reloads_after_archive_race(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     organization_owner: ProjectOwner,
@@ -365,8 +366,8 @@ pub(crate) async fn verify_get_reloads_after_archive_race(    pool: &DatabasePoo
     assert_eq!(current.lock_version(), version(2));
 }
 
-
-pub(crate) async fn verify_disabled_removed_and_archived_boundaries(    pool: &DatabasePool,
+pub(crate) async fn verify_disabled_removed_and_archived_boundaries(
+    pool: &DatabasePool,
     service: &ProjectService,
     owner: UserId,
     organization_owner: ProjectOwner,
@@ -439,8 +440,8 @@ pub(crate) async fn verify_disabled_removed_and_archived_boundaries(    pool: &D
     );
 }
 
-
-pub(crate) async fn seed_fixture(pool: &DatabasePool) {    for (id, label, status) in [
+pub(crate) async fn seed_fixture(pool: &DatabasePool) {
+    for (id, label, status) in [
         (OWNER, "owner", "active"),
         (MEMBER, "member", "active"),
         (MEMBER_TWO, "member-two", "active"),
@@ -501,8 +502,8 @@ pub(crate) async fn seed_fixture(pool: &DatabasePool) {    for (id, label, statu
         .unwrap();
 }
 
-
-pub(crate) fn audit(user_id: UserId) -> ProjectAuditContext {    ProjectAuditContext::new(
+pub(crate) fn audit(user_id: UserId) -> ProjectAuditContext {
+    ProjectAuditContext::new(
         AuditEventId::new(),
         user_id,
         None,
@@ -511,68 +512,68 @@ pub(crate) fn audit(user_id: UserId) -> ProjectAuditContext {    ProjectAuditCon
     )
 }
 
-
-pub(crate) fn user_id(value: &str) -> UserId {    value.parse().unwrap()
+pub(crate) fn user_id(value: &str) -> UserId {
+    value.parse().unwrap()
 }
 
-
-pub(crate) fn organization_id() -> OrganizationId {    ORGANIZATION.parse().unwrap()
+pub(crate) fn organization_id() -> OrganizationId {
+    ORGANIZATION.parse().unwrap()
 }
 
-
-pub(crate) fn slug(value: &str) -> ProjectSlug {    ProjectSlug::new(value.into()).unwrap()
+pub(crate) fn slug(value: &str) -> ProjectSlug {
+    ProjectSlug::new(value.into()).unwrap()
 }
 
-
-pub(crate) fn name(value: &str) -> ProjectName {    ProjectName::new(value.into()).unwrap()
+pub(crate) fn name(value: &str) -> ProjectName {
+    ProjectName::new(value.into()).unwrap()
 }
 
-
-pub(crate) fn version(value: i64) -> ProjectVersion {    ProjectVersion::new(value).unwrap()
+pub(crate) fn version(value: i64) -> ProjectVersion {
+    ProjectVersion::new(value).unwrap()
 }
 
-
-pub(crate) async fn project_version(pool: &DatabasePool, project_id: ProjectId) -> i64 {    sqlx::query_scalar("SELECT lock_version FROM projects WHERE id=$1::uuid")
+pub(crate) async fn project_version(pool: &DatabasePool, project_id: ProjectId) -> i64 {
+    sqlx::query_scalar("SELECT lock_version FROM projects WHERE id=$1::uuid")
         .bind(project_id.to_string())
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn project_name(pool: &DatabasePool, project_id: ProjectId) -> String {    sqlx::query_scalar("SELECT name FROM projects WHERE id=$1::uuid")
+pub(crate) async fn project_name(pool: &DatabasePool, project_id: ProjectId) -> String {
+    sqlx::query_scalar("SELECT name FROM projects WHERE id=$1::uuid")
         .bind(project_id.to_string())
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn project_rows(pool: &DatabasePool, project_id: ProjectId) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE id=$1::uuid")
+pub(crate) async fn project_rows(pool: &DatabasePool, project_id: ProjectId) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE id=$1::uuid")
         .bind(project_id.to_string())
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn tombstone_rows(pool: &DatabasePool, project_id: ProjectId) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM project_tombstones WHERE former_project_id=$1::uuid")
+pub(crate) async fn tombstone_rows(pool: &DatabasePool, project_id: ProjectId) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM project_tombstones WHERE former_project_id=$1::uuid")
         .bind(project_id.to_string())
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn project_count(pool: &DatabasePool, slug: &str) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE slug=$1")
+pub(crate) async fn project_count(pool: &DatabasePool, slug: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE slug=$1")
         .bind(slug)
         .fetch_one(&mut *pool.acquire().await.unwrap())
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn role_count(pool: &DatabasePool, project_id: ProjectId, user_id: UserId) -> i64 {    sqlx::query_scalar(
+pub(crate) async fn role_count(pool: &DatabasePool, project_id: ProjectId, user_id: UserId) -> i64 {
+    sqlx::query_scalar(
         "SELECT COUNT(*) FROM project_user_roles WHERE project_id=$1::uuid AND user_id=$2::uuid",
     )
     .bind(project_id.to_string())
@@ -582,15 +583,15 @@ pub(crate) async fn role_count(pool: &DatabasePool, project_id: ProjectId, user_
     .unwrap()
 }
 
-
-pub(crate) async fn backend_pid(transaction: &mut Transaction<'_, Postgres>) -> i32 {    sqlx::query_scalar("SELECT pg_backend_pid()")
+pub(crate) async fn backend_pid(transaction: &mut Transaction<'_, Postgres>) -> i32 {
+    sqlx::query_scalar("SELECT pg_backend_pid()")
         .fetch_one(&mut **transaction)
         .await
         .unwrap()
 }
 
-
-pub(crate) async fn wait_for_project_update_block(pool: &DatabasePool, holder_pid: i32) -> bool {    let deadline = tokio_time::Instant::now() + Duration::from_secs(2);
+pub(crate) async fn wait_for_project_update_block(pool: &DatabasePool, holder_pid: i32) -> bool {
+    let deadline = tokio_time::Instant::now() + Duration::from_secs(2);
     let mut observer = pool.acquire().await.unwrap();
     loop {
         let remaining = deadline.saturating_duration_since(tokio_time::Instant::now());
@@ -619,8 +620,8 @@ pub(crate) async fn wait_for_project_update_block(pool: &DatabasePool, holder_pi
     }
 }
 
-
-pub(crate) async fn wait_for_project_share_block(pool: &DatabasePool, holder_pid: i32) -> bool {    let deadline = tokio_time::Instant::now() + Duration::from_secs(2);
+pub(crate) async fn wait_for_project_share_block(pool: &DatabasePool, holder_pid: i32) -> bool {
+    let deadline = tokio_time::Instant::now() + Duration::from_secs(2);
     let mut observer = pool.acquire().await.unwrap();
     loop {
         let remaining = deadline.saturating_duration_since(tokio_time::Instant::now());
@@ -649,8 +650,8 @@ pub(crate) async fn wait_for_project_share_block(pool: &DatabasePool, holder_pid
     }
 }
 
-
-pub(crate) async fn audit_count(pool: &DatabasePool, action: &str, result: &str) -> i64 {    sqlx::query_scalar("SELECT COUNT(*) FROM audit_events WHERE action_code=$1 AND result=$2")
+pub(crate) async fn audit_count(pool: &DatabasePool, action: &str, result: &str) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM audit_events WHERE action_code=$1 AND result=$2")
         .bind(action)
         .bind(result)
         .fetch_one(&mut *pool.acquire().await.unwrap())
@@ -658,8 +659,8 @@ pub(crate) async fn audit_count(pool: &DatabasePool, action: &str, result: &str)
         .unwrap()
 }
 
-
-pub(crate) async fn secret_like_audit_metadata(pool: &DatabasePool) -> i64 {    sqlx::query_scalar(
+pub(crate) async fn secret_like_audit_metadata(pool: &DatabasePool) -> i64 {
+    sqlx::query_scalar(
         "SELECT COUNT(*) FROM audit_events \
          WHERE metadata::text ~* '(password|token|secret|credential|authorization|cookie|dsn)'",
     )
@@ -668,8 +669,8 @@ pub(crate) async fn secret_like_audit_metadata(pool: &DatabasePool) -> i64 {    
     .unwrap()
 }
 
-
-pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection = pool.acquire().await.unwrap();
+pub(crate) async fn reset_fixture(pool: &DatabasePool) {
+    let mut connection = pool.acquire().await.unwrap();
     connection
         .execute("DROP SCHEMA public CASCADE")
         .await
@@ -677,8 +678,8 @@ pub(crate) async fn reset_fixture(pool: &DatabasePool) {    let mut connection =
     connection.execute("CREATE SCHEMA public").await.unwrap();
 }
 
-
-pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::var(DATABASE_URL_ENV).unwrap();
+pub(crate) async fn fixture_pool() -> DatabasePool {
+    let database_url = env::var(DATABASE_URL_ENV).unwrap();
     let ca = fs::read(env::var(DATABASE_CA_ENV).unwrap()).unwrap();
     let tls = DatabaseTlsConfig::verify_full(None, Some(ca), None).unwrap();
     DatabasePool::connect(
@@ -695,4 +696,3 @@ pub(crate) async fn fixture_pool() -> DatabasePool {    let database_url = env::
     .await
     .unwrap()
 }
-

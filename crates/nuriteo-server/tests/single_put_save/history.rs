@@ -1,15 +1,15 @@
 #![allow(unused_imports)]
-use super::*;
-use super::verifier::*;
-use super::working_head::*;
-use super::save_http::*;
-use super::relay_multipart::*;
-use super::relay_streams::*;
-use super::versions::*;
 use super::admission::*;
 use super::fake_store::*;
-use super::relay_client::*;
 use super::postgres_bucket::*;
+use super::relay_client::*;
+use super::relay_multipart::*;
+use super::relay_streams::*;
+use super::save_http::*;
+use super::verifier::*;
+use super::versions::*;
+use super::working_head::*;
+use super::*;
 use std::env;
 
 use std::ffi::OsString;
@@ -23,7 +23,6 @@ use std::str::FromStr;
 use std::task::Poll;
 
 use std::time::Duration;
-
 
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 
@@ -120,14 +119,24 @@ use tower::ServiceExt as _;
 
 use url::Url;
 
+use super::{
+    ACCESS_KEY, AbortBehavior, AttachFailureStore, BUCKET, BoundedFrameBody, CapturedLogWriter,
+    DATABASE_CA_ENV, DATABASE_URL_ENV, FailingPresigner, FixtureEnvironment, GatedFrameBody,
+    HangingPresigner, LostCompleteStore, NeverReadBody, ORG, ORG_MEMBER, ORG_OWNER,
+    ORG_PROJECT_MEMBER, ORG_PROJECT_MULTI_ARCHIVE, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_OUTSIDER,
+    ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_READ, ORG_SCOPE, ORG_WRITE,
+    OUTSIDER, ObservedFrameBody, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_HISTORY_LEFT,
+    PROJECT_HISTORY_RIGHT, PROJECT_LEASE_ABORT, PROJECT_LEASE_CLOCK, PROJECT_LEASE_COMPLETE,
+    PROJECT_LEASE_EXPIRE, PROJECT_MULTI_EXPIRY, PROJECT_TIMEOUT, PersistedRelaySecretRow,
+    RelayMultipartFixture, S3_CA_ENV, S3_ENDPOINT_ENV, SCOPE, SECRET_KEY, TEST_PASSWORD,
+    TEST_PASSWORD_HASH, USER, VersionBrowser, WEB_ORIGIN,
+};
 use uuid::Uuid;
-use super::{DATABASE_URL_ENV, DATABASE_CA_ENV, S3_ENDPOINT_ENV, S3_CA_ENV, BUCKET, ACCESS_KEY, SECRET_KEY, WEB_ORIGIN, TEST_PASSWORD, TEST_PASSWORD_HASH, USER, SCOPE, PROJECT_A, PROJECT_B, PROJECT_FAIL, PROJECT_TIMEOUT, PROJECT_LEASE_ABORT, PROJECT_LEASE_EXPIRE, PROJECT_LEASE_COMPLETE, PROJECT_MULTI_EXPIRY, PROJECT_LEASE_CLOCK, PROJECT_HISTORY_LEFT, PROJECT_HISTORY_RIGHT, OUTSIDER, ORG_OWNER, ORG_READ, ORG_WRITE, ORG_MEMBER, ORG_SCOPE, ORG, ORG_PROJECT_OWNER, ORG_PROJECT_READ, ORG_PROJECT_WRITE, ORG_PROJECT_MEMBER, ORG_PROJECT_OUTSIDER, ORG_PROJECT_MULTI_REVOKE, ORG_PROJECT_MULTI_ARCHIVE, PersistedRelaySecretRow, FixtureEnvironment, AbortBehavior, AttachFailureStore, LostCompleteStore, FailingPresigner, HangingPresigner, VersionBrowser, RelayMultipartFixture, CapturedLogWriter, NeverReadBody, BoundedFrameBody, ObservedFrameBody, GatedFrameBody};
-
-
 
 #[tokio::test]
 #[ignore = "requires tests/fixtures/project-history/run.sh"]
-pub(crate) async fn project_history_promotes_atomically_and_replays_durable_outcomes() {    let pool = fixture_pool().await;
+pub(crate) async fn project_history_promotes_atomically_and_replays_durable_outcomes() {
+    let pool = fixture_pool().await;
     reset_and_seed(&pool).await;
     let endpoint = env::var(S3_ENDPOINT_ENV).unwrap();
     let ca_file = env::var(S3_CA_ENV).unwrap();
@@ -768,8 +777,8 @@ pub(crate) async fn project_history_promotes_atomically_and_replays_durable_outc
     );
 }
 
-
-pub(crate) fn history_audit(actor: UserId, correlation_id: &str) -> ProjectAuditContext {    ProjectAuditContext::new(
+pub(crate) fn history_audit(actor: UserId, correlation_id: &str) -> ProjectAuditContext {
+    ProjectAuditContext::new(
         AuditEventId::new(),
         actor,
         Some("Save Fixture".to_owned()),
@@ -778,8 +787,8 @@ pub(crate) fn history_audit(actor: UserId, correlation_id: &str) -> ProjectAudit
     )
 }
 
-
-pub(crate) async fn prepare_verified_head(    creator: &SinglePutService,
+pub(crate) async fn prepare_verified_head(
+    creator: &SinglePutService,
     verifier: &StagingVerifier,
     http: &reqwest::Client,
     expected_project_version: ProjectVersion,
@@ -802,12 +811,12 @@ pub(crate) async fn prepare_verified_head(    creator: &SinglePutService,
     .await
 }
 
-
 #[allow(
     clippy::too_many_arguments,
     reason = "actual fixture keeps Project and Bundle identity inputs explicit"
 )]
-pub(crate) async fn prepare_verified_head_for(    creator: &SinglePutService,
+pub(crate) async fn prepare_verified_head_for(
+    creator: &SinglePutService,
     verifier: &StagingVerifier,
     http: &reqwest::Client,
     storage_scope: &str,

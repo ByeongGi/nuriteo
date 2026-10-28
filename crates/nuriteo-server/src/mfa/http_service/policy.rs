@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
-use super::*;
 use super::enrollment::*;
+use super::*;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
 use serde::{Serialize, Serializer};
@@ -27,7 +27,6 @@ use uuid::Uuid;
 
 use zeroize::Zeroizing;
 
-
 use crate::database::DatabasePool;
 
 use crate::identity::{
@@ -38,16 +37,19 @@ use crate::identity::{
 
 use crate::integration::MasterKeyring;
 
-
 use super::super::{
     EnrollmentComplete, EnrollmentStart, MfaChallengePolicy, MfaIdempotencyKey, MfaService,
     MfaServiceError, RecoveryCode, TotpCode,
 };
-use super::{MAX_POLICY_TARGETS, ENROLLMENT_ISSUER, POLICY_POPULATION_DOMAIN, MfaHttpServiceError, MfaStatusView, MfaEnrollmentStartView, MfaEnrollmentCompleteView, MfaPolicyView, MfaPolicyImpactView, MfaResetTargetView, MfaResetTargetCollectionView, RotatedMfaResponse, SecretText, MfaHttpService, MfaHttpRuntime};
+use super::{
+    ENROLLMENT_ISSUER, MAX_POLICY_TARGETS, MfaEnrollmentCompleteView, MfaEnrollmentStartView,
+    MfaHttpRuntime, MfaHttpService, MfaHttpServiceError, MfaPolicyImpactView, MfaPolicyView,
+    MfaResetTargetCollectionView, MfaResetTargetView, MfaStatusView, POLICY_POPULATION_DOMAIN,
+    RotatedMfaResponse, SecretText,
+};
 
-
-
-pub(crate) async fn reconcile_policy(    tx: &mut Transaction<'_, Postgres>,
+pub(crate) async fn reconcile_policy(
+    tx: &mut Transaction<'_, Postgres>,
     actor: UserId,
     mode: &str,
     grace_days: u16,
@@ -152,8 +154,10 @@ pub(crate) async fn reconcile_policy(    tx: &mut Transaction<'_, Postgres>,
     Ok(())
 }
 
-
-pub(crate) async fn load_policy_view(pool: &DatabasePool) -> Result<MfaPolicyView, MfaHttpServiceError> {    let mut connection = pool
+pub(crate) async fn load_policy_view(
+    pool: &DatabasePool,
+) -> Result<MfaPolicyView, MfaHttpServiceError> {
+    let mut connection = pool
         .acquire()
         .await
         .map_err(|_| MfaHttpServiceError::Unavailable)?;
@@ -185,8 +189,8 @@ pub(crate) async fn load_policy_view(pool: &DatabasePool) -> Result<MfaPolicyVie
     })
 }
 
-
-pub(crate) async fn load_policy_impact(    connection: &mut sqlx::PgConnection,
+pub(crate) async fn load_policy_impact(
+    connection: &mut sqlx::PgConnection,
     mode: &str,
     grace_days: u16,
     version: u64,
@@ -257,21 +261,21 @@ pub(crate) async fn load_policy_impact(    connection: &mut sqlx::PgConnection,
     })
 }
 
-
-pub(crate) fn valid_population_proof(value: &str) -> bool {    value.len() == 43
+pub(crate) fn valid_population_proof(value: &str) -> bool {
+    value.len() == 43
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
-
-pub(crate) fn format_time(value: OffsetDateTime) -> Result<String, MfaHttpServiceError> {    value
+pub(crate) fn format_time(value: OffsetDateTime) -> Result<String, MfaHttpServiceError> {
+    value
         .format(&Rfc3339)
         .map_err(|_| MfaHttpServiceError::Internal)
 }
 
-
-pub(crate) fn map_service_error(error: MfaServiceError) -> MfaHttpServiceError {    match error {
+pub(crate) fn map_service_error(error: MfaServiceError) -> MfaHttpServiceError {
+    match error {
         MfaServiceError::InvalidInput => MfaHttpServiceError::InvalidInput,
         MfaServiceError::AuthenticationFailed => MfaHttpServiceError::AuthenticationFailed,
         MfaServiceError::ReauthenticationRequired => MfaHttpServiceError::ReauthenticationRequired,
@@ -283,8 +287,10 @@ pub(crate) fn map_service_error(error: MfaServiceError) -> MfaHttpServiceError {
     }
 }
 
-
-pub(crate) fn map_http_session_error(error: crate::identity::SessionServiceError) -> MfaHttpServiceError {    match error {
+pub(crate) fn map_http_session_error(
+    error: crate::identity::SessionServiceError,
+) -> MfaHttpServiceError {
+    match error {
         crate::identity::SessionServiceError::InvalidToken
         | crate::identity::SessionServiceError::UserUnavailable => {
             MfaHttpServiceError::AuthenticationFailed
@@ -298,4 +304,3 @@ pub(crate) fn map_http_session_error(error: crate::identity::SessionServiceError
         }
     }
 }
-

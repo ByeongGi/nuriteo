@@ -22,11 +22,14 @@ function tsObject(entries) {
     .join(",\n")}\n})`;
 }
 
-function rustConstants(moduleName, entries, typeName) {
+function rustConstants(moduleName, entries, typeName, moduleDoc) {
   const constants = Object.entries(entries)
-    .map(([name, value]) => `    pub const ${rustName(name)}: ${typeName} = ${value};`)
+    .map(
+      ([name, value]) =>
+        `    /// \`${name}\` value in the \`${moduleName}\` table.\n    pub const ${rustName(name)}: ${typeName} = ${value};`,
+    )
     .join("\n");
-  return `pub mod ${moduleName} {\n${constants}\n}`;
+  return `/// ${moduleDoc}\npub mod ${moduleName} {\n${constants}\n}`;
 }
 
 const magic = magicAsU32(schema.magic);
@@ -50,17 +53,22 @@ export const GOLDEN_REQUEST = Object.freeze(${JSON.stringify(schema.golden.reque
 
 const rust = `// ${generatedNotice}
 
+/// Guest ABI version carried in every wire frame.
 pub const ABI_VERSION: u16 = ${schema.abiVersion};
+/// Little-endian magic bytes identifying a Nuriteo wire frame.
 pub const MAGIC: u32 = 0x${magic.toString(16)};
+/// Fixed byte length of a wire frame header.
 pub const HEADER_LENGTH: usize = ${schema.headerLength};
+/// Maximum accepted payload length in bytes.
 pub const MAX_PAYLOAD_LENGTH: usize = ${schema.maxPayloadLength};
 
-${rustConstants("status", schema.status, "u16")}
+${rustConstants("status", schema.status, "u16", "Response and request status codes on the wire.")}
 
-${rustConstants("opcodes", schema.opcodes, "u16")}
+${rustConstants("opcodes", schema.opcodes, "u16", "Operation codes a guest may send.")}
 
-${rustConstants("errors", schema.errors, "u16")}
+${rustConstants("errors", schema.errors, "u16", "Numeric error codes returned to a guest.")}
 
+/// Hex encoding of the checked-in golden request frame.
 pub const GOLDEN_REQUEST_HEX: &str =
     "${schema.golden.request.wireHex}";
 `;
