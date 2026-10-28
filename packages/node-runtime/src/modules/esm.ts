@@ -1,6 +1,7 @@
 import type { EsmRecord } from "./cache.ts";
 import type { ModuleRuntime } from "./runtime.ts";
 import type { EsmContext, RuntimeNamespace, RuntimeValue } from "../types.ts";
+import { collectDeclarationExports, collectDefaultDeclarationExport, hasAnonymousDefaultDeclarationExport, isPromiseLike, prepareSyncEsmSource, protectImportExportLinesInsideLiterals, restoreImportMetaInStringLiterals, rewriteDefaultAndNamedImport, rewriteDefaultAndNamespaceImport, rewriteDestructuredConstExport, rewriteNamedExport, rewriteNamedImportBindings, rewriteNamedReExport, rewriteNamespaceReExport, rewriteStarReExport, stripBlockComments } from "./esm-eval-free.ts";
 
 export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<RuntimeNamespace> {
   const canonicalUrl = runtime.cache.canonicalize(url);
@@ -52,6 +53,7 @@ export async function evaluateEsm(runtime: ModuleRuntime, url: string): Promise<
   return namespace;
 }
 
+
 export function evaluateEsmSync(runtime: ModuleRuntime, url: string): RuntimeNamespace {
   const canonicalUrl = runtime.cache.canonicalize(url);
   const existing = runtime.cache.esm.get(canonicalUrl);
@@ -102,6 +104,7 @@ export function evaluateEsmSync(runtime: ModuleRuntime, url: string): RuntimeNam
   return namespace;
 }
 
+
 function defineBinding(namespace: RuntimeNamespace, bindings: Map<string, () => RuntimeValue>, name: string, getter: () => RuntimeValue): void {
   bindings.set(name, getter);
   if (!Object.prototype.hasOwnProperty.call(namespace, name)) {
@@ -111,6 +114,7 @@ function defineBinding(namespace: RuntimeNamespace, bindings: Map<string, () => 
     });
   }
 }
+
 
 export function cjsNamespace(exports: RuntimeValue): RuntimeNamespace {
   const namespace: RuntimeNamespace = {};
@@ -130,6 +134,7 @@ export function cjsNamespace(exports: RuntimeValue): RuntimeNamespace {
   return namespace;
 }
 
+
 function compileEsmSource(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => Promise<void> {
   return createEsmSourceCompiler({
     filename,
@@ -139,9 +144,11 @@ function compileEsmSource(source: string, filename: string, globals: Record<stri
   });
 }
 
+
 function compileEsmSourceSync(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
   return createSyncEsmSourceCompiler(prepareSyncEsmSource(source, importMetaRewriteModeFor(filename)), filename, globals);
 }
+
 
 function createEsmSourceCompiler(options: {
   filename: string;
@@ -186,6 +193,7 @@ function createEsmSourceCompiler(options: {
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
+
 function createSyncEsmSourceCompiler(source: string, filename: string, globals: Record<string, RuntimeValue>): (context: EsmContext) => void {
   let compiled: (context: EsmContext, process: RuntimeValue, global: RuntimeValue, console: RuntimeValue, globalThis: RuntimeValue) => void;
   try {
@@ -206,6 +214,7 @@ function createSyncEsmSourceCompiler(source: string, filename: string, globals: 
   return (context) => compiled(context, globals.process, globals.global, globals.console ?? console, globals.globalThis ?? globals.global);
 }
 
+
 function prepareEsmRuntimeGlobals(source: string, importHook: "dynamicImport" | "importNamespace" = "dynamicImport"): string {
   const injections = [
     `const __import = __context.${importHook};`,
@@ -225,6 +234,7 @@ function prepareEsmRuntimeGlobals(source: string, importHook: "dynamicImport" | 
   if (!declaresLexicalBinding(source, "clearImmediate")) injections.push("const clearImmediate = __global?.clearImmediate ?? __globalThis?.clearImmediate;");
   return `${injections.join("\n")}\n${source}`;
 }
+
 
 function compileEvalFreeEsmSource(source: string, globals: Record<string, RuntimeValue>): ((context: EsmContext) => Promise<void>) | null {
   const sourceWithoutShebang = stripShebang(source);
@@ -259,11 +269,13 @@ function compileEvalFreeEsmSource(source: string, globals: Record<string, Runtim
   };
 }
 
+
 interface EvalFreeImportRecord {
   bindings: { imported: string; local: string }[];
   kind: "default" | "named" | "side-effect";
   specifier: string;
 }
+
 
 interface EvalFreeFunctionRecord {
   body: string;
@@ -273,6 +285,7 @@ interface EvalFreeFunctionRecord {
   params: string[];
   start: number;
 }
+
 
 function collectEvalFreeImports(source: string): EvalFreeImportRecord[] {
   const records: EvalFreeImportRecord[] = [];
@@ -310,12 +323,14 @@ function collectEvalFreeImports(source: string): EvalFreeImportRecord[] {
   return records;
 }
 
+
 function removeEvalFreeImports(source: string): string {
   return source
     .replace(/^[ \t]*import\s+[A-Za-z_$][\w$]*\s+from\s+["'][^"']+["'];?[ \t]*$/gm, "")
     .replace(/^[ \t]*import\s+\{[^}\n]+\}\s+from\s+["'][^"']+["'];?[ \t]*$/gm, "")
     .replace(/^[ \t]*import\s+["'][^"']+["'];?[ \t]*$/gm, "");
 }
+
 
 function collectEvalFreeFunctions(source: string): EvalFreeFunctionRecord[] {
   const records: EvalFreeFunctionRecord[] = [];
@@ -340,6 +355,7 @@ function collectEvalFreeFunctions(source: string): EvalFreeFunctionRecord[] {
   return records;
 }
 
+
 function removeEvalFreeFunctionBlocks(source: string, functions: readonly EvalFreeFunctionRecord[]): string {
   let output = "";
   let cursor = 0;
@@ -350,9 +366,11 @@ function removeEvalFreeFunctionBlocks(source: string, functions: readonly EvalFr
   return output + source.slice(cursor);
 }
 
+
 function containsEvalFreeExecutableStatement(source: string): boolean {
   return /(?:^|[;\n])\s*(?:if\s*\(|[A-Za-z_$][\w$]*\s*\(|global(?:This)?\.__[A-Za-z_$][\w$]*\?\.\()/.test(source);
 }
+
 
 async function executeEvalFreeFunction(
   fn: EvalFreeFunctionRecord,
@@ -365,6 +383,7 @@ async function executeEvalFreeFunction(
   fn.params.forEach((param, index) => scope.set(param, args[index]));
   return executeEvalFreeStatements(fn.body, scope, globals, context);
 }
+
 
 async function executeEvalFreeStatements(
   source: string,
@@ -416,11 +435,13 @@ async function executeEvalFreeStatements(
   return returnExpression?.[1] ? evaluateEvalFreeExpression(returnExpression[1], scope, globals, context) : undefined;
 }
 
+
 function collectEvalFreeDeclarations(source: string): { expression: string; name: string }[] {
   return [...source.matchAll(/^[ \t]*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([\s\S]*?);[ \t]*$/gm)]
     .map((match) => ({ name: match[1] || "", expression: match[2] || "" }))
     .filter((declaration) => declaration.name.length > 0);
 }
+
 
 function extractProcessArgvConditional(source: string): { argument: string; end: number; start: number; whenFalse: string; whenTrue: string } | null {
   const match = /if\s*\(\s*process\.argv\.includes\(\s*["']([^"']+)["']\s*\)\s*\)\s*\{/.exec(source);
@@ -442,6 +463,7 @@ function extractProcessArgvConditional(source: string): { argument: string; end:
   };
 }
 
+
 function collectGlobalHookCalls(source: string): { argument: string; name: string }[] {
   const calls: { argument: string; name: string }[] = [];
   const pattern = /global(?:This)?\.(__(?:[A-Za-z_$][\w$]*))\?\.\(\s*\{/g;
@@ -457,6 +479,7 @@ function collectGlobalHookCalls(source: string): { argument: string; name: strin
   return calls;
 }
 
+
 function collectGlobalAssignments(source: string): { expression: string; name: string }[] {
   return [...source.matchAll(/global(?:This)?\.(__(?:[A-Za-z_$][\w$]*))\s*=\s*([^;\n]+);?/g)]
     .map((match) => ({
@@ -465,6 +488,7 @@ function collectGlobalAssignments(source: string): { expression: string; name: s
     }))
     .filter((assignment) => assignment.name.length > 0 && assignment.expression.length > 0);
 }
+
 
 function getEvalFreeGlobalValue(globals: Record<string, RuntimeValue>, name: string): RuntimeValue {
   const globalObject = globals.global;
@@ -478,6 +502,7 @@ function getEvalFreeGlobalValue(globals: Record<string, RuntimeValue>, name: str
   return globals[name];
 }
 
+
 function setEvalFreeGlobalValue(globals: Record<string, RuntimeValue>, name: string, value: RuntimeValue): void {
   const globalObject = globals.global;
   const globalThisObject = globals.globalThis;
@@ -489,6 +514,7 @@ function setEvalFreeGlobalValue(globals: Record<string, RuntimeValue>, name: str
   }
   globals[name] = value;
 }
+
 
 function collectEvalFreeFunctionCalls(source: string): { args: string[]; name: string }[] {
   const calls: { args: string[]; name: string }[] = [];
@@ -505,6 +531,7 @@ function collectEvalFreeFunctionCalls(source: string): { args: string[]; name: s
   }
   return calls;
 }
+
 
 function evaluateEvalFreeObjectLiteral(source: string, scope: Map<string, RuntimeValue>, globals: Record<string, RuntimeValue>): Record<string, RuntimeValue> {
   const inner = source.trim().replace(/^\{/, "").replace(/\}$/, "");
@@ -523,6 +550,7 @@ function evaluateEvalFreeObjectLiteral(source: string, scope: Map<string, Runtim
   }
   return result;
 }
+
 
 function evaluateEvalFreeExpression(source: string, scope: Map<string, RuntimeValue>, globals: Record<string, RuntimeValue>, context?: EsmContext): RuntimeValue {
   const expression = source.trim();
@@ -569,13 +597,16 @@ function evaluateEvalFreeExpression(source: string, scope: Map<string, RuntimeVa
   return undefined;
 }
 
+
 function findMatchingBrace(source: string, openIndex: number): number {
   return findMatchingDelimiter(source, openIndex, "{", "}");
 }
 
+
 function findMatchingParen(source: string, openIndex: number): number {
   return findMatchingDelimiter(source, openIndex, "(", ")");
 }
+
 
 function findMatchingDelimiter(source: string, openIndex: number, openChar: string, closeChar: string): number {
   let depth = 0;
@@ -614,6 +645,7 @@ function findMatchingDelimiter(source: string, openIndex: number, openChar: stri
   return -1;
 }
 
+
 function splitTopLevelComma(source: string): string[] {
   const parts: string[] = [];
   let start = 0;
@@ -647,14 +679,17 @@ function splitTopLevelComma(source: string): string[] {
   return parts;
 }
 
+
 function isDynamicCodeBlocked(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return /unsafe-eval|Content Security Policy|Code generation from strings|call to eval/i.test(error.message);
 }
 
+
 function stripShebang(source: string): string {
   return source.startsWith("#!") ? `//${source.slice(2)}` : source;
 }
+
 
 function unescapeJsString(value: string): string {
   return value
@@ -665,6 +700,7 @@ function unescapeJsString(value: string): string {
     .replaceAll("\\'", "'")
     .replaceAll('\\"', '"');
 }
+
 
 function declaresLexicalBinding(source: string, name: string): boolean {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -684,7 +720,9 @@ function declaresLexicalBinding(source: string, name: string): boolean {
   return false;
 }
 
-type ImportMetaRewriteMode = "preserve-string-literals" | "vite-bundle";
+
+export type ImportMetaRewriteMode = "preserve-string-literals" | "vite-bundle";
+
 
 function importMetaRewriteModeFor(filename: string): ImportMetaRewriteMode {
   return filename.includes("/node_modules/vite/") || filename.includes("/node_modules/rolldown/")
@@ -692,7 +730,8 @@ function importMetaRewriteModeFor(filename: string): ImportMetaRewriteMode {
     : "preserve-string-literals";
 }
 
-function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewriteMode = "preserve-string-literals"): string {
+
+export function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewriteMode = "preserve-string-literals"): string {
   const literalProtection = protectImportExportLinesInsideLiterals(stripBlockComments(source));
   const sourceWithoutBlockComments = literalProtection.source;
   const declarationExports = collectDeclarationExports(sourceWithoutBlockComments);
@@ -751,6 +790,7 @@ function prepareEsmSource(source: string, importMetaRewriteMode: ImportMetaRewri
   return rewriteImportMetaReferences(literalProtection.restore(output), importMetaRewriteMode);
 }
 
+
 /**
  * Build-time companion for the CSP-safe module registry. The returned source
  * is JavaScript that can be embedded in a same-origin static factory; runtime
@@ -760,9 +800,11 @@ export function prepareEsmSourceForStaticFactory(source: string, filename: strin
   return prepareEsmSource(source, importMetaRewriteModeFor(filename));
 }
 
+
 export function prepareEsmStaticFactoryBody(source: string, filename: string): string {
   return prepareEsmRuntimeGlobals(prepareEsmSource(source, importMetaRewriteModeFor(filename)));
 }
+
 
 function rewriteImportMetaReferences(source: string, mode: ImportMetaRewriteMode): string {
   const rewritten = source.replace(/\bimport\.meta\b/g, "__context.importMeta");
@@ -770,452 +812,11 @@ function rewriteImportMetaReferences(source: string, mode: ImportMetaRewriteMode
   return restoreImportMetaInStringLiterals(rewritten);
 }
 
+
 function restoreViteImportMetaAnalysisSentinels(source: string): string {
   // Vite treats import.meta expressions as source text in define keys, filters,
   // generated client modules, and diagnostics. Those string literals must keep
   // their original spelling; only executable references belong to the runtime
   // context used by the static factory.
   return restoreImportMetaInStringLiterals(source);
-}
-
-function restoreImportMetaInStringLiterals(source: string): string {
-  const output: string[] = [];
-  type LexicalContext = {
-    braceDepth?: number;
-    type: "normal" | "template-expression" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment";
-  };
-  const contexts: LexicalContext[] = [{ type: "normal" }];
-  let escaped = false;
-  let inRegexClass = false;
-  let previousSignificant = "";
-
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] || "";
-    const next = source[index + 1] || "";
-    const context = contexts[contexts.length - 1];
-    if (!context) break;
-
-    if (context.type === "single" || context.type === "double" || context.type === "template") {
-      if (source.startsWith("__context.importMeta", index)) {
-        output.push("import.meta");
-        index += "__context.importMeta".length - 1;
-        continue;
-      }
-      output.push(char);
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (context.type === "template" && char === "$" && next === "{") {
-        output.push(next);
-        index += 1;
-        contexts.push({ type: "template-expression", braceDepth: 1 });
-        previousSignificant = "{";
-        continue;
-      }
-      if ((context.type === "single" && char === "'") || (context.type === "double" && char === "\"") || (context.type === "template" && char === "`")) {
-        contexts.pop();
-      }
-      continue;
-    }
-
-    output.push(char);
-
-    if (context.type === "regex") {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === "[") inRegexClass = true;
-      if (char === "]") inRegexClass = false;
-      if (char === "/" && !inRegexClass) contexts.pop();
-      continue;
-    }
-    if (context.type === "line-comment") {
-      if (char === "\n") contexts.pop();
-      continue;
-    }
-    if (context.type === "block-comment") {
-      if (char === "*" && next === "/") {
-        output.push(next);
-        index += 1;
-        contexts.pop();
-      }
-      continue;
-    }
-    if (char === "/" && next === "/") {
-      output.push(next);
-      index += 1;
-      contexts.push({ type: "line-comment" });
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      output.push(next);
-      index += 1;
-      contexts.push({ type: "block-comment" });
-      continue;
-    }
-    if (char === "/" && isRegexStart(previousSignificant)) {
-      contexts.push({ type: "regex" });
-      escaped = false;
-      inRegexClass = false;
-      previousSignificant = char;
-      continue;
-    }
-    if (char === "'") {
-      contexts.push({ type: "single" });
-      escaped = false;
-      continue;
-    }
-    if (char === "\"") {
-      contexts.push({ type: "double" });
-      escaped = false;
-      continue;
-    }
-    if (char === "`") {
-      contexts.push({ type: "template" });
-      escaped = false;
-      continue;
-    }
-    if (context.type === "template-expression") {
-      if (char === "{") context.braceDepth = (context.braceDepth || 0) + 1;
-      if (char === "}") {
-        context.braceDepth = (context.braceDepth || 0) - 1;
-        if (context.braceDepth === 0) contexts.pop();
-      }
-    }
-    if (!/\s/.test(char)) previousSignificant = char;
-  }
-
-  return output.join("");
-}
-
-function protectImportExportLinesInsideLiterals(source: string): { restore: (value: string) => string; source: string } {
-  const importToken = "__NURITEO_LITERAL_IMPORT__";
-  const exportToken = "__NURITEO_LITERAL_EXPORT__";
-  const literalLineStarts = literalLineStartMask(source);
-  const lines = source.split("\n");
-  return {
-    source: lines
-      .map((line, index) => literalLineStarts[index]
-        ? line
-          .replace(/^([ \t]*)import(?=\s|["'{*])/, `$1${importToken}`)
-          .replace(/^([ \t]*)export\b/, `$1${exportToken}`)
-        : line)
-      .join("\n"),
-    restore: (value: string) => value
-      .replaceAll(importToken, "import")
-      .replaceAll(exportToken, "export")
-  };
-}
-
-function literalLineStartMask(source: string): boolean[] {
-  const mask: boolean[] = [false];
-  const contexts: ("normal" | "single" | "double" | "template" | "template-expression")[] = ["normal"];
-  const expressionBraceDepths: number[] = [];
-  let escaped = false;
-
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] || "";
-    const next = source[index + 1] || "";
-    const context = contexts[contexts.length - 1];
-
-    if (char === "\n") {
-      mask.push(contexts.some((item) => item === "single" || item === "double" || item === "template"));
-      continue;
-    }
-
-    if (context === "single" || context === "double") {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if ((context === "single" && char === "'") || (context === "double" && char === "\"")) contexts.pop();
-      continue;
-    }
-
-    if (context === "template") {
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === "$" && next === "{") {
-        contexts.push("template-expression");
-        expressionBraceDepths.push(1);
-        index += 1;
-        continue;
-      }
-      if (char === "`") contexts.pop();
-      continue;
-    }
-
-    if (char === "'") {
-      contexts.push("single");
-      escaped = false;
-      continue;
-    }
-    if (char === "\"") {
-      contexts.push("double");
-      escaped = false;
-      continue;
-    }
-    if (char === "`") {
-      contexts.push("template");
-      escaped = false;
-      continue;
-    }
-
-    if (context === "template-expression") {
-      const last = expressionBraceDepths.length - 1;
-      if (char === "{") expressionBraceDepths[last] = (expressionBraceDepths[last] || 0) + 1;
-      if (char === "}") {
-        const nextDepth = (expressionBraceDepths[last] || 0) - 1;
-        if (nextDepth <= 0) {
-          expressionBraceDepths.pop();
-          contexts.pop();
-        } else {
-          expressionBraceDepths[last] = nextDepth;
-        }
-      }
-    }
-  }
-
-  return mask;
-}
-
-function stripBlockComments(source: string): string {
-  const output: string[] = [];
-  let state: "normal" | "single" | "double" | "template" | "regex" | "line-comment" | "block-comment" = "normal";
-  let escaped = false;
-  let inRegexClass = false;
-  let previousSignificant = "";
-
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index] || "";
-    const next = source[index + 1] || "";
-
-    if (state === "block-comment") {
-      if (char === "*" && next === "/") {
-        output.push("  ");
-        index += 1;
-        state = "normal";
-      } else {
-        output.push(char === "\n" ? "\n" : " ");
-      }
-      continue;
-    }
-
-    if (state === "line-comment") {
-      output.push(char);
-      if (char === "\n") state = "normal";
-      continue;
-    }
-
-    if (state === "single" || state === "double" || state === "template") {
-      output.push(char);
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if ((state === "single" && char === "'") || (state === "double" && char === "\"") || (state === "template" && char === "`")) {
-        state = "normal";
-      }
-      continue;
-    }
-
-    if (state === "regex") {
-      output.push(char);
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (char === "\\") {
-        escaped = true;
-        continue;
-      }
-      if (char === "[") inRegexClass = true;
-      if (char === "]") inRegexClass = false;
-      if (char === "/" && !inRegexClass) state = "normal";
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      output.push("  ");
-      index += 1;
-      state = "block-comment";
-      continue;
-    }
-    if (char === "/" && next === "/") {
-      output.push(char);
-      state = "line-comment";
-      continue;
-    }
-    if (char === "/" && isRegexStart(previousSignificant)) {
-      output.push(char);
-      state = "regex";
-      escaped = false;
-      inRegexClass = false;
-      previousSignificant = char;
-      continue;
-    }
-    if (char === "'") state = "single";
-    if (char === "\"") state = "double";
-    if (char === "`") state = "template";
-    output.push(char);
-    if (!/\s/.test(char)) previousSignificant = char;
-  }
-
-  return output.join("");
-}
-
-function isRegexStart(previousSignificant: string): boolean {
-  return !previousSignificant || "([{=:;,!&|?+-*~%^<>".includes(previousSignificant);
-}
-
-function prepareSyncEsmSource(source: string, importMetaRewriteMode: ImportMetaRewriteMode = "preserve-string-literals"): string {
-  return prepareEsmSource(source, importMetaRewriteMode).replace(/\bawait\s+__import\(/g, "__import(");
-}
-
-function isPromiseLike(value: unknown): value is Promise<unknown> {
-  return (typeof value === "object" || typeof value === "function") && value !== null && typeof (value as { then?: unknown }).then === "function";
-}
-
-function collectDeclarationExports(source: string): string[] {
-  const names = new Set<string>();
-  const pattern = /^[ \t]*export\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)\b/gm;
-  for (const match of source.matchAll(pattern)) {
-    if (match[1]) names.add(match[1]);
-  }
-  return [...names];
-}
-
-function collectDefaultDeclarationExport(source: string): string | null {
-  const match = source.match(/^[ \t]*export\s+default\s+(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)\b/m);
-  return match?.[1] ?? null;
-}
-
-function hasAnonymousDefaultDeclarationExport(source: string): boolean {
-  return /^[ \t]*export\s+default\s+(?:async\s+)?function\s*\(/m.test(source) || /^[ \t]*export\s+default\s+class(?:\s+extends\b|\s*\{)/m.test(source);
-}
-
-function rewriteDefaultAndNamedImport(defaultName: string, named: string, specifier: string): string {
-  const temp = `__esm_${defaultName}`;
-  return [
-    `const ${temp} = await __import("${specifier}");`,
-    `const ${defaultName} = ${temp}.default;`,
-    `const { ${rewriteNamedImportBindings(named)} } = ${temp};`
-  ].join("\n");
-}
-
-function rewriteDefaultAndNamespaceImport(defaultName: string, namespaceName: string, specifier: string): string {
-  const temp = `__esm_${defaultName}_${namespaceName}`;
-  return [`const ${temp} = await __import("${specifier}");`, `const ${defaultName} = ${temp}.default;`, `const ${namespaceName} = ${temp};`].join("\n");
-}
-
-function rewriteNamedImportBindings(clause: string): string {
-  return clause
-    .split(",")
-    .map((binding) => binding.trim())
-    .filter(Boolean)
-    .map((binding) => binding.replace(/\s+as\s+/g, ": "))
-    .join(", ");
-}
-
-function rewriteNamedExport(clause: string): string {
-  return clause
-    .split(",")
-    .map((binding) => binding.trim())
-    .filter(Boolean)
-    .map((binding) => {
-      const [local, exported] = binding.split(/\s+as\s+/);
-      const localName = local?.trim();
-      if (!localName) return "";
-      return `__exportConst("${(exported || localName).trim()}", ${localName});`;
-    })
-    .filter(Boolean)
-    .join("\n");
-}
-
-function rewriteNamedReExport(clause: string, specifier: string): string {
-  const temp = `__reexport_${Math.abs(hashString(`${specifier}:${clause}`))}`;
-  return [
-    `const ${temp} = await __import("${specifier}");`,
-    ...clause
-      .split(",")
-      .map((binding) => binding.trim())
-      .filter(Boolean)
-      .map((binding) => {
-        const [imported, exported] = binding.split(/\s+as\s+/);
-        const importedName = imported?.trim();
-        if (!importedName) return "";
-        return `__exportConst("${(exported || importedName).trim()}", ${temp}.${importedName});`;
-      })
-      .filter(Boolean)
-  ].join("\n");
-}
-
-function rewriteStarReExport(specifier: string): string {
-  const temp = `__reexport_all_${Math.abs(hashString(specifier))}`;
-  return [
-    `const ${temp} = await __import("${specifier}");`,
-    `for (const __key of Object.keys(${temp})) {`,
-    `  if (__key !== "default") __exportConst(__key, ${temp}[__key]);`,
-    "}"
-  ].join("\n");
-}
-
-function rewriteDestructuredConstExport(destructuring: string, expression: string): string {
-  const exports = destructuring
-    .split(",")
-    .map((binding) => binding.trim())
-    .filter(Boolean)
-    .map((binding) => {
-      const [exported, local] = binding.split(":").map((part) => part.trim());
-      return {
-        exported: exported || "",
-        local: local || exported || ""
-      };
-    })
-    .filter(({ exported, local }) => isIdentifier(exported) && isIdentifier(local));
-  return [
-    `const { ${destructuring} } = ${expression};`,
-    ...exports.map(({ exported, local }) => `__exportConst("${exported}", ${local});`)
-  ].join("\n");
-}
-
-function isIdentifier(value: string): boolean {
-  return /^[A-Za-z_$][\w$]*$/.test(value);
-}
-
-function rewriteNamespaceReExport(name: string, specifier: string): string {
-  const temp = `__reexport_ns_${Math.abs(hashString(`${name}:${specifier}`))}`;
-  return [`const ${temp} = await __import("${specifier}");`, `__exportConst("${name}", ${temp});`].join("\n");
-}
-
-function hashString(value: string): number {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) | 0;
-  }
-  return hash;
 }

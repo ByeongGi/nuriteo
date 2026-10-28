@@ -1,6 +1,6 @@
 import { mutationOptions } from "../browser-mutation.ts";
 import type { BrowserMutationOptions } from "../browser-mutation.ts";
-import { requireNoContent, validatedResult, validatedResultForStatus } from "../domain.ts";
+import { requireNoContent, validatedResult } from "../domain.ts";
 import type { ApiEmptyResult, ApiResult, DomainRequestOptions } from "../domain.ts";
 import type { ApiClient } from "../types.ts";
 import {
@@ -57,13 +57,12 @@ export async function createRegistry(
   input: CreateRegistryInput,
   options: BrowserMutationOptions
 ): Promise<ApiResult<RegistryConnection>> {
-  return validatedResultForStatus(
+  return validatedResult(
     await client.post<unknown, CreateRegistryInput>(
       "/admin/registries",
       input,
       mutationOptions(options)
     ),
-    201,
     parseRegistry
   );
 }

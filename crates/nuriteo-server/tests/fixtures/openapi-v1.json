@@ -17769,7 +17769,8 @@
         "type": "object",
         "required": [
           "slug",
-          "name"
+          "name",
+          "templateId"
         ],
         "properties": {
           "name": {
@@ -17777,6 +17778,9 @@
           },
           "slug": {
             "type": "string"
+          },
+          "templateId": {
+            "$ref": "#/components/schemas/ProjectTemplate"
           }
         },
         "additionalProperties": false
@@ -19718,6 +19722,13 @@
           }
         }
       },
+      "ProjectTemplate": {
+        "type": "string",
+        "enum": [
+          "vite-react",
+          "next-app"
+        ]
+      },
       "ProjectVersionCreateView": {
         "type": "object",
         "required": [
@@ -19824,6 +19835,7 @@
           "storageScopeId",
           "slug",
           "name",
+          "templateId",
           "state",
           "createdAt",
           "updatedAt",
@@ -19858,6 +19870,9 @@
             "type": "string"
           },
           "storageScopeId": {
+            "type": "string"
+          },
+          "templateId": {
             "type": "string"
           },
           "updatedAt": {

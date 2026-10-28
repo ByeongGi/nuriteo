@@ -1,0 +1,120 @@
+import { ProjectWorkspaceEditorBridge, ProjectWorkspaceStore } from "../../browser-host/src/storage/index.ts";
+import { type MaterializedProject, type ProjectHealthReport, type SupportedPackageManager } from "../../browser-host/src/onboarding/index.ts";
+
+
+import { HmrClient, PreviewRelay, PreviewServiceWorker, type HmrClientState, type PreviewSession, type PreviewSessionRegistry } from "../../preview/src/index.ts";
+import { type PreviewReliabilitySession } from "./reliability.ts";
+
+
+import type { PreviewWorkflowControllerOptions, PreviewWorkflowLastError, PreviewWorkflowListener, PreviewWorkflowPhase, PreviewProjectFile, PreviewWorkflowUiDiagnostic, ProductBuildResult, ProductInstallResult, ProductWorkflow } from "./controller-contracts.ts";
+
+
+export interface PreviewWorkflowState {
+  phase: PreviewWorkflowPhase;
+  project: ProjectWorkspaceStore | null;
+  projectFiles: PreviewProjectFile[];
+  directories: string[];
+  editor: ProjectWorkspaceEditorBridge | null;
+  workflow: ProductWorkflow | null;
+  install: ProductInstallResult | null;
+  build: ProductBuildResult | null;
+  session: PreviewSession | null;
+  previewUrl: string | null;
+  hmr: HmrClient | null;
+  hmrState: HmrClientState | "idle";
+  health: ProjectHealthReport | null;
+  source: MaterializedProject["source"] | null;
+  packageManagerOverride: SupportedPackageManager | null;
+  sessions: PreviewSessionRegistry;
+  relay: PreviewRelay;
+  serviceWorker: PreviewServiceWorker;
+  lastError: PreviewWorkflowLastError | null;
+  logs: string[];
+  diagnostics: PreviewWorkflowUiDiagnostic[];
+  fetchBridgeBound: boolean;
+  previewErrorBridge: boolean;
+  reliability: PreviewReliabilitySession;
+  lastPreviewPort: number | null;
+}
+
+export interface PreviewControllerScope {
+  options: PreviewWorkflowControllerOptions;
+  readonly listeners: Set<PreviewWorkflowListener>;
+  disposed: boolean;
+  disposeComplete: boolean;
+  operationGeneration: number;
+  readonly operationControllers: Set<AbortController>;
+  sessionHeartbeat: ReturnType<typeof setInterval> | null;
+  readonly state: PreviewWorkflowState;
+  stopSessionHeartbeat: (...args: any[]) => any;
+  startSessionHeartbeat: (...args: any[]) => any;
+  bindPreviewSession: (...args: any[]) => any;
+  ensureLiveSession: (...args: any[]) => any;
+  emit: (...args: any[]) => any;
+  log: (...args: any[]) => any;
+  setPhase: (...args: any[]) => any;
+  applyStorageDiagnostic: (...args: any[]) => any;
+  mapErrorStage: (...args: any[]) => any;
+  setError: (...args: any[]) => any;
+  clearRuntime: (...args: any[]) => any;
+  attachEditor: (...args: any[]) => any;
+  applyMaterializedProject: (...args: any[]) => any;
+  detectWorkflowKind: (...args: any[]) => any;
+  removeConflictingScaffoldFiles: (...args: any[]) => any;
+  packageOverrides: (...args: any[]) => any;
+  setPackageManagerOverride: (...args: any[]) => any;
+  loadViteReactTemplate: (...args: any[]) => any;
+  loadTemplate: (...args: any[]) => any;
+  importZipFile: (...args: any[]) => any;
+  importGitHub: (...args: any[]) => any;
+  bootSnapshot: (...args: any[]) => any;
+  importProjectFiles: (...args: any[]) => any;
+  exportProjectFiles: (...args: any[]) => any;
+  exportZip: (...args: any[]) => any;
+  exportSnapshot: (...args: any[]) => any;
+  exportTreeJson: (...args: any[]) => any;
+  exportPathZip: (...args: any[]) => any;
+  setPreviewErrorBridge: (...args: any[]) => any;
+  getChangeStatus: (...args: any[]) => any;
+  ensureServiceWorker: (...args: any[]) => any;
+  bindPreviewFetchBridge: (...args: any[]) => any;
+  onServiceWorkerMessage: (...args: any[]) => any;
+  stripPreviewPrefix: (...args: any[]) => any;
+  createWorkflowPreviewContainer: (...args: any[]) => any;
+  normalizeRelayResponse: (...args: any[]) => any;
+  maybeInjectPreviewErrorBridge: (...args: any[]) => any;
+  headersToObject: (...args: any[]) => any;
+  connectHmr: (...args: any[]) => any;
+  runPreview: (...args: any[]) => any;
+  saveTextFile: (...args: any[]) => any;
+  createTextFile: (...args: any[]) => any;
+  createDirectory: (...args: any[]) => any;
+  movePath: (...args: any[]) => any;
+  deletePath: (...args: any[]) => any;
+  cancelPreview: (...args: any[]) => any;
+  renameFile: (...args: any[]) => any;
+  deleteFile: (...args: any[]) => any;
+  isInstalledDependencyPath: (...args: any[]) => any;
+  syncWorkflowFilesToProject: (...args: any[]) => any;
+  syncProjectFilesToWorkflow: (...args: any[]) => any;
+  beginOperation: (...args: any[]) => any;
+  assertOperationActive: (...args: any[]) => any;
+  restartDev: (...args: any[]) => any;
+  reconnectHmr: (...args: any[]) => any;
+  runBuild: (...args: any[]) => any;
+  clearPackageCache: (...args: any[]) => any;
+  stopPreviewPort: (...args: any[]) => any;
+  resolveWriterConflict: (...args: any[]) => any;
+  simulateQuotaPressure: (...args: any[]) => any;
+  runRecoveryAction: (...args: any[]) => any;
+  installDeclaredPackages: (...args: any[]) => any;
+  runInstalledPackageLifecycles: (...args: any[]) => any;
+  syncDeclaredPackages: (...args: any[]) => any;
+  startPreviewDevServer: (...args: any[]) => any;
+  installProjectPackages: (...args: any[]) => any;
+  runShellCommand: (...args: any[]) => any;
+  runShellCommandInSession: (...args: any[]) => any;
+  disposeShellLifecycle: () => void;
+  dispose: (...args: any[]) => any;
+  getSnapshot: (...args: any[]) => any;
+}
