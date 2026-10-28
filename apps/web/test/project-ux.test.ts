@@ -18,6 +18,7 @@ import {
 } from "../src/lib/api/project-bff.ts";
 import { projectSaveSessionPath } from "../src/lib/api/project-bff.ts";
 import { forwardSaveSessionRequest } from "../src/lib/api/save-bff.ts";
+import { readStudioShellSources } from "./studio/shell-sources.ts";
 
 const OWNER_ID = "0199ee6c-c777-7000-8000-000000005001";
 const PROJECT_ID = "0199ee6c-c777-7000-8000-000000005002";
@@ -401,7 +402,7 @@ function testProjectSourceContracts() {
     "workspace-first IA requires a canonical Studio route"
   );
   const dashboard = read("src/projects/project-dashboard.tsx");
-  const ideShell = read("src/projects/project-ide-shell.tsx");
+  const ideShell = readStudioShellSources();
   const terminalView = read("src/projects/project-terminal-view.tsx");
   const templatePicker = read("src/projects/project-template-picker.tsx");
   const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
@@ -440,7 +441,7 @@ function testProjectSourceContracts() {
   assert.doesNotMatch(dashboard, /confirmName|정확한 프로젝트 이름/u);
   assert.match(
     dashboard,
-    /href=\{\(function \(\) \{\s*if \(item\.state === "active"\) \{\s*return \(projectStudioHref\(workspace\.storageScopeId, item\.id\)\);\s*\}\s*return \(projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\);\s*\}\)\(\)\}/u,
+    /const projectRowHref = item\.state === "active" \? \(projectStudioHref\(workspace\.storageScopeId, item\.id\)\) : \(projectDetailHref\(workspace\.storageScopeId, state, item\.id\)\);[\s\S]+href=\{projectRowHref\}/u,
     "활성 프로젝트의 목록 주 동작은 설정 화면이 아니라 Studio를 열어야 합니다."
   );
   assert.match(

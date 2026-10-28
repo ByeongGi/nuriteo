@@ -16,6 +16,7 @@ import {
   settleEditorDraft
 } from "../../src/projects/studio/editor-tabs.ts";
 import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../../src/projects/studio/preview-console.ts";
+import { readStudioShellSources } from "./shell-sources.ts";
 
 const previewA = openEditorFile(createEditorTabs(), "src/App.tsx", "preview");
 const replaced = openEditorFile(previewA, "src/main.tsx", "preview");
@@ -60,7 +61,7 @@ const savedClosed = closeSavedEditorTabs(pinnedBesidePreview, new Set(["src/App.
 assert.deepEqual(savedClosed.openPaths, ["src/App.tsx"]);
 assert.equal(savedClosed.previewPath, undefined);
 
-const shell = fs.readFileSync(new URL("../../src/projects/project-ide-shell.tsx", import.meta.url), "utf8");
+const shell = readStudioShellSources();
 const tree = fs.readFileSync(new URL("../../src/projects/project-file-tree.tsx", import.meta.url), "utf8");
 assert.match(shell, /useUnsavedChangesGuard\(hasUnpublishedChanges \|\| hasUnsavedEditorChange\)/u);
 assert.match(shell, /is-preview/u);
@@ -69,7 +70,8 @@ assert.match(tree, /onDoubleClick=\{\(\) => onPin\(node\.file\.path\)\}/u);
 assert.match(tree, /dirtyPaths\.has\(node\.file\.path\)/u);
 assert.match(shell, /onCreateDirectory=\{beginCreateDirectory\}/u);
 assert.match(shell, /onMove=\{moveExplorerPath\}/u);
-assert.match(shell, /aria-label=\{\(function \(\) \{\s*if \(isRunningPreview\) \{\s*return \("미리보기 취소"\);\s*\}\s*return \("미리보기 실행"\);\s*\}\)\(\)\}/u);
+assert.match(shell, /const previewRunLabel = isRunningPreview \? \("미리보기 취소"\) : \("미리보기 실행"\)/u);
+assert.match(shell, /aria-label=\{previewRunLabel\}/u);
 assert.match(shell, /studioConsoleSourceLabel\(entry\.source\)/u);
 assert.equal(studioConsoleSourceLabel("page"), "페이지");
 assert.equal(studioConsoleSourceLabel("server"), "개발 서버");

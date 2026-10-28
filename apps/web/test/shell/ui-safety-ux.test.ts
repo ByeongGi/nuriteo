@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readStudioShellSources } from "../studio/shell-sources.ts";
+
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const dialog = read("src/components/ui/confirmation-dialog.tsx");
 const guard = read("src/lib/use-unsaved-changes-guard.ts");
-const ide = read("src/projects/project-ide-shell.tsx");
+const ide = readStudioShellSources();
 const fileSearch = read("src/projects/use-project-file-search.ts");
 
 assert.match(dialog, /@base-ui\/react\/alert-dialog/u);

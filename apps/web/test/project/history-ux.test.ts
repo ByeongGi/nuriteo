@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { forwardProjectHistoryRequest } from "../../src/lib/api/history-bff.ts";
+import { readStudioShellSources } from "../studio/shell-sources.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ownerId = "0199ee6c-c777-7000-8000-00000000d001";
@@ -67,7 +68,7 @@ async function testHistoryForwarding(): Promise<void> {
 
 function testHistoryUiContract(): void {
   const panel = read("src/projects/project-history-panel.tsx");
-  const shell = read("src/projects/project-ide-shell.tsx");
+  const shell = readStudioShellSources();
   const confirmationDialog = read("src/components/ui/confirmation-dialog.tsx");
   assert.match(panel, /<ConfirmationDialog/u);
   assert.match(confirmationDialog, /<AlertDialog\.Root/u);
