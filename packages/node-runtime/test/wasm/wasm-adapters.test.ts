@@ -5,7 +5,7 @@ import path from "node:path";
 import { createWasmAdapterPolicy, createWasmAdapterRegistry, rejectNativeAddon, verifyWasmAdapterManifest } from "../../../node-runtime/src/index.ts";
 
 const root = new URL("../../../..", import.meta.url).pathname;
-const manifest = JSON.parse(fs.readFileSync(path.join(root, "vendor/manifests/wasm-adapters.json"), "utf8"));
+const manifest = JSON.parse(fs.readFileSync(path.join(root, "compat/manifests/wasm-adapters.json"), "utf8"));
 const registry = createWasmAdapterRegistry(manifest, { root });
 verifyWasmAdapterManifest(manifest);
 const loaded = await registry.instantiate("system-wasm");

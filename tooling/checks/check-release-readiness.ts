@@ -21,8 +21,8 @@ for (const file of requiredDocs) {
 }
 
 const versions = readJson("compat/versions.json");
-const npmManifest = readJson("vendor/manifests/npm.json");
-const pnpmManifest = readJson("vendor/manifests/pnpm.json");
+const npmManifest = readJson("compat/manifests/npm.json");
+const pnpmManifest = readJson("compat/manifests/pnpm.json");
 const operations = fs.readFileSync("docs/release/operations.md", "utf8");
 
 assert(versions.runtimeBaseline.node.version === "24.17.0", "unexpected Node baseline");

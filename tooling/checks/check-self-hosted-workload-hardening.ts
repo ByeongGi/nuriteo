@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 
-const policy = JSON.parse(fs.readFileSync("platform/security/workload-hardening-policy.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("compat/platform/security/workload-hardening-policy.json", "utf8")) as {
   schemaVersion: number; taskId: string; profile: string;
   container: Record<string, unknown>; pod: Record<string, unknown>; network: Record<string, unknown>;
   requiredWorkloadTemplates: string[]; images: string[] };

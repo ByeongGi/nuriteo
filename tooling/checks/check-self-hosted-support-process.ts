@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 type Severity = { level: string; cvssMinimum: number; acknowledgeHours: number; triageHours: number; targetResolutionDays: number };
-const policy = JSON.parse(fs.readFileSync("platform/security/vulnerability-response-policy.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("compat/platform/security/vulnerability-response-policy.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   reporting: { preferred: string; publicIssueSecretsForbidden: boolean; automaticSupportBundleUpload: boolean; bugBountyOffered: boolean };
@@ -13,7 +13,7 @@ const policy = JSON.parse(fs.readFileSync("platform/security/vulnerability-respo
   incidentStates: string[];
   disclosure: { mode: string; creditRequiresConsent: boolean; publishAfter: string[] };
 };
-const drill = JSON.parse(fs.readFileSync("platform/security/incident-drill-v1.json", "utf8")) as {
+const drill = JSON.parse(fs.readFileSync("compat/platform/security/incident-drill-v1.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   severity: string;

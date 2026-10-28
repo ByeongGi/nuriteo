@@ -6,7 +6,7 @@ function assert(condition, message) {
 }
 
 const matrix = JSON.parse(fs.readFileSync("compat/non-js-tooling-candidates.json", "utf8"));
-const artifactManifest = JSON.parse(fs.readFileSync("vendor/manifests/non-js-runtime-artifacts.json", "utf8"));
+const artifactManifest = JSON.parse(fs.readFileSync("compat/manifests/non-js-runtime-artifacts.json", "utf8"));
 const document = fs.readFileSync("docs/productization/non-js-tooling-candidates.md", "utf8");
 
 assert(matrix.schemaVersion === 5, "unexpected non-JS tooling schema");

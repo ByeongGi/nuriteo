@@ -31,7 +31,7 @@ assert.equal(runPackageManagerCohort("pnpm").lifecycle, "fixture-optional:instal
 assert.equal(runPackageManagerCohort("pnpm").bin, "fixture-bin:hello");
 
 const nativeFallbackPolicy = createNativeFallbackPolicy({
-  wasmPolicy: createWasmAdapterPolicy(JSON.parse(fs.readFileSync(path.join(root, "vendor/manifests/wasm-adapters.json"), "utf8")))
+  wasmPolicy: createWasmAdapterPolicy(JSON.parse(fs.readFileSync(path.join(root, "compat/manifests/wasm-adapters.json"), "utf8")))
 });
 assert.equal(
   nativeFallbackPolicy.classify({

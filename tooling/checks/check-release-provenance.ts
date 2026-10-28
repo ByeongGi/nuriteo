@@ -15,8 +15,8 @@ function git(args) {
 }
 
 const policy = readJson("compat/release-provenance.json");
-const npmManifest = readJson("vendor/manifests/npm.json");
-const pnpmManifest = readJson("vendor/manifests/pnpm.json");
+const npmManifest = readJson("compat/manifests/npm.json");
+const pnpmManifest = readJson("compat/manifests/pnpm.json");
 const packageJson = readJson("package.json");
 const workflow = fs.readFileSync(".github/workflows/release-provenance.yml", "utf8");
 const sourceCommit = git(["rev-parse", "HEAD"]);

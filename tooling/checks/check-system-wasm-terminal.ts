@@ -4,7 +4,7 @@ import fs from "node:fs";
 
 const buildPath = "target/wasm32-unknown-unknown/debug/system_wasm.wasm";
 const productPath = "packages/workspace-runtime/assets/runtime/system_wasm.wasm";
-const adapterManifestPath = "vendor/manifests/wasm-adapters.json";
+const adapterManifestPath = "compat/manifests/wasm-adapters.json";
 const compatibilityPath = "compat/wasm-tool-adapters.json";
 
 assert.ok(fs.existsSync(buildPath), `missing system WASM build: run pnpm build:wasm before this check`);

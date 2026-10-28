@@ -226,7 +226,7 @@ for (const dir of [
   "packages/node-runtime",
   "packages/preview",
   "packages/protocol",
-  "vendor/manifests"
+  "compat/manifests"
 ]) {
   copyDir(dir, path.join(packageRoot, dir));
 }

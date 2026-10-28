@@ -11,11 +11,11 @@
   "maximumFindings": { "high": 0, "critical": 0, "secrets": 0 },
   "requiredImages": ["server", "web", "operations"],
   "requiredInputs": [
-    "platform/security/self-hosted-v1-threat-model.json",
-    "platform/security/dependency-policy.json",
-    "platform/security/workload-hardening-policy.json",
+    "compat/platform/security/self-hosted-v1-threat-model.json",
+    "compat/platform/security/dependency-policy.json",
+    "compat/platform/security/workload-hardening-policy.json",
     "docs/security/incident-intake.md"
   ],
-  "report": "platform/security/reports/SEC-004.json",
+  "report": "compat/platform/security/reports/SEC-004.json",
   "revalidation": "Every release-candidate digest must be scanned again after the reproducible build and before signing or publication. A digest change invalidates its previous result."
 }

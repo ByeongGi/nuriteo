@@ -17,6 +17,6 @@
     "cargo deny check advisories licenses sources",
     "pnpm audit --prod --audit-level high"
   ],
-  "waiverRegistry": "platform/security/dependency-waivers.json",
+  "waiverRegistry": "compat/platform/security/dependency-waivers.json",
   "sbomContract": "release/offline/inventory-v1.json"
 }

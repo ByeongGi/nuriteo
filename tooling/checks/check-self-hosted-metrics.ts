@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 type Metric = { name: string; type: string; unit: string; labels: string[]; buckets?: number[]; cardinality: string };
-const catalog = JSON.parse(fs.readFileSync("platform/observability/metric-catalog.json", "utf8")) as {
+const catalog = JSON.parse(fs.readFileSync("compat/platform/observability/metric-catalog.json", "utf8")) as {
   schemaVersion: number; taskId: string; endpoint: string; format: string; visibility: string;
   metrics: Metric[]; boundedLabels: Record<string, string | string[]>; prohibitedLabels: string[];
   compatibility: string;
@@ -50,7 +50,7 @@ assert.ok(source.includes('"unmatched"'));
 assert.ok(source.includes('"OTHER"'));
 
 const operations = fs.readFileSync("docs/operations/prometheus-metrics.md", "utf8");
-for (const term of ["/metrics", "ClusterIP", "route template", "platform/observability/metric-catalog.json"])
+for (const term of ["/metrics", "ClusterIP", "route template", "compat/platform/observability/metric-catalog.json"])
   assert.ok(operations.includes(term), `metrics operations guide missing: ${term}`);
 
 console.log(JSON.stringify({ status: "pass", task: catalog.taskId, metrics: catalog.metrics.length,

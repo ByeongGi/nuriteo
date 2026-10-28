@@ -14,7 +14,7 @@
   "supportedAdapters": [
     {
       "name": "system-wasm",
-      "source": "vendor/manifests/wasm-adapters.json",
+      "source": "compat/manifests/wasm-adapters.json",
       "integrity": "sha256-required",
       "exportContract": "required",
       "fallbackPolicy": "deny-native",

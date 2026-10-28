@@ -6,7 +6,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const tarballDir = process.env.PM_REHEARSAL_TARBALL_DIR || "/private/tmp/pm-upgrade-rehearsal";
-const manifestsDir = path.join(root, "vendor/manifests");
+const manifestsDir = path.join(root, "compat/manifests");
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, "utf8"));

@@ -33,7 +33,7 @@ assert.equal(
 );
 
 for (const name of ["npm", "pnpm"]) {
-  const manifest = JSON.parse(fs.readFileSync(new URL(`../../../vendor/manifests/${name}.json`, import.meta.url), "utf8"));
+  const manifest = JSON.parse(fs.readFileSync(new URL(`../../../compat/manifests/${name}.json`, import.meta.url), "utf8"));
   const entry = registry.resolve(name);
   assert.equal(entry.version, manifest.version);
   assert.ok(entry.entrySha256);

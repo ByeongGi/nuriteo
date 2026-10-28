@@ -5,7 +5,7 @@
   "status": "supported",
   "publicGrade": "supported",
   "artifact": {
-    "manifest": "vendor/manifests/yarn.json",
+    "manifest": "compat/manifests/yarn.json",
     "installed": "tests/fixtures/package-managers/cli/yarn/1.22.22/installed.json",
     "entry": "tests/fixtures/package-managers/cli/yarn/1.22.22/package/bin/yarn.js",
     "entrySha256": "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04",

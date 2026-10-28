@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-let manifestDir = path.resolve("vendor/manifests");
+let manifestDir = path.resolve("compat/manifests");
 let outDir = path.resolve("tests/fixtures/package-managers/cli");
 
 function readManifest(name) {

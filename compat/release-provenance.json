@@ -21,8 +21,8 @@
   "sbom": {
     "format": "CycloneDX-like JSON summary",
     "requiredComponents": [
-      { "name": "npm", "version": "10.9.2", "license": "Artistic-2.0", "source": "vendor/manifests/npm.json" },
-      { "name": "pnpm", "version": "9.15.9", "license": "MIT", "source": "vendor/manifests/pnpm.json" },
+      { "name": "npm", "version": "10.9.2", "license": "Artistic-2.0", "source": "compat/manifests/npm.json" },
+      { "name": "pnpm", "version": "9.15.9", "license": "MIT", "source": "compat/manifests/pnpm.json" },
       { "name": "fflate", "version": "0.8.3", "license": "MIT", "source": "package.json" },
       { "name": "typescript", "version": "6.0.3", "license": "Apache-2.0", "source": "package.json" }
     ]
