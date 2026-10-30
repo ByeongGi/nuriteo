@@ -15,6 +15,8 @@ use super::{
 #[must_use]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ProcessError {
+    /// No process identifier or generation remains.
+    Exhausted,
     /// The process group does not belong to the session.
     InvalidProcessGroup,
     /// The process cannot become a session leader.
@@ -30,6 +32,7 @@ impl ProcessError {
     #[must_use]
     pub const fn reason(self) -> &'static str {
         match self {
+            Self::Exhausted => "process identifier space exhausted",
             Self::InvalidProcessGroup => "invalid process group",
             Self::InvalidSession => "invalid session",
             Self::InvalidTransition => "invalid process state transition",
@@ -78,17 +81,22 @@ impl ProcessTable {
     }
 
     /// Allocates a process in the prepared state.
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns [`ProcessError::Exhausted`] when the process identifier or the
+    /// generation has no remaining value. The table is left unchanged.
     pub fn prepare(
         &mut self,
         parent: Option<Pid>,
         cwd: impl Into<String>,
         env: BTreeMap<String, String>,
-    ) -> ProcessState {
+    ) -> ProcessResult<ProcessState> {
         let pid = Pid(self.next_pid.max(1));
-        self.next_pid = pid.0 + 1;
+        let next_pid = pid.0.checked_add(1).ok_or(ProcessError::Exhausted)?;
         let generation = Generation(self.next_generation.max(1));
-        self.next_generation = generation.0 + 1;
+        let next_generation = generation.0.checked_add(1).ok_or(ProcessError::Exhausted)?;
+        self.next_pid = next_pid;
+        self.next_generation = next_generation;
         let (process_group, session) = parent
             .and_then(|pid| self.processes.get(&pid))
             .map_or((ProcessGroupId(pid.0), SessionId(pid.0)), |parent| {
@@ -108,7 +116,7 @@ impl ProcessTable {
         self.resources.attach(pid);
         self.pending_signals.insert(pid, VecDeque::new());
         self.processes.insert(pid, state.clone());
-        state
+        Ok(state)
     }
 
     /// Moves a prepared process to starting.
@@ -337,4 +345,61 @@ fn is_terminal_status(status: ProcessStatus) -> bool {
         status,
         ProcessStatus::Failed | ProcessStatus::Exited | ProcessStatus::Killed
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    #[test]
+    fn rejects_prepare_when_either_counter_is_exhausted() {
+        let mut table = ProcessTable {
+            next_pid: u32::MAX,
+            ..ProcessTable::default()
+        };
+        assert_eq!(
+            table
+                .prepare(None, "/workspace", BTreeMap::new())
+                .unwrap_err(),
+            ProcessError::Exhausted
+        );
+        assert!(table.processes.is_empty());
+        assert_eq!(table.next_pid, u32::MAX);
+        assert_eq!(table.next_generation, 0);
+
+        let mut table = ProcessTable {
+            next_generation: u32::MAX,
+            ..ProcessTable::default()
+        };
+        assert_eq!(
+            table
+                .prepare(None, "/workspace", BTreeMap::new())
+                .unwrap_err(),
+            ProcessError::Exhausted
+        );
+        assert!(table.processes.is_empty());
+        assert_eq!(table.next_pid, 0);
+        assert_eq!(table.next_generation, u32::MAX);
+    }
+
+    #[test]
+    fn keeps_the_last_process_when_the_following_identifier_is_exhausted() {
+        let mut table = ProcessTable {
+            next_pid: u32::MAX - 1,
+            next_generation: u32::MAX - 1,
+            ..ProcessTable::default()
+        };
+        let process = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
+        assert_eq!(process.pid, Pid(u32::MAX - 1));
+        assert_eq!(process.generation, Generation(u32::MAX - 1));
+        assert_eq!(
+            table
+                .prepare(None, "/workspace", BTreeMap::new())
+                .unwrap_err(),
+            ProcessError::Exhausted
+        );
+        assert_eq!(table.get(process.pid).unwrap().pid, process.pid);
+    }
 }

@@ -248,11 +248,14 @@ impl SystemFs {
     /// Returns [`FsError::InvalidInput`] when neither read nor write is set, or
     /// truncate is set without write. Returns [`FsError::IsDirectory`] for a
     /// directory, [`FsError::NotFound`] when the path is missing and create is
-    /// off, and [`FsError::NotFile`] for a symlink that does not resolve to a file.
+    /// off, [`FsError::NotFile`] for a symlink that does not resolve to a file,
+    /// and [`FsError::DescriptorExhausted`] when the process has no free descriptor.
+    /// A full descriptor table leaves the filesystem unchanged.
     pub fn open(&mut self, pid: Pid, path: &str, options: OpenOptions) -> FsResult<Fd> {
         if !options.read && !options.write {
             return Err(FsError::InvalidInput);
         }
+        self.fd_table(pid).ensure_available()?;
 
         let path = AbsolutePath::parse(path)?;
         let inode = match self.resolve_parts(path.parts()) {
@@ -280,7 +283,13 @@ impl SystemFs {
             offset: 0,
             options,
         };
-        Ok(self.fd_table(pid).insert(open_file))
+        self.fd_table(pid).insert(open_file)
+    }
+
+    /// Points `pid`'s descriptor cursor at the end of the `u32` range.
+    #[cfg(test)]
+    pub fn saturate_descriptors(&mut self, pid: Pid) {
+        self.fd_table(pid).saturate();
     }
 
     /// Reads up to `len` bytes through a process descriptor.
@@ -553,6 +562,32 @@ mod tests {
             .unwrap();
         assert_eq!(fs.read(PID_A, fd, 16).unwrap(), b"hello");
         assert_eq!(fs.read(PID_A, fd, 16).unwrap(), b"");
+    }
+
+    #[test]
+    fn keeps_file_bytes_when_descriptors_are_exhausted() {
+        let mut fs = SystemFs::new();
+        let fd = fs
+            .open(
+                PID_A,
+                "/workspace/result.txt",
+                OpenOptions::read_write_create(),
+            )
+            .unwrap();
+        fs.write(PID_A, fd, b"hello").unwrap();
+        fs.close(PID_A, fd).unwrap();
+        fs.saturate_descriptors(PID_A);
+
+        assert_eq!(
+            fs.open(
+                PID_A,
+                "/workspace/result.txt",
+                OpenOptions::write_create_truncate(),
+            )
+            .unwrap_err(),
+            FsError::DescriptorExhausted
+        );
+        assert_eq!(fs.stat("/workspace/result.txt").unwrap().len, 5);
     }
 
     #[test]

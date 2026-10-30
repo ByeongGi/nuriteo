@@ -71,6 +71,7 @@ impl From<ProcessError> for DispatchError {
     fn from(error: ProcessError) -> Self {
         Self {
             code: match error {
+                ProcessError::Exhausted => errors::EAGAIN,
                 ProcessError::NotFound => errors::EBADF,
                 ProcessError::InvalidProcessGroup
                 | ProcessError::InvalidSession
@@ -150,7 +151,7 @@ impl SystemDispatcher {
             parent,
             if cwd.is_empty() { "/workspace" } else { cwd },
             BTreeMap::new(),
-        );
+        )?;
         let mut response = Vec::with_capacity(16);
         for value in [
             process.pid.0,
@@ -446,6 +447,13 @@ mod tests {
             .dispatch(&frame(0, opcodes::PROCESS_REGISTER, &payload))
             .unwrap();
         u32::from_le_bytes(response[0..4].try_into().unwrap())
+    }
+
+    #[test]
+    fn maps_process_identifier_exhaustion_to_eagain() {
+        let error = DispatchError::from(ProcessError::Exhausted);
+        assert_eq!(error.code, errors::EAGAIN);
+        assert_eq!(error.message, "process identifier space exhausted");
     }
 
     #[test]

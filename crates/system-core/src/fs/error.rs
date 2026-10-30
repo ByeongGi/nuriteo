@@ -9,6 +9,8 @@ use std::{
 pub enum FsError {
     /// The path already has a directory entry.
     AlreadyExists,
+    /// No descriptor number remains for this process.
+    DescriptorExhausted,
     /// The descriptor is not open for this process.
     InvalidFd,
     /// The path or open options are not usable.
@@ -31,6 +33,7 @@ impl FsError {
     pub const fn reason(self) -> &'static str {
         match self {
             Self::AlreadyExists => "path already exists",
+            Self::DescriptorExhausted => "file descriptor space exhausted",
             Self::InvalidFd => "invalid file descriptor",
             Self::InvalidInput => "invalid filesystem input",
             Self::IsDirectory => "path is a directory",

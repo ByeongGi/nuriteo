@@ -19,11 +19,13 @@ mod tests {
     #[test]
     fn tracks_prepare_start_ready_exit_and_resources() {
         let mut table = ProcessTable::default();
-        let process = table.prepare(
-            None,
-            "/workspace",
-            BTreeMap::from([("A".into(), "1".into())]),
-        );
+        let process = table
+            .prepare(
+                None,
+                "/workspace",
+                BTreeMap::from([("A".into(), "1".into())]),
+            )
+            .unwrap();
 
         assert_eq!(process.pid, Pid(1));
         assert_eq!(process.generation, Generation(1));
@@ -48,7 +50,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_stop_and_invalid_startup() {
         let mut table = ProcessTable::default();
-        let process = table.prepare(None, "/workspace", BTreeMap::new());
+        let process = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
 
         assert_eq!(
             table.ready(process.pid).unwrap_err(),
@@ -64,9 +66,9 @@ mod tests {
     #[test]
     fn advances_pid_generation_for_replacement() {
         let mut table = ProcessTable::default();
-        let first = table.prepare(None, "/workspace", BTreeMap::new());
+        let first = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
         table.kill(first.pid).unwrap();
-        let second = table.prepare(None, "/workspace", BTreeMap::new());
+        let second = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
 
         assert_ne!(first.pid, second.pid);
         assert_ne!(first.generation, second.generation);
@@ -75,9 +77,13 @@ mod tests {
     #[test]
     fn inherits_and_changes_process_groups_within_one_session() {
         let mut table = ProcessTable::default();
-        let parent = table.prepare(None, "/workspace", BTreeMap::new());
-        let child = table.prepare(Some(parent.pid), "/workspace", BTreeMap::new());
-        let sibling = table.prepare(Some(parent.pid), "/workspace", BTreeMap::new());
+        let parent = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
+        let child = table
+            .prepare(Some(parent.pid), "/workspace", BTreeMap::new())
+            .unwrap();
+        let sibling = table
+            .prepare(Some(parent.pid), "/workspace", BTreeMap::new())
+            .unwrap();
 
         assert_eq!(child.session, parent.session);
         assert_eq!(child.process_group, parent.process_group);
@@ -98,8 +104,10 @@ mod tests {
     #[test]
     fn creates_a_new_session_only_for_a_non_group_leader() {
         let mut table = ProcessTable::default();
-        let parent = table.prepare(None, "/workspace", BTreeMap::new());
-        let child = table.prepare(Some(parent.pid), "/workspace", BTreeMap::new());
+        let parent = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
+        let child = table
+            .prepare(Some(parent.pid), "/workspace", BTreeMap::new())
+            .unwrap();
 
         assert_eq!(
             table.create_session(parent.pid).unwrap_err(),
@@ -113,8 +121,10 @@ mod tests {
     #[test]
     fn queues_virtual_signals_for_each_live_group_member() {
         let mut table = ProcessTable::default();
-        let parent = table.prepare(None, "/workspace", BTreeMap::new());
-        let child = table.prepare(Some(parent.pid), "/workspace", BTreeMap::new());
+        let parent = table.prepare(None, "/workspace", BTreeMap::new()).unwrap();
+        let child = table
+            .prepare(Some(parent.pid), "/workspace", BTreeMap::new())
+            .unwrap();
 
         let deliveries = table
             .signal_process_group(parent.process_group, VirtualSignal::Interrupt)

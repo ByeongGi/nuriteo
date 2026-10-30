@@ -279,10 +279,14 @@ impl KernelIo {
     /// Opens a path and installs a descriptor for `pid`.
     ///
     /// # Errors
-    /// Returns [`IoError::Fs`] for the filesystem open failure and
-    /// [`IoError::DescriptorExhausted`] when the process has no free descriptor.
+    /// Returns [`IoError::Fs`] for a filesystem open failure and
+    /// [`IoError::DescriptorExhausted`] when either descriptor table has no free number.
     pub fn open_file(&mut self, pid: Pid, path: &str, options: OpenOptions) -> IoResult<Fd> {
-        let internal_fd = self.fs.open(pid, path, options)?;
+        let internal_fd = match self.fs.open(pid, path, options) {
+            Ok(fd) => fd,
+            Err(FsError::DescriptorExhausted) => return Err(IoError::DescriptorExhausted),
+            Err(error) => return Err(error.into()),
+        };
         match self.descriptor_table(pid).insert(Descriptor::File {
             fd: internal_fd,
             readable: options.read,
@@ -619,6 +623,25 @@ mod tests {
     const OUTSIDER: Pid = Pid(3);
 
     #[test]
+    fn reports_filesystem_descriptor_exhaustion_as_kernel_exhaustion() {
+        let mut io = KernelIo::new();
+        io.open_file(
+            HOST,
+            "/workspace/file.txt",
+            OpenOptions::read_write_create(),
+        )
+        .unwrap();
+        io.filesystem_mut().saturate_descriptors(HOST);
+
+        let error = io
+            .open_file(HOST, "/workspace/file.txt", OpenOptions::read_only())
+            .unwrap_err();
+
+        assert_eq!(error, IoError::DescriptorExhausted);
+        assert_eq!(error.reason(), "file descriptor space exhausted");
+    }
+
+    #[test]
     fn nested_io_errors_keep_their_source() {
         let error = IoError::Fs(FsError::NotFound);
         assert_eq!(error.to_string(), "filesystem error: path was not found");
@@ -741,8 +764,12 @@ mod tests {
     #[test]
     fn routes_terminal_events_to_the_foreground_process_group() {
         let mut processes = ProcessTable::default();
-        let shell = processes.prepare(None, "/workspace", BTreeMap::new());
-        let command = processes.prepare(Some(shell.pid), "/workspace", BTreeMap::new());
+        let shell = processes
+            .prepare(None, "/workspace", BTreeMap::new())
+            .unwrap();
+        let command = processes
+            .prepare(Some(shell.pid), "/workspace", BTreeMap::new())
+            .unwrap();
         let command = processes
             .set_process_group(command.pid, ProcessGroupId(command.pid.0))
             .unwrap();
