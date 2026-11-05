@@ -3,8 +3,8 @@ import Link from "next/link";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { loadWorkspaceMemberContext, requireMember } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
-import { WorkspaceFacts, WorkspacePanel, WorkspaceSection } from "#src/app/(workspace)/workspaces/[workspaceId]/workspace-section.tsx";
+import { loadWorkspaceMemberContext, requireMember } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
+import { WorkspaceFacts, WorkspacePanel, WorkspaceSection } from "@/app/(workspace)/workspaces/[workspaceId]/_components/workspace-section.tsx";
 import { Button } from "#src/components/ui/button.tsx";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

@@ -1,8 +1,9 @@
-import { previewAdminPolicyCleanup } from "@nuriteo/api-client";
+import { previewAdminPolicyCleanup } from "@/services/admin/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { StorageCleanupPreview } from "#src/app/(admin)/admin/operations/storage-cleanup/cleanup-preview.tsx";
+import { StorageCleanupPreview } from "@/app/(admin)/admin/operations/storage-cleanup/_components/cleanup-preview.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

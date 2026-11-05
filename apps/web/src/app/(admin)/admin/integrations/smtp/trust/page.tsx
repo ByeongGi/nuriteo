@@ -1,8 +1,10 @@
-import { ApiError, listIntegrationCas } from "@nuriteo/api-client";
+import { ApiError } from "@/services/http/api.ts";
+import { listIntegrationCas } from "@/services/integration-ca/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { SmtpTrustScreen } from "#src/app/(admin)/admin/integrations/smtp/trust/smtp-trust-screen.tsx";
+import { SmtpTrustScreen } from "@/app/(admin)/admin/integrations/smtp/trust/_components/smtp-trust-screen.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

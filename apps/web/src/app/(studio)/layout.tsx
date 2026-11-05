@@ -1,10 +1,12 @@
-import { getCurrentUser, getMfaStatus } from "@nuriteo/api-client";
+import { getMfaStatus } from "@/services/mfa/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+
 import { headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
+import { signInHref } from "@/app/(public)/sign-in/_utils/return-to.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

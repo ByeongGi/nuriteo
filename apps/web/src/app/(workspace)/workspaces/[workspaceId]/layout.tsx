@@ -1,4 +1,7 @@
-import { getCurrentUser, getCurrentWorkspaces, getMfaStatus } from "@nuriteo/api-client";
+import { getMfaStatus } from "@/services/mfa/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import { cookies, headers } from "next/headers";
 import { redirect, unstable_rethrow } from "next/navigation";
 import { Suspense } from "react";
@@ -8,8 +11,8 @@ import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import {
   WorkspaceShellFrame,
   WorkspaceShellLoading
-} from "#src/app/(workspace)/workspace-shell-frame.tsx";
-import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
+} from "@/app/(workspace)/_components/workspace-shell-frame.tsx";
+import { signInHref } from "@/app/(public)/sign-in/_utils/return-to.ts";
 import {
   isExplicitlySignedOut,
   safeRequestReference

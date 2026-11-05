@@ -1,4 +1,4 @@
-import { registryAction } from "#src/app/api/v1/admin/registries/[registryId]/registry-action.ts";
+import { registryAction } from "@/app/api/v1/admin/registries/[registryId]/_utils/registry-action.ts";
 
 export const dynamic = "force-dynamic";
 

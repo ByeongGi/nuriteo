@@ -1,9 +1,11 @@
-import { getCurrentWorkspaces, getProject } from "@nuriteo/api-client";
+import { getProject } from "@/services/projects/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { ProjectStudioScreen } from "#src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx";
+import { ProjectStudioScreen } from "@/app/(studio)/projects/[projectId]/studio/_components/project-studio-screen.tsx";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { previewOriginConfiguration } from "#src/lib/preview/config.ts";

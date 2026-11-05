@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { TeamProjectManager } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/[teamId]/projects/team-project-manager.tsx";
-import { loadTeamContext } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/team-page-data.ts";
+import { TeamProjectManager } from "@/app/(workspace)/workspaces/[workspaceId]/teams/[teamId]/projects/_components/team-project-manager.tsx";
+import { loadTeamContext } from "@/app/(workspace)/workspaces/[workspaceId]/teams/_utils/team-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "팀 프로젝트 접근" };

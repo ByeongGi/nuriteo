@@ -15,7 +15,7 @@
     "start": "next start",
     "storybook": "storybook dev -p 6006",
     "runtime:assets": "node --experimental-strip-types tooling/build-runtime-assets.ts",
-    "test": "node --conditions=react-server test/run.ts",
+    "test": "node --conditions=react-server --import ./test/register-alias.mjs test/run.ts",
     "test:browser-entry": "node test/browser-entry.test.ts",
     "test:browser-shell": "node test/authenticated-shell-browser.test.ts",
     "test:browser-admin-settings": "node test/admin-settings-browser.test.ts",
@@ -64,7 +64,8 @@
     "react-dom": "19.0.0",
     "server-only": "0.0.1",
     "tailwind-merge": "3.7.0",
-    "tailwind-variants": "3.3.1"
+    "tailwind-variants": "3.3.1",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@storybook/addon-a11y": "10.6.2",

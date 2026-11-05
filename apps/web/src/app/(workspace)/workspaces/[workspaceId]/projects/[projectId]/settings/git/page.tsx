@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { ProjectGitPanel } from "#src/projects/project-git-panel.tsx";
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectSettingsPanel, ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectSettingsPanel, ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 Git 설정" };
 

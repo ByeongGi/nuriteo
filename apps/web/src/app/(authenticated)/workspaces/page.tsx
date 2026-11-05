@@ -1,4 +1,5 @@
-import { getCurrentWorkspaces } from "@nuriteo/api-client";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
@@ -8,7 +9,7 @@ import {
   safeRequestReference
 } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { EmptyWorkspaceScreen, WorkspaceScreen } from "#src/app/(authenticated)/workspaces/workspace-catalog.tsx";
+import { EmptyWorkspaceScreen, WorkspaceScreen } from "@/app/(authenticated)/workspaces/_components/workspace-catalog.tsx";
 
 export const metadata: Metadata = {
   title: "워크스페이스"

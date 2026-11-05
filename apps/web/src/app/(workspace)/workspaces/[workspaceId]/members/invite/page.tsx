@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MemberInviteForm } from "#src/app/(workspace)/workspaces/[workspaceId]/members/invite/member-invite-form.tsx";
-import { loadWorkspaceMemberContext } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { MemberInviteForm } from "@/app/(workspace)/workspaces/[workspaceId]/members/invite/_components/member-invite-form.tsx";
+import { loadWorkspaceMemberContext } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "멤버 초대" };

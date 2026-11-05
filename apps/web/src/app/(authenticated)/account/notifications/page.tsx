@@ -1,7 +1,8 @@
-import { getNotificationPreferences } from "@nuriteo/api-client";
+import { getNotificationPreferences } from "@/services/notifications/api.ts";
+
 import type { Metadata } from "next";
 
-import { NotificationPreferencesForm } from "#src/app/(authenticated)/account/notifications/notification-preferences-form.tsx";
+import { NotificationPreferencesForm } from "@/app/(authenticated)/account/notifications/_components/notification-preferences-form.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";

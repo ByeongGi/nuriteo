@@ -6,7 +6,7 @@ export {};
 if (!process.execArgv.some((argument) => argument === "--conditions=react-server")) {
   const result = spawnSync(
     process.execPath,
-    ["--conditions=react-server", fileURLToPath(import.meta.url)],
+    ["--conditions=react-server", "--import", "./test/register-alias.mjs", fileURLToPath(import.meta.url)],
     { stdio: "inherit" }
   );
   process.exit(result.status ?? 1);

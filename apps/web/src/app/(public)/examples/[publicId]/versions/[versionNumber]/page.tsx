@@ -1,4 +1,6 @@
-import { ApiError, getPublicPublishedExampleVersion } from "@nuriteo/api-client";
+import { ApiError } from "@/services/http/api.ts";
+import { getPublicPublishedExampleVersion } from "@/services/published-examples/api.ts";
+
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 

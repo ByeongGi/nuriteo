@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { parseAuditEventCollection } from "#src/app/(admin)/admin/system/audit-log/audit-log-model.ts";
-import { AuditLogTable } from "#src/app/(admin)/admin/system/audit-log/audit-log-table.tsx";
+import { parseAuditEventCollection } from "@/app/(admin)/admin/system/audit-log/_utils/audit-log-model.ts";
+import { AuditLogTable } from "@/app/(admin)/admin/system/audit-log/_components/audit-log-table.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

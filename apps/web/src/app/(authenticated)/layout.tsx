@@ -1,5 +1,11 @@
-import { getCurrentUser, getCurrentWorkspaces, getMfaStatus, listNotifications } from "@nuriteo/api-client";
-import type { Workspace } from "@nuriteo/api-client";
+import { getMfaStatus } from "@/services/mfa/api.ts";
+import { listNotifications } from "@/services/notifications/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+import type {
+  Workspace
+} from "@nuriteo/api-client";
+
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -15,8 +21,8 @@ import { parseThemeMode, THEME_COOKIE_NAME } from "#src/lib/theme.ts";
 import {
   AuthenticatedShellFrame,
   AuthenticatedShellLoading
-} from "#src/app/(authenticated)/authenticated-shell-frame.tsx";
-import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
+} from "@/app/(authenticated)/_components/authenticated-shell-frame.tsx";
+import { signInHref } from "@/app/(public)/sign-in/_utils/return-to.ts";
 
 export default function AuthenticatedLayout({
   children

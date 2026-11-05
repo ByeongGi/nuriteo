@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MemberRoleEditor } from "#src/app/(workspace)/workspaces/[workspaceId]/members/[userId]/role/member-role-editor.tsx";
-import { loadWorkspaceMemberContext, requireMember } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { MemberRoleEditor } from "@/app/(workspace)/workspaces/[workspaceId]/members/[userId]/role/_components/member-role-editor.tsx";
+import { loadWorkspaceMemberContext, requireMember } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "멤버 역할 변경" };

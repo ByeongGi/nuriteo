@@ -1,4 +1,5 @@
-import { getMfaPolicy } from "@nuriteo/api-client";
+import { getMfaPolicy } from "@/services/mfa/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";

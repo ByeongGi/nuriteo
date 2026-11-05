@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { RemoveMember } from "#src/app/(workspace)/workspaces/[workspaceId]/members/[userId]/remove/remove-member.tsx";
-import { loadWorkspaceMemberContext, requireMember } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { RemoveMember } from "@/app/(workspace)/workspaces/[workspaceId]/members/[userId]/remove/_components/remove-member.tsx";
+import { loadWorkspaceMemberContext, requireMember } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "멤버 제외" };

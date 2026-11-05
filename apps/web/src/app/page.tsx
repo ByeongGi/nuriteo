@@ -1,4 +1,6 @@
-import { getCurrentUser, getSetupStatus } from "@nuriteo/api-client";
+import { getCurrentUser } from "@/services/session/api.ts";
+import { getSetupStatus } from "@/services/setup/api.ts";
+
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";

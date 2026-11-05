@@ -1,8 +1,12 @@
-import { listProjectVersions, listRecoveryCheckpoints } from "@nuriteo/api-client";
+import {
+  listProjectVersions,
+  listRecoveryCheckpoints
+} from "@/services/projects/api.ts";
+
 import type { Metadata } from "next";
 
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectHistoryScreen } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/history/history-screen.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectHistoryScreen } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/history/_components/history-screen.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 버전과 복구" };
 

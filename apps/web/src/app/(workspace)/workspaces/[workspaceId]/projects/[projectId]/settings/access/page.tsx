@@ -1,9 +1,12 @@
-import { ApiError, listDirectProjectRoles, listOrganizationMembers } from "@nuriteo/api-client";
+import { ApiError } from "@/services/http/api.ts";
+import { listOrganizationMembers } from "@/services/organizations/api.ts";
+import { listDirectProjectRoles } from "@/services/projects/api.ts";
+
 import type { Metadata } from "next";
 
 import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectSettingsNotice, ProjectSettingsPanel, ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectSettingsNotice, ProjectSettingsPanel, ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 접근 권한" };
 

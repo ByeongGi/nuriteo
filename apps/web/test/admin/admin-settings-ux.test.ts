@@ -151,16 +151,18 @@ function sourceContracts(): void {
   const page = read("src/app/(admin)/admin/system/settings/page.tsx");
   const legacySettingsPage = read("src/app/(admin)/admin/settings/page.tsx");
   const adminHome = read("src/app/(admin)/admin/page.tsx");
-  const settings = read("src/app/(admin)/admin/system/settings/admin-settings.tsx");
-  const navigation = read("src/app/(admin)/admin/admin-navigation.tsx");
+  const settings = read("src/app/(admin)/admin/system/settings/_components/admin-settings.tsx");
+  const navigation = read("src/app/(admin)/admin/_components/admin-navigation.tsx");
   const adminLayout = read("src/app/(admin)/admin/layout.tsx");
-  const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");
+  const adminShell = read("src/app/(admin)/admin/_components/admin-shell-frame.tsx");
   const operationsPage = read("src/app/(admin)/admin/operations/page.tsx");
-  const operationsDashboard = read("src/app/(admin)/admin/operations/operations-dashboard.tsx");
-  const supportBundle = read("src/app/(admin)/admin/operations/support-bundle-download.tsx");
+  const operationsDashboard = read("src/app/(admin)/admin/operations/_components/operations-dashboard.tsx");
+  const supportBundle = read("src/app/(admin)/admin/operations/_components/support-bundle-download.tsx");
+  const supportBundleHook = read("src/app/(admin)/admin/operations/_hooks/use-support-bundle-download.ts");
+  const settingsHook = read("src/app/(admin)/admin/system/settings/_hooks/use-admin-settings.ts");
   const storageCleanupPage = read("src/app/(admin)/admin/operations/storage-cleanup/page.tsx");
   const layout = read("src/app/(authenticated)/layout.tsx");
-  const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
+  const authenticatedNavigation = read("src/app/(authenticated)/_components/authenticated-navigation.tsx");
 
   assert.match(page, /Promise\.all\(\[/u);
   assert.match(page, /listAdminSettings\(client\)/u);
@@ -208,8 +210,8 @@ function sourceContracts(): void {
   assert.match(operationsDashboard, /aria-labelledby="dependency-health-title"/u);
   assert.match(operationsDashboard, /SupportBundleDownload preview=\{operations\.supportBundle\}/u);
   assert.match(supportBundle, /어떤 정보도 자동으로 업로드되지 않습니다/u);
-  assert.match(supportBundle, /bytes\.byteLength > preview\.maximumBytes/u);
-  assert.doesNotMatch(supportBundle, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
+  assert.match(supportBundleHook, /bytes\.byteLength > preview\.maximumBytes/u);
+  assert.doesNotMatch(`${supportBundle}\n${supportBundleHook}`, /localStorage|sessionStorage|dangerouslySetInnerHTML/u);
   assert.match(layout, /<AuthenticatedShellFrame/u);
   assert.match(authenticatedNavigation, /href: "\/admin\/operations"/u);
   assert.match(adminLayout, /is_instance_admin/u);
@@ -219,7 +221,7 @@ function sourceContracts(): void {
   assert.match(adminShell, /사용자 화면/u);
   assert.match(adminShell, /<AdminNavigation/u);
   assert.doesNotMatch(
-    `${page}\n${settings}\n${operationsPage}\n${operationsDashboard}`,
+    `${page}\n${settings}\n${settingsHook}\n${operationsPage}\n${operationsDashboard}`,
     /dangerouslySetInnerHTML|localStorage|sessionStorage/u
   );
 }

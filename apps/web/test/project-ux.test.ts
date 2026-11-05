@@ -412,7 +412,7 @@ function testProjectSourceContracts() {
   const workspaceProjectsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/page.tsx");
   const projectSettingsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/page.tsx");
   const projectAccessSettingsPage = read("src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/access/page.tsx");
-  const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx");
+  const studioScreen = read("src/app/(studio)/projects/[projectId]/studio/_components/project-studio-screen.tsx");
   const legacyStudioPage = read("src/app/(studio)/projects/[projectId]/studio/page.tsx");
   const workspaceProjectStudioPage = read("src/app/(studio)/workspaces/[workspaceId]/projects/[projectId]/studio/page.tsx");
   const studioStory = read("src/design-system/redesign/studio-redesign.stories.tsx");

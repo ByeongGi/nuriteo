@@ -1,10 +1,12 @@
-import { getCurrentUser, listOidcLoginProviders } from "@nuriteo/api-client";
+import { listOidcLoginProviders } from "@/services/oidc/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { SignInForm } from "#src/app/(public)/sign-in/sign-in-form.tsx";
-import { safeReturnTo } from "#src/app/(public)/sign-in/return-to.ts";
+import { SignInForm } from "@/app/(public)/sign-in/_components/sign-in-form.tsx";
+import { safeReturnTo } from "@/app/(public)/sign-in/_utils/return-to.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import {
   isExplicitlySignedOut,

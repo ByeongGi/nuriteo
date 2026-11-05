@@ -1,10 +1,11 @@
-import { listNotifications } from "@nuriteo/api-client";
+import { listNotifications } from "@/services/notifications/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
-import { NotificationCenter } from "#src/app/(authenticated)/notifications/notification-center.tsx";
+import { NotificationCenter } from "@/app/(authenticated)/notifications/_components/notification-center.tsx";
 
 export const metadata: Metadata = { title: "알림" };
 

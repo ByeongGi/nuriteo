@@ -102,6 +102,7 @@ function testReadOnlyPublicExperienceBoundary(): void {
   const version = read("src/app/(public)/examples/[publicId]/versions/[versionNumber]/page.tsx");
   const shell = read("src/app/(public)/examples/_components/read-only-example-shell.tsx");
   const forkForm = read("src/app/(public)/examples/_components/fork-example-form.tsx");
+  const forkHook = read("src/app/(public)/examples/_hooks/use-fork-example-form.ts");
   const publicClient = read("src/lib/api/public-server-client.ts");
   const workspaceRoute = read("src/app/api/v1/me/workspaces/route.ts");
 
@@ -114,10 +115,10 @@ function testReadOnlyPublicExperienceBoundary(): void {
   assert.match(shell, /고정 스냅샷/u);
   assert.match(shell, /정제된 아카이브 다운로드/u);
   assert.match(shell, /ForkExampleForm/u);
-  assert.match(forkForm, /getCurrentWorkspaces/u);
-  assert.match(forkForm, /forkPublishedExample/u);
-  assert.match(forkForm, /readCsrfCredential/u);
-  assert.match(forkForm, /published-example-fork-\$\{crypto\.randomUUID\(\)\}/u);
+  assert.match(forkHook, /getCurrentWorkspaces/u);
+  assert.match(forkHook, /forkPublishedExample/u);
+  assert.match(forkHook, /readCsrfCredential/u);
+  assert.match(forkHook, /published-example-fork-\$\{crypto\.randomUUID\(\)\}/u);
   assert.match(forkForm, /원본 접근 권한, Git 연결이나 환경값/u);
   assert.match(shell, /\/api\/v1\/published-examples\/\$\{example\.publicId\}\/versions\/\$\{example\.versionNumber\}\/content/u);
   assert.doesNotMatch(`${gallery}\n${galleryScreen}\n${detail}\n${detailScreen}\n${version}\n${shell}`, /ProjectIdeShell|createServerApiClient|cookies\(|headers\(/u);

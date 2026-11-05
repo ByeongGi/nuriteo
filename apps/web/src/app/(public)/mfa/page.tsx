@@ -1,9 +1,10 @@
-import { getMfaStatus } from "@nuriteo/api-client";
+import { getMfaStatus } from "@/services/mfa/api.ts";
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
+import { signInHref } from "@/app/(public)/sign-in/_utils/return-to.ts";
 import {
   isExplicitlySignedOut,
   safeRequestReference

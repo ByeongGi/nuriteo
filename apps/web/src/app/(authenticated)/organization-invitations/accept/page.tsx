@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 
-import { AcceptInvitation } from "#src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx";
+import { AcceptInvitation } from "@/app/(authenticated)/organization-invitations/accept/_components/accept-invitation.tsx";
 import { ProductEntryLoading } from "#src/app/_components/product-entry-shell.tsx";
 
 export default function AcceptOrganizationInvitationPage() {

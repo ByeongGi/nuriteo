@@ -31,7 +31,7 @@ function testStandaloneAndDependencyContract(): void {
   const providers = read("src/app/providers.tsx");
   assert.match(providers, /QueryClientProvider/u);
   assert.match(providers, /staleTime:\s*60_000/u);
-  assert.match(read("src/app/(public)/sign-in/sign-in-form.tsx"), /useMutation/u);
+  assert.match(read("src/app/(public)/sign-in/_hooks/use-sign-in-form.ts"), /useMutation/u);
   const buttonStyles = read("src/components/ui/button.styles.ts");
   assert.match(buttonStyles, /const buttonVariants = tv\(/u);
   assert.doesNotMatch(buttonStyles, /["']use client["']/u);
@@ -67,7 +67,7 @@ function testStandaloneAndDependencyContract(): void {
     }
     assert.doesNotMatch(read(sourceFile), /["']@base-ui\/react(?:\/|["'])/u, `${sourceFile} must import Base UI through a shared wrapper`);
   }
-  assert.match(read("src/app/(public)/sign-in/sign-in.styles.ts"), /slots:\s*\{/u);
+  assert.match(read("src/app/(public)/sign-in/_components/sign-in.styles.ts"), /slots:\s*\{/u);
   assert.match(read("next.config.ts"), /output:\s*"standalone"/u);
   assert.match(read("postcss.config.mjs"), /"@tailwindcss\/postcss"/u);
   const relativeSourceImport = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']\.\.?\//u;
@@ -75,7 +75,7 @@ function testStandaloneAndDependencyContract(): void {
     // Monaco language contributions and worker entry points must remain static
     // relative URLs so Next/Webpack can include the package-owned browser assets.
     if (sourceFile === "src/projects/project-monaco-editor.tsx") continue;
-    assert.doesNotMatch(read(sourceFile), relativeSourceImport, `${sourceFile} must use the #src/* alias`);
+    assert.doesNotMatch(read(sourceFile), relativeSourceImport, `${sourceFile} must use the #src/* or @/* alias`);
   }
 }
 
@@ -134,11 +134,11 @@ function testThemeAndTokenContract(): void {
 }
 
 function testComponentOwnedStyleBoundaries(): void {
-  const authenticatedShell = read("src/app/(authenticated)/authenticated-shell-frame.tsx");
-  const authenticatedNavigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
+  const authenticatedShell = read("src/app/(authenticated)/_components/authenticated-shell-frame.tsx");
+  const authenticatedNavigation = read("src/app/(authenticated)/_components/authenticated-navigation.tsx");
   const projectDashboard = read("src/projects/project-dashboard.tsx");
-  const adminShell = read("src/app/(admin)/admin/admin-shell-frame.tsx");
-  const adminNavigation = read("src/app/(admin)/admin/admin-navigation.tsx");
+  const adminShell = read("src/app/(admin)/admin/_components/admin-shell-frame.tsx");
+  const adminNavigation = read("src/app/(admin)/admin/_components/admin-navigation.tsx");
   const globals = read("src/styles/globals.css");
 
   for (const [name, source] of [

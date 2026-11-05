@@ -55,8 +55,11 @@ async function rotatedSessionContract(): Promise<void> {
 }
 
 function sourceContracts(): void {
-  const security = read("src/app/(public)/mfa/security.tsx");
-  const policy = read("src/app/(admin)/admin/_components/mfa-policy-editor.tsx");
+  const security = read("src/app/(public)/mfa/_components/security.tsx");
+  const policy = [
+    read("src/app/(admin)/admin/_components/mfa-policy-editor.tsx"),
+    read("src/app/(admin)/admin/_hooks/use-mfa-policy-editor.ts")
+  ].join("\n");
   const policyPage = read("src/app/(admin)/admin/authentication/mfa/page.tsx");
   const resetPage = read("src/app/(admin)/admin/access/mfa-reset/page.tsx");
   const legacyPage = read("src/app/(admin)/admin/mfa/page.tsx");

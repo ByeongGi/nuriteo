@@ -1,4 +1,5 @@
-import { getSetupStatus } from "@nuriteo/api-client";
+import { getSetupStatus } from "@/services/setup/api.ts";
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { tv } from "tailwind-variants";

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { tv } from "tailwind-variants";
+
+import { useAccountNavigation } from "@/app/(authenticated)/_hooks/use-account-navigation.ts";
 
 const accountNavigationStyles = tv({
   slots: {
@@ -22,13 +23,13 @@ const accountItems = [
 ] as const;
 
 export function AccountNavigation() {
-  const pathname = usePathname();
+  const { isCurrent } = useAccountNavigation();
   const styles = accountNavigationStyles();
 
   return (
     <nav className={styles.root()} aria-label="계정 설정">
       {accountItems.map((item) => {
-        const current = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const current = isCurrent(item.href);
         return (
           <Link
             aria-current={current ? "page" : undefined}

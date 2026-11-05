@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { TeamMemberManager } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/[teamId]/members/team-member-manager.tsx";
-import { loadTeamContext } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/team-page-data.ts";
+import { TeamMemberManager } from "@/app/(workspace)/workspaces/[workspaceId]/teams/[teamId]/members/_components/team-member-manager.tsx";
+import { loadTeamContext } from "@/app/(workspace)/workspaces/[workspaceId]/teams/_utils/team-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "팀 멤버" };

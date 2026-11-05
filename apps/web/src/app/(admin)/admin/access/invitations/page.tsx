@@ -1,8 +1,9 @@
-import { listActivationInvitations } from "@nuriteo/api-client";
+import { listActivationInvitations } from "@/services/activation/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { ActivationInvitations } from "#src/app/(admin)/admin/access/invitations/activation-invitations.tsx";
+import { ActivationInvitations } from "@/app/(admin)/admin/access/invitations/_components/activation-invitations.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 

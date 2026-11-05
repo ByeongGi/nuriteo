@@ -1,8 +1,12 @@
-import { getAdminStatus, listAdminSettings } from "@nuriteo/api-client";
+import {
+  getAdminStatus,
+  listAdminSettings
+} from "@/services/admin/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { AdminSettings } from "#src/app/(admin)/admin/system/settings/admin-settings.tsx";
+import { AdminSettings } from "@/app/(admin)/admin/system/settings/_components/admin-settings.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

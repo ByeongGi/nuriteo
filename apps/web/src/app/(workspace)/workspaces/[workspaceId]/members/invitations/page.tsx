@@ -1,10 +1,11 @@
-import { listOrganizationInvitations } from "@nuriteo/api-client";
+import { listOrganizationInvitations } from "@/services/organization-invitations/api.ts";
+
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { InvitationDirectory } from "#src/app/(workspace)/workspaces/[workspaceId]/members/invitations/invitation-directory.tsx";
-import { loadWorkspaceMemberContext } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { InvitationDirectory } from "@/app/(workspace)/workspaces/[workspaceId]/members/invitations/_components/invitation-directory.tsx";
+import { loadWorkspaceMemberContext } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

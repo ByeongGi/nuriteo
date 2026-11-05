@@ -1,7 +1,8 @@
-import { listGitProvidersForAdmin } from "@nuriteo/api-client";
+import { listGitProvidersForAdmin } from "@/services/git-providers/api.ts";
+
 import { notFound } from "next/navigation";
 
-import { GitProviderConsole } from "#src/app/(admin)/admin/integrations/git/provider-console.tsx";
+import { GitProviderConsole } from "@/app/(admin)/admin/integrations/git/_components/provider-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
 export default async function GitProviderDetailPage({ params }: { readonly params: Promise<{ readonly providerId: string }> }) {

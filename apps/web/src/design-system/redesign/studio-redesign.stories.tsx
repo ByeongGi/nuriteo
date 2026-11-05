@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { waitFor } from "storybook/test";
 
 import { ProjectIdeShell } from "#src/projects/project-ide-shell.tsx";
-import { ProjectStudioFrame } from "#src/app/(studio)/projects/[projectId]/studio/project-studio-screen.tsx";
+import { ProjectStudioFrame } from "@/app/(studio)/projects/[projectId]/studio/_components/project-studio-screen.tsx";
 import { createStudioRuntimeFeatureLoader } from "#src/design-system/redesign/fixtures/studio-runtime-fixture.ts";
 
 const project: Project = {

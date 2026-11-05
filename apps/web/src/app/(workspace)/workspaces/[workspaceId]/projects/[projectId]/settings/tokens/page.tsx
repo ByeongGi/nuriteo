@@ -1,9 +1,10 @@
-import { listAccessTokens } from "@nuriteo/api-client";
+import { listAccessTokens } from "@/services/access-tokens/api.ts";
+
 import type { Metadata } from "next";
 
-import { AccessTokenConsole } from "#src/app/(authenticated)/account/tokens/token-console.tsx";
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
+import { AccessTokenConsole } from "@/app/(authenticated)/account/tokens/_components/token-console.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 토큰" };
 

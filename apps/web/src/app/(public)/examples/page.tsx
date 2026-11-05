@@ -1,4 +1,5 @@
-import { listPublicPublishedExamples } from "@nuriteo/api-client";
+import { listPublicPublishedExamples } from "@/services/published-examples/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";

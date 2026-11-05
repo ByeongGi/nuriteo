@@ -1,9 +1,11 @@
-import { getCurrentWorkspaces, getOrganization } from "@nuriteo/api-client";
+import { getOrganization } from "@/services/organizations/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { WorkspaceSection, WorkspaceTextLink } from "#src/app/(workspace)/workspaces/[workspaceId]/workspace-section.tsx";
+import { WorkspaceSection, WorkspaceTextLink } from "@/app/(workspace)/workspaces/[workspaceId]/_components/workspace-section.tsx";
 import { SettingsGroup, SettingsRow, SettingsValue } from "#src/components/ui/settings-group.tsx";
 
 export const metadata: Metadata = { title: "워크스페이스 설정" };

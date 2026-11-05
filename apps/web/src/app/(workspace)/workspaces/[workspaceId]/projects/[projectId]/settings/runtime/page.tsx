@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 import { Badge } from "#src/components/ui/badge.tsx";
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectSettingsNotice, ProjectSettingsSection } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/project-settings-section.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectSettingsNotice, ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
 import { SettingsGroup, SettingsRow, SettingsValue } from "#src/components/ui/settings-group.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 런타임" };

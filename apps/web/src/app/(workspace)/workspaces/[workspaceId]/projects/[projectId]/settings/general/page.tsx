@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { loadProjectContext } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-context.ts";
-import { ProjectGeneralSettings } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/general/project-general-settings.tsx";
+import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
+import { ProjectGeneralSettings } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/general/_components/project-general-settings.tsx";
 
 export const metadata: Metadata = { title: "프로젝트 일반 설정" };
 

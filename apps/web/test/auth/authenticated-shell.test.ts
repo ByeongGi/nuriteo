@@ -64,12 +64,18 @@ function testRequestScopedAuthenticatedBoundary(): void {
 
 function testAccessibleStateContract(): void {
   const page = read("src/app/(authenticated)/workspaces/page.tsx");
-  const catalog = read("src/app/(authenticated)/workspaces/workspace-catalog.tsx");
+  const catalog = read("src/app/(authenticated)/workspaces/_components/workspace-catalog.tsx");
   const newWorkspace = read("src/app/(authenticated)/workspaces/new/page.tsx");
   const loading = read("src/app/(authenticated)/workspaces/loading.tsx");
   const sharedLoading = read("src/app/_components/workspace-page-loading.tsx");
-  const navigation = read("src/app/(authenticated)/authenticated-navigation.tsx");
-  const logout = read("src/app/(authenticated)/logout-button.tsx");
+  const navigation = [
+    read("src/app/(authenticated)/_components/authenticated-navigation.tsx"),
+    read("src/app/(authenticated)/_hooks/use-authenticated-navigation.ts")
+  ].join("\n");
+  const logout = [
+    read("src/app/(authenticated)/_components/logout-button.tsx"),
+    read("src/app/(authenticated)/_hooks/use-logout-button.ts")
+  ].join("\n");
 
   assert.match(page, /<WorkspaceScreen/u);
   assert.match(catalog, /aria-label="워크스페이스 검색 및 필터"/u);

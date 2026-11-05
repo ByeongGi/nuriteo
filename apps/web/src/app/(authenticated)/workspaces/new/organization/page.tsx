@@ -1,7 +1,9 @@
-import { getCurrentUser, getCurrentWorkspaces } from "@nuriteo/api-client";
+import { getCurrentUser } from "@/services/session/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import type { Metadata } from "next";
 
-import { OrganizationConsole } from "#src/app/(authenticated)/organizations/organization-console.tsx";
+import { OrganizationConsole } from "@/app/(authenticated)/organizations/_components/organization-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
 export const metadata: Metadata = { title: "조직 워크스페이스 만들기" };

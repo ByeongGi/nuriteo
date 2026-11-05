@@ -1,10 +1,11 @@
-import { getAdminOperations } from "@nuriteo/api-client";
+import { getAdminOperations } from "@/services/admin/api.ts";
+
 import type { Metadata } from "next";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
-import { OperationsDashboard } from "#src/app/(admin)/admin/operations/operations-dashboard.tsx";
+import { OperationsDashboard } from "@/app/(admin)/admin/operations/_components/operations-dashboard.tsx";
 
 export const metadata: Metadata = { title: "인스턴스 운영" };
 

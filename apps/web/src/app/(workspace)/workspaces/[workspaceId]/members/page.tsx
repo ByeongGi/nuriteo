@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MemberDirectory } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-directory.tsx";
-import { loadWorkspaceMemberContext } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { MemberDirectory } from "@/app/(workspace)/workspaces/[workspaceId]/members/_components/member-directory.tsx";
+import { loadWorkspaceMemberContext } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "워크스페이스 멤버" };

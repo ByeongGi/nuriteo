@@ -1,8 +1,10 @@
-import { getCurrentWorkspaces, getProject } from "@nuriteo/api-client";
+import { getProject } from "@/services/projects/api.ts";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { ProjectSettingsNavigation } from "#src/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/project-settings-navigation.tsx";
+import { ProjectSettingsNavigation } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_components/project-settings-navigation.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
 export default async function ProjectLayout({ children, params }: Readonly<{ children: ReactNode; params: Promise<{ workspaceId: string; projectId: string }> }>) {

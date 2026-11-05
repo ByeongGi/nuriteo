@@ -1,10 +1,12 @@
-import { getCurrentUser, getMfaStatus } from "@nuriteo/api-client";
+import { getMfaStatus } from "@/services/mfa/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { signInHref } from "#src/app/(public)/sign-in/return-to.ts";
-import { MfaSecurity } from "#src/app/(public)/mfa/security.tsx";
+import { signInHref } from "@/app/(public)/sign-in/_utils/return-to.ts";
+import { MfaSecurity } from "@/app/(public)/mfa/_components/security.tsx";
 import { safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 

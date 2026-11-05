@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { TeamCreateForm } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/new/team-create-form.tsx";
-import { loadTeamCollectionContext } from "#src/app/(workspace)/workspaces/[workspaceId]/teams/team-page-data.ts";
+import { TeamCreateForm } from "@/app/(workspace)/workspaces/[workspaceId]/teams/new/_components/team-create-form.tsx";
+import { loadTeamCollectionContext } from "@/app/(workspace)/workspaces/[workspaceId]/teams/_utils/team-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "새 팀" };

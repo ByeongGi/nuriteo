@@ -1,4 +1,5 @@
-import { getCurrentWorkspaces } from "@nuriteo/api-client";
+import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
+
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 

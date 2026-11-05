@@ -1,7 +1,8 @@
-import { listAdminOidcProviders } from "@nuriteo/api-client";
+import { listAdminOidcProviders } from "@/services/oidc/api.ts";
+
 import { notFound } from "next/navigation";
 
-import { OidcProviderConsole } from "#src/app/(admin)/admin/authentication/oidc/provider-console.tsx";
+import { OidcProviderConsole } from "@/app/(admin)/admin/authentication/oidc/_components/provider-console.tsx";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";
 
 export default async function OidcProviderDetailPage({ params }: { readonly params: Promise<{ readonly providerId: string }> }) {

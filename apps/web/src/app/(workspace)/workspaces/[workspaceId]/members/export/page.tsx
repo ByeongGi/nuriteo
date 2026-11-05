@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
-import { MemberExport } from "#src/app/(workspace)/workspaces/[workspaceId]/members/export/member-export.tsx";
-import { loadWorkspaceMemberContext } from "#src/app/(workspace)/workspaces/[workspaceId]/members/member-page-data.ts";
+import { MemberExport } from "@/app/(workspace)/workspaces/[workspaceId]/members/export/_components/member-export.tsx";
+import { loadWorkspaceMemberContext } from "@/app/(workspace)/workspaces/[workspaceId]/members/_utils/member-page-data.ts";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 
 export const metadata: Metadata = { title: "멤버 내보내기" };

@@ -1,24 +1,15 @@
 "use client";
 
-import {
-  ApiError,
-  activateIntegrationCa,
-  listIntegrationCas,
-  stageIntegrationCa,
-} from "@nuriteo/api-client";
-import type { IntegrationCaBundle, IntegrationCaCollection, IntegrationCaType } from "@nuriteo/api-client";
-import { useState } from "react";
-import type { FormEvent } from "react";
+import type { IntegrationCaCollection, IntegrationCaType } from "@nuriteo/api-client";
 import { tv } from "tailwind-variants";
 
-import { Badge } from "#src/components/ui/badge.tsx";
-import { Button } from "#src/components/ui/button.tsx";
-import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
-import { TextareaField } from "#src/components/ui/field.tsx";
-import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
-import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
-import { AdminEmptyState, AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "#src/app/(admin)/admin/_components/admin-form-layout.tsx";
-import { AdminCollectionHeading } from "#src/app/(admin)/admin/_components/admin-surface.tsx";
+import { AdminEmptyState, AdminForm, AdminFormActionNote, AdminFormActions, AdminFormFieldSpan, AdminFormSection } from "@/app/(admin)/admin/_components/admin-form-layout.tsx";
+import { AdminCollectionHeading } from "@/app/(admin)/admin/_components/admin-surface.tsx";
+import { useIntegrationCaConsole } from "@/app/(admin)/admin/_hooks/use-integration-ca-console.ts";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { TextareaField } from "@/components/ui/field.tsx";
 
 interface IntegrationCaConsoleProps {
   readonly appearance?: "detail" | "embedded" | "standalone";
@@ -50,62 +41,7 @@ const integrationCaStyles = tv({
 
 export function IntegrationCaConsole({ appearance = "embedded", initialCollection, type, integrationId }: IntegrationCaConsoleProps) {
   const styles = integrationCaStyles({ appearance });
-  const [items, setItems] = useState<readonly IntegrationCaBundle[] | undefined>(initialCollection?.items);
-  const [version, setVersion] = useState(initialCollection?.version ?? 0);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState<{ readonly error: boolean; readonly text: string }>();
-
-  async function load() {
-    setPending(true);
-    setMessage(undefined);
-    try {
-      const result = await listIntegrationCas(createBrowserApiClient(), type, integrationId);
-      setItems(result.data.items);
-      setVersion(result.data.version);
-    } catch (error) {
-      setMessage(failure(error));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function stage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const pem = String(new FormData(form).get("pem") ?? "");
-    form.reset();
-    setPending(true);
-    setMessage(undefined);
-    try {
-      const result = await stageIntegrationCa(createBrowserApiClient(), type, integrationId, version, pem, {
-        csrfToken: readCsrfCredential(),
-        idempotencyKey: crypto.randomUUID(),
-      });
-      setItems((current) => [result.data, ...(current ?? []).filter((item) => item.state !== "candidate")]);
-      setVersion(result.data.version);
-      setMessage({ error: false, text: "CA 후보를 저장했습니다. 인증서 본문은 이 브라우저에서 제거했습니다." });
-    } catch (error) {
-      setMessage(failure(error));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function activate(candidate: IntegrationCaBundle) {
-    setPending(true);
-    setMessage(undefined);
-    try {
-      await activateIntegrationCa(createBrowserApiClient(), type, integrationId, candidate.id, candidate.version, {
-        csrfToken: readCsrfCredential(),
-        idempotencyKey: crypto.randomUUID(),
-      });
-      await load();
-      setMessage({ error: false, text: "실제 연동 사전 점검을 통과해 CA를 활성화했습니다." });
-    } catch (error) {
-      setMessage(failure(error));
-      setPending(false);
-    }
-  }
+  const { activate, items, load, message, pending, stage } = useIntegrationCaConsole(initialCollection, type, integrationId);
 
   return (
     <section className={styles.root()} aria-label="사설 인증 기관">
@@ -197,24 +133,4 @@ export function IntegrationCaConsole({ appearance = "embedded", initialCollectio
   );
 }
 
-function failure(error: unknown) {
-  if (error instanceof ApiError && error.code === "REAUTHENTICATION_REQUIRED") {
-    return { error: true, text: "보안을 위해 다시 로그인한 뒤 CA 변경을 다시 시도하세요." };
-  }
-  if (error instanceof ApiError && error.status === 403) {
-    return { error: true, text: "이 CA 변경을 수행할 관리자 권한이 없습니다." };
-  }
-  if (error instanceof ApiError && error.status === 428) {
-    return { error: true, text: "최신 CA 상태를 다시 불러온 뒤 변경을 다시 시도하세요." };
-  }
-  if (error instanceof ApiError && error.status === 412) {
-    return { error: true, text: "다른 곳에서 CA 상태가 변경되었습니다. 신뢰 기록을 새로 불러온 뒤 다시 시도하세요." };
-  }
-  if (error instanceof ApiError && error.status === 422) {
-    return { error: true, text: "CA 번들 또는 실제 연동 사전 점검이 거부되었습니다." };
-  }
-  if (error instanceof ApiError && error.status === 404) {
-    return { error: true, text: "사설 CA 신뢰를 추가하기 전에 연동을 먼저 구성하세요." };
-  }
-  return { error: true, text: "CA 신뢰 설정을 안전하게 변경하지 못했습니다." };
-}
+

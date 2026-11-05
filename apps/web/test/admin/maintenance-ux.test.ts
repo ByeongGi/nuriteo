@@ -51,8 +51,11 @@ try {
   const page = readSource("src/app/(admin)/admin/operations/maintenance/page.tsx");
   const legacyPage = readSource("src/app/(admin)/admin/maintenance/page.tsx");
   const adminLayout = readSource("src/app/(admin)/admin/layout.tsx");
-  const consoleSource = readSource("src/app/(admin)/admin/operations/maintenance/maintenance-console.tsx");
-  const shell = readSource("src/app/(authenticated)/authenticated-shell-frame.tsx");
+  const consoleSource = [
+    readSource("src/app/(admin)/admin/operations/maintenance/_components/maintenance-console.tsx"),
+    readSource("src/app/(admin)/admin/operations/maintenance/_hooks/use-maintenance-console.ts")
+  ].join("\n");
+  const shell = readSource("src/app/(authenticated)/_components/authenticated-shell-frame.tsx");
   assert.match(adminLayout, /is_instance_admin/u);
   assert.match(consoleSource, /최근 관리자 재인증이 필요/u);
   assert.match(consoleSource, /종료 제한 시간을 넘기면 안전을 위해 차단 상태를 유지/u);

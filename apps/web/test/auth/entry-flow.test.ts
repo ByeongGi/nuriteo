@@ -20,12 +20,12 @@ import {
   reauthenticationHref,
   safeReturnTo,
   signInHref
-} from "../../src/app/(public)/sign-in/return-to.ts";
+} from "../../src/app/(public)/sign-in/_utils/return-to.ts";
 import {
   clearOidcReturnToCookie,
   issueOidcReturnToCookie,
   readOidcReturnTo
-} from "../../src/app/(public)/sign-in/oidc-return-to.ts";
+} from "../../src/app/(public)/sign-in/_utils/oidc-return-to.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -87,7 +87,8 @@ function testCliOnlySetupContract(): void {
 
 function testAccessibleCredentialBoundary(): void {
   const signInPage = read("src/app/(public)/sign-in/page.tsx");
-  const form = read("src/app/(public)/sign-in/sign-in-form.tsx");
+  const form = read("src/app/(public)/sign-in/_components/sign-in-form.tsx");
+  const signInHook = read("src/app/(public)/sign-in/_hooks/use-sign-in-form.ts");
   const browserClient = read("src/lib/api/browser-client.ts");
 
   assert.match(signInPage, /isExplicitlySignedOut\(error\)/u);
@@ -97,23 +98,24 @@ function testAccessibleCredentialBoundary(): void {
   assert.match(form, /<label[^>]*htmlFor="password"[^>]*>비밀번호<\/label>/u);
   assert.match(form, /autoComplete="username"/u);
   assert.match(form, /autoComplete="current-password"/u);
-  assert.match(form, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
-  assert.match(form, /router\.replace\(destination\)/u);
+  assert.match(signInHook, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
+  assert.match(signInHook, /router\.replace\(destination\)/u);
   assert.match(form, /begin\?returnTo=\$\{encodeURIComponent\(destination\)\}/u);
-  assert.match(form, /passwordInput\.current\.value = ""/u);
+  assert.match(signInHook, /passwordInput\.current\.value = ""/u);
   assert.match(form, /role="alert"/u);
-  assert.doesNotMatch(form, /localStorage|sessionStorage|URLSearchParams|console\./u);
+  assert.doesNotMatch(`${form}\n${signInHook}`, /localStorage|sessionStorage|URLSearchParams|console\./u);
   assert.match(browserClient, /REAUTHENTICATION_REQUIRED/u);
   assert.match(browserClient, /window\.location\.assign\(reauthenticationHref\(returnTo\)\)/u);
 }
 
 function testActivationAndSystemStateContracts(): void {
-  const activation = read("src/app/(public)/activate/activation-form.tsx");
+  const activation = read("src/app/(public)/activate/_components/activation-form.tsx");
+  const activationHook = read("src/app/(public)/activate/_hooks/use-activation-form.ts");
   const systemStates = read("src/design-system/production-shells.stories.tsx");
   const projectsLoading = read("src/app/(authenticated)/projects/loading.tsx");
   const workspacesLoading = read("src/app/(authenticated)/workspaces/loading.tsx");
 
-  assert.match(activation, /activationToken === undefined \? searchParams\.get\("token"\) : activationToken/u);
+  assert.match(activationHook, /activationToken === undefined \? searchParams\.get\("token"\) : activationToken/u);
   assert.match(activation, /if \(token === null \|\| token\.trim\(\)\.length === 0\)/u);
   assert.match(activation, /계정을 활성화할 수 없습니다/u);
   assert.match(systemStates, /<ActivationForm activationToken="storybook-activation-token"/u);

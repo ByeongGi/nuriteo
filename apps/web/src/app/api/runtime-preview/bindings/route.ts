@@ -1,4 +1,7 @@
-import { ApiError, getCurrentUser, getProject } from "@nuriteo/api-client";
+import { ApiError } from "@/services/http/api.ts";
+import { getProject } from "@/services/projects/api.ts";
+import { getCurrentUser } from "@/services/session/api.ts";
+
 import { NextResponse } from "next/server.js";
 
 import { createRequestScopedApiClient } from "#src/lib/api/server-policy.ts";

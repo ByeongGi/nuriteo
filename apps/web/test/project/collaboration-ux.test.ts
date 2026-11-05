@@ -373,10 +373,16 @@ function jsonRequest(signal?: AbortSignal): Request {
 }
 
 function testUxSourceContracts() {
-  const activation = read("src/app/(public)/activate/activation-form.tsx");
-  const admin = read("src/app/(admin)/admin/access/invitations/activation-invitations.tsx");
-  const organizations = read("src/app/(authenticated)/organizations/organization-console.tsx");
-  const accept = read("src/app/(authenticated)/organization-invitations/accept/accept-invitation.tsx");
+  const activation = read("src/app/(public)/activate/_hooks/use-activation-form.ts");
+  const admin = [
+    read("src/app/(admin)/admin/access/invitations/_components/activation-invitations.tsx"),
+    read("src/app/(admin)/admin/access/invitations/_hooks/use-activation-invitations.ts")
+  ].join("\n");
+  const organizations = [
+    read("src/app/(authenticated)/organizations/_components/organization-console.tsx"),
+    read("src/app/(authenticated)/organizations/_hooks/use-organization.ts")
+  ].join("\n");
+  const accept = read("src/app/(authenticated)/organization-invitations/accept/_hooks/use-accept-invitation.ts");
   const organizationPage = read("src/app/(authenticated)/organizations/page.tsx");
   const guard = read("src/lib/use-exclusive-mutation.ts");
   assert.match(activation, /useSearchParams\(\)/u);
