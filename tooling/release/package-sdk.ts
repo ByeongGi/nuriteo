@@ -314,6 +314,10 @@ writeFile("package.json", `${JSON.stringify({
   name: "@nuriteo/sdk",
   version: sdkVersion,
   license: sdkManifest.license,
+  repository: {
+    type: "git",
+    url: "git+https://github.com/ByeongGi/nuriteo.git"
+  },
   publishConfig: sdkManifest.publishConfig,
   type: "module",
   types: "./index.d.ts",

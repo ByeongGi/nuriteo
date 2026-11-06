@@ -1,0 +1,40 @@
+name: Publish SDK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish @nuriteo/sdk beta
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: wasm32-unknown-unknown
+      - run: pnpm install --frozen-lockfile
+      - run: npm install -g npm@11.13.0
+      - run: pnpm package:sdk
+      - run: node tooling/checks/check-sdk-public-release.ts
+      - run: node tooling/checks/check-sdk-publish-rehearsal.ts
+      - working-directory: dist/sdk/package
+        run: npm publish --access public
