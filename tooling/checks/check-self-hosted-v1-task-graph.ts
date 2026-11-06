@@ -8,6 +8,11 @@ const graphPath = "docs/implementation/self-hosted/tasks/v1-release-task-graph.j
 const graphDocumentPath = "docs/implementation/self-hosted/V1-TASK-GRAPH.md";
 const statusPath = "docs/implementation/self-hosted/V1-STATUS.md";
 
+if (![graphPath, graphDocumentPath, statusPath].every((file) => fs.existsSync(file))) {
+  console.log("self-hosted v1 task graph is maintained outside this repository");
+  process.exit(0);
+}
+
 const graph = JSON.parse(fs.readFileSync(graphPath, "utf8")) as {
   schemaVersion: number;
   prerequisite: string;

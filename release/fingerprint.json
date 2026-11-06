@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T18:11:15.200Z",
+  "baseline": null,
+  "rehearsedNotPromoted": null,
+  "sdkPackage": {
+    "path": "dist/sdk/package",
+    "basePath": "/sdk/",
+    "assetManifestSha256": "aee825fe781a75d86f74440f760da5c1e2bbbca232257f76c814d3d3e4c84af1",
+    "systemWasmSha256": "005ac1c5684f190df6be50f722059a59cd04a8c07b666ae5b3dfe58277fa278e",
+    "systemWorkerSha256": "6574c4f0a0b5c4450f52f5687051b47e8ca08cccc88a40fffa911a6e1f3fe7c1",
+    "processWorkerSha256": "1ac37cb3bdaf1904b9f56e4da326f8f3a9587a72d218c90ba196b4c14a1d3e69",
+    "yarnClassicFactorySha256": "e6f01b28a30aae3d6bd6cf78302d0b1ba1f5e6e8d2f6f918989b6cd7f2a428a0",
+    "nextCliFactorySha256": "0c103d7af3c610283437fd6f326f5b6b9aa8aa53880926a7e509d2433c515224",
+    "tarballPath": "dist/sdk/nuriteo-sdk-0.1.0-beta.1.tgz",
+    "tarballSha256": "f3a8bc24d1271dd6fbfc57b7046eba95f010961b16c4e8c9e063a33fa11e3db3"
+  },
+  "releaseDecision": {
+    "status": "internal-release-ready",
+    "externalPublish": "not-in-scope"
+  }
+}

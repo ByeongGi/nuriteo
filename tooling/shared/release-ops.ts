@@ -93,7 +93,7 @@ function expandLayout(template, { channel, assetSetId }) {
 /**
  * Plan a versioned SDK/runtime asset deployment for a release channel.
  * @param {string} channel
- * @param {object} fingerprint docs/release/fingerprint.json shape
+ * @param {object} fingerprint release/fingerprint.json shape
  * @param {{ root?: string, policy?: object, generatedAt?: string }} [options]
  */
 export function planRelease(channel, fingerprint, {

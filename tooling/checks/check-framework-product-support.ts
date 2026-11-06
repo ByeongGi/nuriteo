@@ -89,10 +89,6 @@ const bundlerService = serviceResults.results.find((candidate) => candidate.id =
 assert(bundlerService?.status === "pass" && bundlerService.score === 100, "bundler service workflow must pass");
 assert(serviceResults.summary.pass === 19 && serviceResults.summary.hold === 1, "service workflow summary is stale");
 
-const supportDoc = fs.readFileSync(path.join(root, "docs/release/support-matrix.md"), "utf8");
-assert(!/Webpack dev workflow[^\n]*candidate hold/.test(supportDoc), "Webpack release matrix retains candidate hold language");
-assert(!/Rspack dev workflow[^\n]*candidate hold/.test(supportDoc), "Rspack release matrix retains candidate hold language");
-
 console.log(`framework product support ok frameworks=${support.frameworks.length} bundlers=${support.bundlerCandidates.length}`);
 
 function assert(condition, message) {

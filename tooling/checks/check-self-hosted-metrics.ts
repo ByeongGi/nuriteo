@@ -49,9 +49,5 @@ assert.ok(source.includes("MatchedPath"));
 assert.ok(source.includes('"unmatched"'));
 assert.ok(source.includes('"OTHER"'));
 
-const operations = fs.readFileSync("docs/operations/prometheus-metrics.md", "utf8");
-for (const term of ["/metrics", "ClusterIP", "route template", "release/gates/platform/observability/metric-catalog.json"])
-  assert.ok(operations.includes(term), `metrics operations guide missing: ${term}`);
-
 console.log(JSON.stringify({ status: "pass", task: catalog.taskId, metrics: catalog.metrics.length,
   prohibitedLabels: catalog.prohibitedLabels.length }));

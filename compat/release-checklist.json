@@ -11,7 +11,7 @@
     "docs/release/support-matrix.md",
     "docs/release/known-limitations.md",
     "docs/release/operations.md",
-    "docs/release/fingerprint.json"
+    "release/fingerprint.json"
   ],
   "requiredManifests": [
     "compat/release-policy.json",

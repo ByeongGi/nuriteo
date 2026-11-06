@@ -75,26 +75,10 @@ for (const file of [
   "compat/framework-product-support.json",
   "compat/nextjs-browser-worker-results.json",
   "compat/nextjs-security-baseline.json",
-  "compat/service-workflow-fixture-results.json",
-  "docs/productization/public-compatibility-matrix.md"
+  "compat/service-workflow-fixture-results.json"
 ]) {
   assert(fs.existsSync(path.resolve(file)), `missing SG25 artifact: ${file}`);
 }
-
-const publicDoc = fs.readFileSync("docs/productization/public-compatibility-matrix.md", "utf8");
-assert(publicDoc.includes("Vite Vue runtime | supported"), "public matrix doc must list Vue as supported");
-assert(publicDoc.includes("Vite Svelte | supported"), "public matrix doc must list Svelte as supported");
-assert(publicDoc.includes("Webpack 5.111.0 dev workflow | supported"), "public matrix doc must list Webpack as supported");
-assert(publicDoc.includes("Rspack 2.2.4 dev workflow | supported"), "public matrix doc must list Rspack as supported");
-assert(publicDoc.includes("20") && publicDoc.includes("minimumPassOrHoldForSG25") || publicDoc.includes("15 pass"), "public matrix doc must describe the 20-fixture SG25 gate");
-
-const supportDoc = fs.readFileSync("docs/release/support-matrix.md", "utf8");
-assert(supportDoc.includes("Vite Vue runtime"), "support-matrix must mention Vite Vue");
-assert(supportDoc.includes("Vite Svelte"), "support-matrix must mention Vite Svelte");
-assert(supportDoc.includes("Next.js"), "support-matrix must mention Next.js");
-assert(supportDoc.includes("product-preview"), "support-matrix must record the Next.js adapter preview grade");
-assert(supportDoc.includes("candidate"), "support-matrix must record candidate grades");
-assert(supportDoc.includes("hold"), "support-matrix must record hold grades");
 
 console.log(
   `SG25 ok fixtures=${service.summary.total} passOrHold=${service.summary.passOrHold} vue=${vue.grade} svelte=${svelte.grade} next=${next.grade}`

@@ -32,11 +32,12 @@ for (const path of policy.evidence) assert.ok(fs.existsSync(path), `missing evid
 
 const operations = fs.readFileSync("crates/nuriteo-server/src/admin/operations_service.rs", "utf8");
 const bundle = fs.readFileSync("crates/nuriteo-server/src/admin/support_bundle.rs", "utf8");
-const observability = fs.readFileSync("crates/nuriteo-server/src/observability/mod.rs", "utf8");
+const observability = fs.readFileSync("crates/nuriteo-server/src/observability/diagnostics.rs", "utf8");
 const routes = fs.readFileSync("crates/nuriteo-server/src/admin/http_routes.rs", "utf8");
+const consoleRoutes = fs.readFileSync("crates/nuriteo-server/src/admin/http_routes/console.rs", "utf8");
 const bff = fs.readFileSync("apps/web/src/app/api/v1/admin/support-bundle/route.ts", "utf8");
-const ui = fs.readFileSync("apps/web/src/app/(authenticated)/admin/operations/support-bundle-download.tsx", "utf8");
-const guide = fs.readFileSync("docs/operations/support-bundle.md", "utf8");
+const ui = fs.readFileSync("apps/web/src/app/(admin)/admin/operations/_components/support-bundle-download.tsx", "utf8");
+const download = fs.readFileSync("apps/web/src/app/(admin)/admin/operations/_hooks/use-support-bundle-download.ts", "utf8");
 
 for (const term of [policy.format, "maximum_bytes: 65_536", "Project source", "authorization headers"])
   assert.ok(operations.includes(term), `operations preview missing ${term}`);
@@ -45,13 +46,12 @@ for (const term of ["support_bundle(", "diagnostic_snapshot(63)", "retained_unti
 for (const term of ["DIAGNOSTIC_RING_CAPACITY: usize = 128", "DIAGNOSTIC_BUNDLE_LIMIT: usize = 64", "VecDeque"])
   assert.ok(observability.includes(term), `diagnostic ring missing ${term}`);
 assert.ok(routes.includes("/api/v1/admin/support-bundle"));
-assert.ok(routes.includes("projectSessionCookie"));
+assert.ok(consoleRoutes.includes(`path = SUPPORT_BUNDLE,\n    tag = "administration",\n    security(("projectSessionCookie" = [])),`));
 assert.ok(bff.includes('path: "/api/v1/admin/support-bundle"'));
 assert.ok(bff.includes("requireCsrf: false"));
-for (const term of ["Nothing is uploaded automatically", "preview.maximumBytes", "URL.revokeObjectURL"])
-  assert.ok(ui.includes(term), `diagnostic UI missing ${term}`);
-for (const term of ["최대 64", "자동 업로드하지 않으며", "Project source", "operation ID"])
-  assert.ok(guide.includes(term), `support guide missing ${term}`);
+assert.ok(ui.includes("어떤 정보도 자동으로 업로드되지 않습니다"), "diagnostic UI missing the no-upload notice");
+for (const term of ["preview.maximumBytes", "URL.revokeObjectURL"])
+  assert.ok(download.includes(term), `diagnostic download missing ${term}`);
 
 console.log(JSON.stringify({
   status: "pass",

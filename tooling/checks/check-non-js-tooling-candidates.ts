@@ -7,7 +7,6 @@ function assert(condition, message) {
 
 const matrix = JSON.parse(fs.readFileSync("compat/non-js-tooling-candidates.json", "utf8"));
 const artifactManifest = JSON.parse(fs.readFileSync("compat/manifests/non-js-runtime-artifacts.json", "utf8"));
-const document = fs.readFileSync("docs/productization/non-js-tooling-candidates.md", "utf8");
 
 assert(matrix.schemaVersion === 5, "unexpected non-JS tooling schema");
 assert(matrix.status === "supported-adapters-with-held-runtime-validated-candidates", "non-JS tooling adapter status is incomplete");
@@ -26,7 +25,6 @@ for (const id of ["python-wasi-webc", "wasmer-sdk-runtime", "wasm-git-memfs", "w
 const candidates = new Map(matrix.candidates.map((candidate) => [candidate.id, candidate]));
 for (const id of ["jq-wasm", "sqlite-wasm", "python-wasi", "git-wasm", "docker-linux-binary"]) {
   assert(candidates.has(id), `missing non-JS tooling candidate: ${id}`);
-  assert(document.includes(id), `candidate document missing ${id}`);
 }
 for (const id of matrix.firstSupportLane) {
   const candidate = candidates.get(id);

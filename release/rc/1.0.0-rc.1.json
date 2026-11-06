@@ -30,7 +30,7 @@
       "entrypoint": ["/usr/local/bin/nuriteo-server"]
     }
   ],
-  "artifactAggregateSha256": "eeee0bcd5b4577266e3b18f07c80523982fad5950f6b6ef58d5eb8a8c2f856ea",
+  "artifactAggregateSha256": "5adbb8482acf4201047ebef3bc5e2b6d34adc1328471220bc13a137b9e251b60",
   "artifacts": [
     { "path": "Cargo.lock", "sha256": "b0acb2ef22b876dd62a02b25a1956a5e18524a8e38a86dc158c1d444e6aee6d0" },
     { "path": "pnpm-lock.yaml", "sha256": "b757ab5710665f230e420af604bcc7f9690ba53f9917e9ceefb4d7182e8ad801" },

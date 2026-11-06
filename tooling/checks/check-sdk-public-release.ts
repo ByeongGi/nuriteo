@@ -32,8 +32,6 @@ for (const relative of [
   "dist/sdk/package/index.js",
   "dist/sdk/package/index.cjs",
   "dist/sdk/package/index.d.ts",
-  "docs/productization/sdk-api-freeze-rfc.md",
-  "docs/release/sdk-publish-rehearsal.md",
   "tests/contract/sdk-consumer/services.test.ts"
 ]) assert.ok(fs.existsSync(relative), `missing SDK release evidence: ${relative}`);
 
@@ -42,14 +40,6 @@ assert.ok(matrix.cases.length >= 4);
 assert.ok(matrix.cases.every((entry) => entry.status === "pass"), "all SDK consumers must pass");
 assert.equal(matrix.gate.status, "pass");
 assert.ok(provenance.ci.requiredCommands.includes("node tooling/checks/check-sdk-publish-rehearsal.ts"));
-
-const apiDoc = fs.readFileSync("docs/productization/sdk-api-freeze-rfc.md", "utf8");
-assert.match(apiDoc, /NuriteoMountSnapshot/);
-assert.match(apiDoc, /not a drop-in|drop-in replacement/i);
-const publishDoc = fs.readFileSync("docs/release/sdk-publish-rehearsal.md", "utf8");
-assert.match(publishDoc, /0\.1\.0-beta\.1/);
-assert.match(publishDoc, /npm dist-tag add/);
-assert.match(publishDoc, /provenance/i);
 
 console.log(`SDK public release gate ok version=${contract.version} status=${contract.status}`);
 

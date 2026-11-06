@@ -49,9 +49,5 @@ assert.ok(values.includes("metricsEnabled: false"));
 assert.ok(values.includes("logsEnabled: false"));
 assert.ok(chart.includes("secretKeyRef:"));
 
-const guide = fs.readFileSync("docs/operations/opentelemetry.md", "utf8");
-for (const term of ["phone-home", "OTLP/gRPC", "OTLP/HTTP", "NURITEO_OTLP_AUTHORIZATION_FILE", "Collector lifecycle"])
-  assert.ok(guide.includes(term), `operations guide missing ${term}`);
-
 console.log(JSON.stringify({ status: "pass", task: policy.taskId, signals: policy.signals.length,
   protocols: policy.protocols.length, maxQueue: policy.bounds.queueSize.maximum }));

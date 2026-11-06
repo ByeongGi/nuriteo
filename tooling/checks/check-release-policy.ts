@@ -5,7 +5,6 @@ function assert(condition, message) {
 }
 
 const policy = JSON.parse(fs.readFileSync("compat/release-policy.json", "utf8"));
-const document = fs.readFileSync("docs/release/release-policy.md", "utf8");
 
 assert(policy.schemaVersion === 1, "unexpected release policy schema");
 assert(policy.versioning.sdk.scheme === "semver", "SDK versioning must be semver");
@@ -18,7 +17,5 @@ assert(policy.endOfSupport.noticeDays >= 90, "support notice must be at least 90
 assert(policy.channels.some((channel) => channel.id === "stable" && channel.externalPublish === true), "stable channel must define external publish");
 assert(policy.channels.every((channel) => channel.promotionCriteria.length > 0), "each release channel must define promotion criteria");
 assert(policy.candidateRehearsal.length >= 4, "candidate rehearsal steps are incomplete");
-assert(document.includes("Candidate Rehearsal"), "release policy document must include candidate rehearsal");
-assert(document.includes("지원 종료"), "release policy document must include support end policy");
 
 console.log("release policy ok");

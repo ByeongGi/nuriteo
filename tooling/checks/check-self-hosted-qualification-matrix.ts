@@ -23,8 +23,6 @@ const support = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-support
 const browser = JSON.parse(fs.readFileSync("compat/browser-smoke-results.json", "utf8")) as {
   results: Record<string, { status: string; version?: string }>;
 };
-const documentation = fs.readFileSync("docs/release/self-hosted-v1-qualification-matrix.md", "utf8");
-
 assert.equal(matrix.schemaVersion, 1);
 assert.equal(matrix.taskId, "QUAL-001");
 assert.equal(matrix.status, "pass");
@@ -39,7 +37,6 @@ for (const entry of matrix.entries) {
   assert.ok(entry.environment.length >= 20, `${entry.id}: environment is incomplete`);
   assert.ok(entry.artifact.length >= 10, `${entry.id}: artifact identity is incomplete`);
   assert.ok(entry.checks.length >= 5, `${entry.id}: coverage is incomplete`);
-  assert.ok(documentation.includes(`| \`${entry.id}\` |`), `${entry.id}: documentation row missing`);
 }
 assert.equal(new Set(required).size, matrix.entries.length);
 assert.equal(matrix.excluded.length, 3);

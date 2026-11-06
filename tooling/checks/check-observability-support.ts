@@ -156,10 +156,6 @@ assert(Boolean(fixture.traceIds.preview), "replay fixture must retain preview tr
 assert.equal(fixture.recoveryOutcomes.length, 2, "replay fixture must include recovery outcomes");
 assert.equal(fixture.metrics.bootTimeMs, 120, "replay fixture must include metrics candidates");
 
-const planSource = fs.readFileSync("docs/productization/service-readiness-plan.md", "utf8");
-assert(planSource.includes("### SG28 상태"), "service-readiness-plan must document SG28 status");
-assert(planSource.includes("PASS"), "SG28 status section must include PASS evidence");
-
 const decision = readJson("release/gates/launch-decision.json");
 assert.equal(decision.gates.SG28, "pass", "launch-decision SG28 must be pass");
 

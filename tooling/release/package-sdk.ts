@@ -506,7 +506,7 @@ if (writeFingerprintFlag) {
   const target = writeFingerprint(fingerprint, { root });
   console.log(`release fingerprint written: ${path.relative(root, target)}`);
 } else {
-  console.log("release fingerprint not updated; pass --write-fingerprint to refresh docs/release/fingerprint.json");
+  console.log("release fingerprint not updated; pass --write-fingerprint to refresh release/fingerprint.json");
 }
 
 console.log(`sdk package written: ${path.relative(root, packageRoot)}`);

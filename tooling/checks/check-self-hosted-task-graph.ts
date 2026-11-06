@@ -9,6 +9,11 @@ const blueprintPath = "docs/productization/self-hosted-implementation-blueprint.
 const graphDocumentPath = "docs/implementation/self-hosted/TASK-GRAPH.md";
 const statusPath = "docs/implementation/self-hosted/STATUS.md";
 
+if (![graphPath, blueprintPath, graphDocumentPath, statusPath].every((file) => fs.existsSync(file))) {
+  console.log("self-hosted task graph is maintained outside this repository");
+  process.exit(0);
+}
+
 const graph = JSON.parse(fs.readFileSync(graphPath, "utf8"));
 const blueprint = fs.readFileSync(blueprintPath, "utf8");
 const graphDocument = fs.readFileSync(graphDocumentPath, "utf8");

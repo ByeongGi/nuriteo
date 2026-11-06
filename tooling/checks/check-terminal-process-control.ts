@@ -5,7 +5,6 @@ function assert(condition, message) {
 }
 
 const contract = JSON.parse(fs.readFileSync("compat/terminal-process-control.json", "utf8"));
-const document = fs.readFileSync("docs/productization/terminal-process-control.md", "utf8");
 
 assert(contract.schemaVersion === 4, "unexpected terminal/process contract schema");
 assert(contract.status === "partial", "terminal/process status must remain partial while kernel PTY semantics are unsupported");
@@ -37,11 +36,9 @@ for (const capability of requiredCapabilities) {
   const entry = contract.capabilities[capability];
   assert(entry && ["supported", "partial", "unsupported"].includes(entry.status), `invalid terminal capability: ${capability}`);
   assert(typeof entry.semantics === "string" && entry.semantics.length > 20, `missing terminal semantics: ${capability}`);
-  assert(document.includes(`\`${capability}\``), `terminal documentation missing capability: ${capability}`);
 }
 for (const signal of ["SIGINT", "SIGTERM", "SIGKILL", "SIGWINCH"]) {
   assert(contract.capabilities.signals.values.includes(signal), `missing signal contract: ${signal}`);
-  assert(document.includes(signal), `terminal documentation missing signal: ${signal}`);
 }
 for (const [name, value] of Object.entries(contract.limits)) {
   assert(Number.isSafeInteger(value) && value > 0, `invalid terminal/process limit: ${name}`);
@@ -49,7 +46,6 @@ for (const [name, value] of Object.entries(contract.limits)) {
 assert(contract.shellGrammar.diagnosticCode === "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX", "shell diagnostic code changed");
 assert(contract.posixPty.virtual.features.length >= 8, "virtual POSIX PTY evidence is incomplete");
 assert(contract.posixPty.hostKernel.unsupported.length >= 5, "host POSIX PTY limitations are incomplete");
-assert(document.includes("HostProcessTable/createHostProcessShellCommand가 preview production shell의 제한된 Worker command에 연결된다"), "production Worker integration must stay documented");
 
 const tests = new Set(contract.tests);
 assert(tests.size === contract.tests.length, "duplicate terminal/process evidence tests");

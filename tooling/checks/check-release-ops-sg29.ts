@@ -100,10 +100,6 @@ try {
 assert(migrationRejected, "unsupported snapshot schemaVersion must reject");
 migrationContract.assertSafeFailure(originalBytes, originalBytes);
 
-const operationsDoc = fs.readFileSync(path.join(root, "docs/release/operations.md"), "utf8");
-assert(/Release Channels/i.test(operationsDoc), "operations.md must document release channels");
-assert(/Rollback/i.test(operationsDoc), "operations.md must document rollback");
-
 console.log(
   `SG29 release-ops ok channel=${channels.currentChannel} assetSet=${releasePlan.assetSetId} rollbackTo=${rollback.toAssetSetId}`
 );

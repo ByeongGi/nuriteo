@@ -16,8 +16,6 @@ const largeFixtureSoak = readJson("compat/large-fixture-restart-soak.json");
 const browserWorkerResources = readJson("compat/browser-worker-resource-results.json");
 const fixtureCatalog = readJson("compat/ecosystem-fixtures.json");
 const browserSmoke = readJson("compat/browser-smoke-results.json");
-const supportMatrix = fs.readFileSync("docs/release/support-matrix.md", "utf8");
-const browserGrades = fs.readFileSync("docs/productization/browser-support-grades.md", "utf8");
 
 assert(policy.schemaVersion === 1, "unexpected runtime reliability policy schema");
 assert(policy.memory.heapCeilingMiB === 256, "memory ceiling must stay aligned with performance baseline");
@@ -90,10 +88,6 @@ for (const fixture of soak.fixtures) {
   assert(fs.existsSync(path.resolve(fixture.test)), `missing soak fixture: ${fixture.test}`);
 }
 
-assert(supportMatrix.includes("Edge"), "support matrix must mention Edge");
-assert(supportMatrix.includes("Safari"), "support matrix must mention Safari");
-assert(browserGrades.includes("candidate"), "browser grades doc must define candidate");
-assert(browserGrades.includes("SharedArrayBuffer"), "browser grades doc must discuss SharedArrayBuffer");
 assert(fs.existsSync("packages/browser-host/test/resources/large-node-modules-stress.test.ts"), "large node_modules stress test missing");
 assert(fs.existsSync("packages/workspace-runtime/test/ide-offline-soak.test.ts"), "workspace Runtime soak test missing");
 

@@ -13,7 +13,7 @@
     "dist/sdk/package/index.d.ts",
     "dist/sdk/package/asset-manifest.json",
     "dist/sdk/package/assets/system_wasm.wasm",
-    "docs/release/fingerprint.json",
+    "release/fingerprint.json",
     "compat/release-policy.json",
     "compat/performance-baseline.json",
     "compat/soak-baseline.json"
