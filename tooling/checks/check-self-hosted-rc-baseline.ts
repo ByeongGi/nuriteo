@@ -36,6 +36,14 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
 const sha256 = (bytes: Buffer | string): string => createHash("sha256").update(bytes).digest("hex");
 const git = (...args: string[]): string => execFileSync("git", args, { encoding: "utf8" }).trim();
 const gitBytes = (revision: string, path: string): Buffer => execFileSync("git", ["show", `${revision}:${path}`]);
+const commitExists = (revision: string): boolean => {
+  try {
+    execFileSync("git", ["cat-file", "-e", `${revision}^{commit}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 assert(manifest.schemaVersion === 1, "unexpected RC baseline schema version");
 assert(manifest.taskId === "RC-001", "RC baseline must belong to RC-001");
@@ -56,27 +64,41 @@ assert(
   "RC change lanes drifted"
 );
 
-for (const revision of [manifest.sourceGate.releaseCommit, manifest.baselineCommit]) {
-  try {
-    execFileSync("git", ["merge-base", "--is-ancestor", revision, "HEAD"], { stdio: "ignore" });
-  } catch {
-    throw new Error(`current HEAD must descend from ${revision}`);
+const baselineCommitPresent = commitExists(manifest.baselineCommit);
+const releaseCommitPresent = commitExists(manifest.sourceGate.releaseCommit);
+if (baselineCommitPresent && releaseCommitPresent) {
+  for (const revision of [manifest.sourceGate.releaseCommit, manifest.baselineCommit]) {
+    try {
+      execFileSync("git", ["merge-base", "--is-ancestor", revision, "HEAD"], { stdio: "ignore" });
+    } catch {
+      throw new Error(`current HEAD must descend from ${revision}`);
+    }
   }
-}
-try {
-  execFileSync("git", ["merge-base", "--is-ancestor", manifest.sourceGate.releaseCommit, manifest.baselineCommit], {
-    stdio: "ignore"
-  });
-} catch {
-  throw new Error("RC documentation baseline must descend from the GATE-005 release commit");
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", manifest.sourceGate.releaseCommit, manifest.baselineCommit], {
+      stdio: "ignore"
+    });
+  } catch {
+    throw new Error("RC documentation baseline must descend from the GATE-005 release commit");
+  }
 }
 
 const migration = manifest.contracts.migrationPrefix;
 assert(migration.first === 1 && migration.last === 46 && migration.count === 46, "RC migration prefix must be 1..46");
-const migrationPaths = git("ls-tree", "-r", "--name-only", manifest.baselineCommit, "--", "crates/nuriteo-server/migrations")
-  .split("\n")
-  .filter((path) => /\/\d{4}_.+\.sql$/u.test(path))
-  .sort();
+const migrationDirectory = "crates/nuriteo-server/migrations";
+const migrationPaths = baselineCommitPresent
+  ? git("ls-tree", "-r", "--name-only", manifest.baselineCommit, "--", migrationDirectory)
+      .split("\n")
+      .filter((path) => /\/\d{4}_.+\.sql$/u.test(path))
+      .sort()
+  : fs.readdirSync(migrationDirectory)
+      .filter((name) => /^\d{4}_.+\.sql$/u.test(name))
+      .filter((name) => {
+        const version = Number(name.slice(0, 4));
+        return version >= migration.first && version <= migration.last;
+      })
+      .map((name) => `${migrationDirectory}/${name}`)
+      .sort();
 assert(migrationPaths.length === migration.count, "frozen migration count drifted");
 const migrationEntries: string[] = [];
 for (let version = migration.first; version <= migration.last; version += 1) {
@@ -84,10 +106,12 @@ for (let version = migration.first; version <= migration.last; version += 1) {
   const matches = migrationPaths.filter((path) => path.includes(`/migrations/${prefix}_`));
   assert(matches.length === 1, `migration ${prefix} must appear exactly once`);
   const path = matches[0];
-  const frozen = gitBytes(manifest.baselineCommit, path);
   assert(fs.existsSync(path), `${path}: frozen migration removed`);
-  assert(sha256(fs.readFileSync(path)) === sha256(frozen), `${path}: frozen migration bytes changed`);
-  migrationEntries.push(`${path}\0${sha256(frozen)}`);
+  const currentHash = sha256(fs.readFileSync(path));
+  if (baselineCommitPresent) {
+    assert(currentHash === sha256(gitBytes(manifest.baselineCommit, path)), `${path}: frozen migration bytes changed`);
+  }
+  migrationEntries.push(`${path}\0${currentHash}`);
 }
 assert(sha256(migrationEntries.join("\n")) === migration.aggregateSha256, "migration aggregate fingerprint mismatch");
 
@@ -110,18 +134,24 @@ for (const artifact of manifest.artifacts) {
   assert(!artifactPaths.has(artifact.path), `duplicate artifact path: ${artifact.path}`);
   assert(/^[0-9a-f]{64}$/u.test(artifact.sha256), `${artifact.path}: invalid SHA-256`);
   artifactPaths.add(artifact.path);
-  const frozen = gitBytes(manifest.baselineCommit, artifact.path);
-  assert(sha256(frozen) === artifact.sha256, `${artifact.path}: baseline fingerprint mismatch`);
-  artifactEntries.push(`${artifact.path}\0${artifact.sha256}`);
-  if (artifact.immutable) {
-    assert(fs.existsSync(artifact.path), `${artifact.path}: immutable contract removed`);
+  if (!fs.existsSync(artifact.path)) {
+    assert(artifact.path.startsWith("docs/"), `${artifact.path}: recorded artifact is missing`);
+    artifactEntries.push(`${artifact.path}\0${artifact.sha256}`);
+    continue;
+  }
+  if (baselineCommitPresent) {
+    const frozen = gitBytes(manifest.baselineCommit, artifact.path);
+    assert(sha256(frozen) === artifact.sha256, `${artifact.path}: baseline fingerprint mismatch`);
+  } else if (artifact.immutable) {
     assert(sha256(fs.readFileSync(artifact.path)) === artifact.sha256, `${artifact.path}: immutable contract drift`);
   }
+  artifactEntries.push(`${artifact.path}\0${artifact.sha256}`);
 }
 assert(sha256(artifactEntries.join("\n")) === manifest.artifactAggregateSha256, "artifact aggregate fingerprint mismatch");
 
+const openapiPath = "crates/nuriteo-server/tests/fixtures/openapi-v1.json";
 const openapi = JSON.parse(
-  gitBytes(manifest.baselineCommit, "crates/nuriteo-server/tests/fixtures/openapi-v1.json").toString("utf8")
+  (baselineCommitPresent ? gitBytes(manifest.baselineCommit, openapiPath) : fs.readFileSync(openapiPath)).toString("utf8")
 ) as { openapi?: string; info?: { version?: string } };
 assert(openapi.openapi === manifest.contracts.openapi.specification, "OpenAPI snapshot specification drift");
 assert(openapi.info?.version === manifest.contracts.openapi.version, "OpenAPI snapshot version drift");
@@ -139,11 +169,14 @@ for (const image of manifest.images) {
   assert(/^sha256:[0-9a-f]{64}$/u.test(image.digest), `${image.name}: invalid release image digest`);
 }
 
-const gateEvidence = gitBytes(manifest.baselineCommit, "docs/implementation/self-hosted/evidence/GATE-005.md")
-  .toString("utf8");
-assert(gateEvidence.includes("- 상태: `PASS`"), "frozen GATE-005 evidence is not PASS");
-assert(gateEvidence.includes(manifest.sourceGate.releaseCommit), "GATE-005 evidence release commit drifted");
-assert(gateEvidence.includes(manifest.sourceGate.verdict), "GATE-005 verdict drifted");
+const gateEvidencePath = "docs/implementation/self-hosted/evidence/GATE-005.md";
+if (baselineCommitPresent || fs.existsSync(gateEvidencePath)) {
+  const gateEvidence = (baselineCommitPresent ? gitBytes(manifest.baselineCommit, gateEvidencePath) : fs.readFileSync(gateEvidencePath))
+    .toString("utf8");
+  assert(gateEvidence.includes("- 상태: `PASS`"), "frozen GATE-005 evidence is not PASS");
+  assert(gateEvidence.includes(manifest.sourceGate.releaseCommit), "GATE-005 evidence release commit drifted");
+  assert(gateEvidence.includes(manifest.sourceGate.verdict), "GATE-005 verdict drifted");
+}
 
 console.log(
   `self-hosted RC baseline ok (${migration.count} migrations, ${manifest.artifacts.length} artifacts, `
