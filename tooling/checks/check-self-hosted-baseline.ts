@@ -4,7 +4,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const manifestPath = "compat/self-hosted-test-baseline.json";
+const manifestPath = "release/gates/self-hosted-test-baseline.json";
 const packagePath = "package.json";
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));

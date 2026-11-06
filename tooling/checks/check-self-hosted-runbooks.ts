@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const manifest = JSON.parse(fs.readFileSync("compat/self-hosted-runbooks-v1.json", "utf8")) as {
+const manifest = JSON.parse(fs.readFileSync("release/gates/self-hosted-runbooks-v1.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   releaseLineage: string;

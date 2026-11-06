@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "updatedAt": "2026-10-12",
   "status": "self-hosted-v1",
-  "responsePolicy": "compat/platform/security/vulnerability-response-policy.json",
-  "supportBundlePolicy": "compat/self-hosted-support-bundle-v1.json",
+  "responsePolicy": "release/gates/platform/security/vulnerability-response-policy.json",
+  "supportBundlePolicy": "release/gates/self-hosted-support-bundle-v1.json",
   "requiredIncidentTypes": [
     "rollback",
     "browser-regression",

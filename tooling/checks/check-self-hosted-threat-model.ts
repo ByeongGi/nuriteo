@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const model = JSON.parse(fs.readFileSync("compat/platform/security/self-hosted-v1-threat-model.json", "utf8")) as {
+const model = JSON.parse(fs.readFileSync("release/gates/platform/security/self-hosted-v1-threat-model.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   releaseLineage: string;

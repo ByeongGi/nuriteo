@@ -41,7 +41,7 @@ try {
     ["compose", "deploy/compose/compose.yaml"],
     ["compose-external-s3", "deploy/compose/compose.external-s3.yaml"],
     ["release-manifest-schema", "release/offline/release-manifest-v1.schema.json"],
-    ["upgrade-compatibility", "compat/self-hosted-upgrade-compatibility-v1.json"],
+    ["upgrade-compatibility", "release/gates/self-hosted-upgrade-compatibility-v1.json"],
     ["import-images", "release/offline/scripts/import-images"],
     ["render-config", "release/offline/scripts/render-config"],
     ["verify", "release/offline/scripts/verify"],

@@ -16,7 +16,7 @@
       "status": "supported",
       "contract": "Server, Web, and Operations OCI images on linux/amd64 and linux/arm64",
       "qualification": "REL-001 proved two clean native builds with identical role digests on both architectures; SEC-004 and QUAL-004 bound the promoted arm64 runtime images to that exact set.",
-      "evidence": ["release/ga/reproducible-images.json", "compat/platform/security/reports/SEC-004.json", "release/ga/qualification-report.json"]
+      "evidence": ["release/ga/reproducible-images.json", "release/gates/platform/security/reports/SEC-004.json", "release/ga/qualification-report.json"]
     },
     {
       "id": "SHV1-COMPOSE-DOCKER",
@@ -40,7 +40,7 @@
       "status": "qualified",
       "contract": "Kubernetes 1.29 through 1.37 with Helm 3.14 through 4.2",
       "qualification": "Kubernetes 1.29.14 and 1.37.0 endpoints passed actual install, failure fence, upgrade, rollback, uninstall, and Secret-preservation lifecycles with Helm 4.2.2.",
-      "evidence": ["charts/nuriteo/Chart.yaml", "docs/implementation/self-hosted/evidence/K8S-006.md", "compat/self-hosted-v1-qualification-matrix.json"]
+      "evidence": ["deploy/charts/nuriteo/Chart.yaml", "docs/implementation/self-hosted/evidence/K8S-006.md", "release/gates/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-POSTGRESQL",
@@ -48,7 +48,7 @@
       "status": "qualified",
       "contract": "PostgreSQL 17 and 18 over verified TLS; no optional extension is required",
       "qualification": "Pinned PostgreSQL 17.11 and 18.1 both passed custom-CA TLS migration serialization, validation, rollback, and retry tests.",
-      "evidence": ["docs/implementation/self-hosted/evidence/DB-001.md", "docs/implementation/self-hosted/evidence/SEC-004.md", "compat/self-hosted-v1-qualification-matrix.json"]
+      "evidence": ["docs/implementation/self-hosted/evidence/DB-001.md", "docs/implementation/self-hosted/evidence/SEC-004.md", "release/gates/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-S3",
@@ -64,7 +64,7 @@
       "status": "supported",
       "contract": "Current stable desktop Chrome/Chromium with cross-origin isolation, SharedArrayBuffer, Service Worker, and OPFS",
       "qualification": "Chrome 154 passed current isolation, SharedArrayBuffer, Service Worker, and OPFS capability qualification; production browser runtime gates remain linked.",
-      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+      "evidence": ["compat/browser-smoke-results.json", "release/gates/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-BROWSER-EDGE",
@@ -72,7 +72,7 @@
       "status": "qualified",
       "contract": "Microsoft Edge 155 desktop",
       "qualification": "COOP/COEP, SharedArrayBuffer, Service Worker, OPFS, and the retained Vite preview smoke passed.",
-      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+      "evidence": ["compat/browser-smoke-results.json", "release/gates/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-BROWSER-SAFARI",
@@ -80,7 +80,7 @@
       "status": "qualified",
       "contract": "Safari 26.6.2 on macOS desktop",
       "qualification": "Isolation, preview, OPFS reopen, and quota recovery smoke passed; iOS and mobile Safari are excluded.",
-      "evidence": ["compat/browser-smoke-results.json", "compat/self-hosted-v1-qualification-matrix.json"]
+      "evidence": ["compat/browser-smoke-results.json", "release/gates/self-hosted-v1-qualification-matrix.json"]
     },
     {
       "id": "SHV1-AUTH",
@@ -96,7 +96,7 @@
       "status": "qualified",
       "contract": "Forward-only in-place upgrade from the published self-hosted v1 Beta/RC lineage; downgrade is not supported",
       "qualification": "Beta gate migration 46 and RC.1 migration 50 both passed the upgrade, isolated restore, and application-only rollback matrix; signed artifacts repeat it in QUAL-004.",
-      "evidence": ["compat/self-hosted-upgrade-compatibility-v1.json", "compat/self-hosted-v1-lifecycle-matrix.json"]
+      "evidence": ["release/gates/self-hosted-upgrade-compatibility-v1.json", "release/gates/self-hosted-v1-lifecycle-matrix.json"]
     },
     {
       "id": "SHV1-AIRGAP",

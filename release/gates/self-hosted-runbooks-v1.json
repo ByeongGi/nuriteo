@@ -13,8 +13,8 @@
     },
     {
       "id": "install-helm",
-      "command": "charts/nuriteo/tests/kind-release.sh",
-      "contractCheck": "charts/nuriteo/tests/check-chart.sh",
+      "command": "deploy/charts/nuriteo/tests/kind-release.sh",
+      "contractCheck": "deploy/charts/nuriteo/tests/check-chart.sh",
       "actualEvidence": "docs/implementation/self-hosted/evidence/GATE-006.md"
     },
     {

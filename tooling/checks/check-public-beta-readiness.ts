@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
-const decision = readJson("compat/launch-decision.json");
+const decision = readJson("release/gates/launch-decision.json");
 const reliability = readJson("compat/runtime-reliability-policy.json");
 const actualFixtures = readJson("compat/ecosystem-fixture-actual-product-results.json");
 const serviceFixtures = readJson("compat/service-workflow-fixture-results.json");

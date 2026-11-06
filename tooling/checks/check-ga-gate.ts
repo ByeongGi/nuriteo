@@ -19,14 +19,14 @@ assert.equal(reproducibility.images.length, 6);
 const qualification = JSON.parse(fs.readFileSync("release/ga/qualification-report.json", "utf8"));
 assert.equal(qualification.status, "PASS");
 assert.equal(qualification.signedArtifacts, true);
-const security = JSON.parse(fs.readFileSync("compat/platform/security/reports/SEC-004.json", "utf8"));
+const security = JSON.parse(fs.readFileSync("release/gates/platform/security/reports/SEC-004.json", "utf8"));
 assert.equal(security.status, "PASS");
 assert.equal(security.sourceCommit, reproducibility.sourceCommit);
 assert.equal(security.images.reduce((sum, image) => sum + image.critical, 0), 0);
 assert.equal(security.images.reduce((sum, image) => sum + image.high, 0), 0);
 const manifest = JSON.parse(fs.readFileSync("release/ga/artifacts/nuriteo-1.0.0.release.json", "utf8"));
 assert.equal(manifest.release, "1.0.0");
-const support = JSON.parse(fs.readFileSync("compat/self-hosted-v1-support-matrix.json", "utf8"));
+const support = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-support-matrix.json", "utf8"));
 assert.equal(
   support.support.filter((entry) => entry.status === "candidate").length,
   0,

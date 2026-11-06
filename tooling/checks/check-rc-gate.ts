@@ -50,7 +50,7 @@ for (const task of manifest.qualifications) {
 const betaGate = fs.readFileSync(path.join(root, "docs/implementation/self-hosted/evidence/GATE-005.md"), "utf8");
 assert.match(betaGate, /상태: `PASS`/u);
 
-const compatibility = JSON.parse(fs.readFileSync(path.join(root, "compat/self-hosted-upgrade-compatibility-v1.json"), "utf8"));
+const compatibility = JSON.parse(fs.readFileSync(path.join(root, "release/gates/self-hosted-upgrade-compatibility-v1.json"), "utf8"));
 assert.equal(compatibility.releaseLineage, manifest.releaseLineage);
 assert.equal(compatibility.support.upgradeTo, "self-hosted-v1-rc-lineage");
 

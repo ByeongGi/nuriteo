@@ -15,7 +15,7 @@ type Source = {
   databasePolicy: string;
   evidence: string[];
 };
-const matrix = JSON.parse(fs.readFileSync("compat/self-hosted-v1-lifecycle-matrix.json", "utf8")) as {
+const matrix = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-lifecycle-matrix.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   status: string;
@@ -23,12 +23,12 @@ const matrix = JSON.parse(fs.readFileSync("compat/self-hosted-v1-lifecycle-matri
   commonNegativeCases: string[];
   finalArtifactBoundary: string;
 };
-const compatibility = JSON.parse(fs.readFileSync("compat/self-hosted-upgrade-compatibility-v1.json", "utf8")) as {
+const compatibility = JSON.parse(fs.readFileSync("release/gates/self-hosted-upgrade-compatibility-v1.json", "utf8")) as {
   support: { direction: string; downgrade: string };
   schema: { sourceMigration: number };
   objects: { existingObjectPolicy: string; rewritePolicy: string };
 };
-const support = JSON.parse(fs.readFileSync("compat/self-hosted-v1-support-matrix.json", "utf8")) as {
+const support = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-support-matrix.json", "utf8")) as {
   support: Array<{ id: string; status: string; evidence: string[] }>;
 };
 const documentation = fs.readFileSync("docs/operations/self-hosted-v1-lifecycle-matrix.md", "utf8");
@@ -65,6 +65,6 @@ assert.equal(matrix.commonNegativeCases.length, 5);
 assert.ok(matrix.finalArtifactBoundary.includes("QUAL-004"));
 const upgrade = support.support.find(({ id }) => id === "SHV1-UPGRADE");
 assert.equal(upgrade?.status, "qualified");
-assert.ok(upgrade?.evidence.includes("compat/self-hosted-v1-lifecycle-matrix.json"));
+assert.ok(upgrade?.evidence.includes("release/gates/self-hosted-v1-lifecycle-matrix.json"));
 
 console.log(JSON.stringify({ status: "pass", task: matrix.taskId, sources: matrix.sources.length, targetMigration: currentMigration }));

@@ -10,14 +10,14 @@ type Entry = {
   artifact: string;
   checks: string[];
 };
-const matrix = JSON.parse(fs.readFileSync("compat/self-hosted-v1-qualification-matrix.json", "utf8")) as {
+const matrix = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-qualification-matrix.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   status: string;
   entries: Entry[];
   excluded: string[];
 };
-const support = JSON.parse(fs.readFileSync("compat/self-hosted-v1-support-matrix.json", "utf8")) as {
+const support = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-support-matrix.json", "utf8")) as {
   support: Array<{ id: string; status: string; contract: string; evidence: string[] }>;
 };
 const browser = JSON.parse(fs.readFileSync("compat/browser-smoke-results.json", "utf8")) as {
@@ -47,7 +47,7 @@ assert.equal(matrix.excluded.length, 3);
 for (const id of ["SHV1-KUBERNETES", "SHV1-POSTGRESQL", "SHV1-BROWSER-EDGE", "SHV1-BROWSER-SAFARI"]) {
   const entry = support.support.find((candidate) => candidate.id === id);
   assert.equal(entry?.status, "qualified", `${id}: support matrix was not promoted`);
-  assert.ok(entry.evidence.includes("compat/self-hosted-v1-qualification-matrix.json"), `${id}: qualification evidence missing`);
+  assert.ok(entry.evidence.includes("release/gates/self-hosted-v1-qualification-matrix.json"), `${id}: qualification evidence missing`);
 }
 assert.equal(browser.results.chrome.status, "pass");
 assert.equal(browser.results.chrome.version, "154.0.8037.98");

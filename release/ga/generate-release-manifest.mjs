@@ -31,7 +31,7 @@ const manifest = {
   artifacts,
   compatibility: {
     kubernetes: ">=1.29.0-0",
-    sourceMatrix: "compat/self-hosted-v1-lifecycle-matrix.json",
+    sourceMatrix: "release/gates/self-hosted-v1-lifecycle-matrix.json",
     supportMatrix: "support/self-hosted-v1-support-matrix.json"
   },
   rollback: {

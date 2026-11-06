@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "compatibilityManifest": "compat/self-hosted-upgrade-compatibility-v1.json",
-  "compatibilityManifestSha256": "6e2864c0c82ddb24b2d8e7ca12ec65e0e6f5bcb6a309b7a3039aa0589bbc830f",
+  "compatibilityManifest": "release/gates/self-hosted-upgrade-compatibility-v1.json",
+  "compatibilityManifestSha256": "c5f5cb4f34be0d9723a22767e8d8de7bbc8225dcb363f3aa492d08617e599252",
   "targetReleaseManifest": "deploy/compose/fixtures/target-release-set-v1.json",
   "targetReleaseManifestSha256": "2faba90cec0ddb0115692c469b58818eac2adb8e3bf09569a7e91ed62e310023",
   "source": {

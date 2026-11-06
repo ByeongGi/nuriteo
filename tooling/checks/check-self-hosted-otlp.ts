@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const policy = JSON.parse(fs.readFileSync("compat/platform/observability/otlp-policy.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("release/gates/platform/observability/otlp-policy.json", "utf8")) as {
   schemaVersion: number; taskId: string; defaultEnabled: boolean; phoneHome: boolean;
   signals: string[]; protocols: string[]; endpoint: { requiredWhenEnabled: boolean; tlsRequired: boolean; fallback: boolean };
   bounds: Record<string, { default: number; minimum: number; maximum: number }>;

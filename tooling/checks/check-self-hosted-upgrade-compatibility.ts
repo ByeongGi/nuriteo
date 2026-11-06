@@ -12,7 +12,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-const compatibilityPath = process.argv[2] ?? "compat/self-hosted-upgrade-compatibility-v1.json";
+const compatibilityPath = process.argv[2] ?? "release/gates/self-hosted-upgrade-compatibility-v1.json";
 const compatibility = JSON.parse(fs.readFileSync(compatibilityPath, "utf8")) as UpgradeCompatibility;
 const baselinePath = compatibility.sourceBaseline.path;
 const baselineBytes = fs.readFileSync(baselinePath);

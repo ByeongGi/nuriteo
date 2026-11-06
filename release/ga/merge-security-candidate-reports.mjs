@@ -7,7 +7,7 @@ if (!reproducibilityPath || !outputPath || summaryPaths.length !== 3) {
   throw new Error("usage: merge-security-candidate-reports.mjs REL-001 OUTPUT SERVER WEB OPERATIONS");
 }
 const reproducibility = JSON.parse(await readFile(reproducibilityPath, "utf8"));
-const policy = JSON.parse(await readFile("compat/platform/security/image-release-policy.json", "utf8"));
+const policy = JSON.parse(await readFile("release/gates/platform/security/image-release-policy.json", "utf8"));
 const summaries = await Promise.all(summaryPaths.map(async (file) => JSON.parse(await readFile(file, "utf8"))));
 const roles = new Set();
 for (const summary of summaries) {

@@ -233,7 +233,7 @@ const required = [
   "tooling/checks/check-runtime-reliability-policy.ts",
   "packages/browser-host/test/resources/large-node-modules-stress.test.ts",
   "packages/browser-host/test/reliability-recovery.test.ts",
-  "compat/launch-decision.json",
+  "release/gates/launch-decision.json",
   "compat/framework-actual-validation.json",
   "compat/service-workflow-fixture-results.json",
   "tooling/checks/check-sg25.ts",

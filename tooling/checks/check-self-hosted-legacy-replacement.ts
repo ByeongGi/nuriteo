@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const relativeManifest = "compat/self-hosted-legacy-replacement.json";
+const relativeManifest = "release/gates/self-hosted-legacy-replacement.json";
 
 type Replacement = {
   id: string;
@@ -58,7 +58,7 @@ assert.equal(inventory.releaseLineage, "nuriteo-self-hosted-v1");
 assert.match(inventory.recordedAt, /^\d{4}-\d{2}-\d{2}$/u);
 assert.equal(inventory.migrationCompletedAt, "2026-10-11");
 assert.equal(inventory.cleanupCompletedAt, "2026-10-11");
-assert.equal(inventory.baselineManifest, "compat/self-hosted-rc-baseline.json");
+assert.equal(inventory.baselineManifest, "release/gates/self-hosted-rc-baseline.json");
 assertExisting(inventory.baselineManifest, "RC baseline manifest");
 
 assert.deepEqual(

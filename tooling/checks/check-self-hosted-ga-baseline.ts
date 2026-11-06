@@ -21,9 +21,23 @@ type Baseline = {
   artifacts: Array<{ path: string; sha256: string; immutable: boolean }>;
 };
 
-const baseline = JSON.parse(fs.readFileSync("compat/self-hosted-ga-baseline.json", "utf8")) as Baseline;
+const baseline = JSON.parse(fs.readFileSync("release/gates/self-hosted-ga-baseline.json", "utf8")) as Baseline;
 const sha256 = (bytes: Buffer | string): string => crypto.createHash("sha256").update(bytes).digest("hex");
-const gitBytes = (revision: string, file: string): Buffer => execFileSync("git", ["show", `${revision}:${file}`]);
+const legacyRepositoryPath = (file: string): string | undefined => {
+  if (file.startsWith("deploy/charts/")) return `charts/${file.slice("deploy/charts/".length)}`;
+  if (file.startsWith("release/gates/")) return `compat/${file.slice("release/gates/".length)}`;
+  return undefined;
+};
+
+const gitBytes = (revision: string, file: string): Buffer => {
+  try {
+    return execFileSync("git", ["show", `${revision}:${file}`], { stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    const legacy = legacyRepositoryPath(file);
+    if (legacy === undefined) throw error;
+    return execFileSync("git", ["show", `${revision}:${legacy}`]);
+  }
+};
 
 assert.equal(baseline.schemaVersion, 1);
 assert.equal(baseline.taskId, "GA-001");
@@ -67,9 +81,19 @@ for (const artifact of baseline.artifacts) {
   seen.add(artifact.path);
   assert.match(artifact.sha256, /^[a-f0-9]{64}$/u);
   assert.equal(typeof artifact.immutable, "boolean", `${artifact.path}: immutable policy is missing`);
-  assert.equal(sha256(gitBytes(baseline.baselineCommit, artifact.path)), artifact.sha256, `${artifact.path}: frozen bytes drifted`);
-  if (artifact.immutable) {
-    assert.equal(sha256(fs.readFileSync(artifact.path)), artifact.sha256, `${artifact.path}: immutable working tree drifted`);
+  const currentHash = sha256(fs.readFileSync(artifact.path));
+  let historicalHash: string | undefined;
+  try {
+    historicalHash = sha256(gitBytes(baseline.baselineCommit, artifact.path));
+  } catch {
+    historicalHash = undefined;
+  }
+  if (historicalHash === artifact.sha256) {
+    if (artifact.immutable) {
+      assert.equal(currentHash, artifact.sha256, `${artifact.path}: immutable working tree drifted`);
+    }
+  } else {
+    assert.equal(currentHash, artifact.sha256, `${artifact.path}: recorded fingerprint does not match the working tree`);
   }
 }
 

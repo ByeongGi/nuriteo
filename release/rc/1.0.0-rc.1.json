@@ -35,10 +35,10 @@
     { "path": "Cargo.lock", "sha256": "b0acb2ef22b876dd62a02b25a1956a5e18524a8e38a86dc158c1d444e6aee6d0" },
     { "path": "pnpm-lock.yaml", "sha256": "b757ab5710665f230e420af604bcc7f9690ba53f9917e9ceefb4d7182e8ad801" },
     { "path": "deploy/compose/compose.yaml", "sha256": "d4045603428d01a6eaf281db85db6bbeff4f35c12dbf09b57c1016d4d22fe863" },
-    { "path": "charts/nuriteo/Chart.yaml", "sha256": "0da862cf1d1e9f19be141cbf4b2e9756a4447527b08f33e86cdc0def9d7adfca" },
-    { "path": "charts/nuriteo/values.yaml", "sha256": "50b9f804da7dee9f9a9ebd5b2acfb212b3f41b2fc292c0cf22d3297615a51612" },
-    { "path": "charts/nuriteo/values.schema.json", "sha256": "2610b9593a122eb10bf1bccf5a7e3d7862cd39b323767be07eefc8ee94fe304f" },
-    { "path": "compat/self-hosted-upgrade-compatibility-v1.json", "sha256": "6e2864c0c82ddb24b2d8e7ca12ec65e0e6f5bcb6a309b7a3039aa0589bbc830f" },
+    { "path": "deploy/charts/nuriteo/Chart.yaml", "sha256": "0da862cf1d1e9f19be141cbf4b2e9756a4447527b08f33e86cdc0def9d7adfca" },
+    { "path": "deploy/charts/nuriteo/values.yaml", "sha256": "50b9f804da7dee9f9a9ebd5b2acfb212b3f41b2fc292c0cf22d3297615a51612" },
+    { "path": "deploy/charts/nuriteo/values.schema.json", "sha256": "2610b9593a122eb10bf1bccf5a7e3d7862cd39b323767be07eefc8ee94fe304f" },
+    { "path": "release/gates/self-hosted-upgrade-compatibility-v1.json", "sha256": "c5f5cb4f34be0d9723a22767e8d8de7bbc8225dcb363f3aa492d08617e599252" },
     { "path": "release/offline/inventory-v1.json", "sha256": "54747b8b25c64553e45161c35244dc3ad93927234b9e7f44a211b1baf975917a" }
   ],
   "qualifications": ["RC-002", "RC-003", "RC-004", "RC-005"]

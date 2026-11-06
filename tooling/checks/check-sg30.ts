@@ -8,7 +8,7 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-const decision = readJson("compat/launch-decision.json");
+const decision = readJson("release/gates/launch-decision.json");
 const allowed = new Set(decision.allowedDecisions || []);
 assert(allowed.has("private-beta-ready") && allowed.has("public-beta-ready") && allowed.has("hold"), "allowed decisions incomplete");
 assert(allowed.has(decision.decision), `decision must be one of ${[...allowed].join("|")}`);

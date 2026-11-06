@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "taskId": "LEG-001",
   "releaseLineage": "nuriteo-self-hosted-v1",
-  "baselineManifest": "compat/self-hosted-rc-baseline.json",
+  "baselineManifest": "release/gates/self-hosted-rc-baseline.json",
   "recordedAt": "2026-10-09",
   "migrationCompletedAt": "2026-10-11",
   "cleanupCompletedAt": "2026-10-11",

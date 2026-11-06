@@ -85,7 +85,7 @@ export function validateUpgradeCompatibility(
   invariant(baseline.schemaVersion === 1 && baseline.taskId === "RC-001", "source must be the RC-001 baseline");
   invariant(baseline.sourceGate.id === "GATE-005" && baseline.sourceGate.status === "PASS", "source gate must be GATE-005 PASS");
   invariant(compatibility.releaseLineage === baseline.releaseLineage, "release lineage drifted from RC baseline");
-  invariant(compatibility.sourceBaseline.path === "compat/self-hosted-rc-baseline.json", "unexpected RC baseline path");
+  invariant(compatibility.sourceBaseline.path === "release/gates/self-hosted-rc-baseline.json", "unexpected RC baseline path");
   invariant(sha256Pattern.test(compatibility.sourceBaseline.sha256), "invalid RC baseline SHA-256");
   invariant(sha256(baselineBytes) === compatibility.sourceBaseline.sha256, "RC baseline content fingerprint mismatch");
   invariant(compatibility.sourceBaseline.taskId === baseline.taskId, "RC baseline task identity mismatch");

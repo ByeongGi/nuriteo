@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const policy = JSON.parse(fs.readFileSync("compat/self-hosted-support-bundle-v1.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("release/gates/self-hosted-support-bundle-v1.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   format: string;

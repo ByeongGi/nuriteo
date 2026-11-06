@@ -8,7 +8,7 @@ function assert(condition: unknown, message: string): asserts condition {
 
 type Artifact = { immutable?: boolean; path: string; sha256: string };
 
-const manifestPath = "compat/self-hosted-rc-baseline.json";
+const manifestPath = "release/gates/self-hosted-rc-baseline.json";
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
   schemaVersion: number;
   taskId: string;

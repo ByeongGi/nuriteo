@@ -108,7 +108,7 @@ import fs from "node:fs";
 
 const digest = (reference) => reference.slice(reference.indexOf("@") + 1);
 const sha256 = (file) => crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-const compatibility = JSON.parse(fs.readFileSync(`${process.env.ROOT_DIR}/compat/self-hosted-upgrade-compatibility-v1.json`, "utf8"));
+const compatibility = JSON.parse(fs.readFileSync(`${process.env.ROOT_DIR}/release/gates/self-hosted-upgrade-compatibility-v1.json`, "utf8"));
 compatibility.images.roles = compatibility.images.roles.map((role) => {
   if (role.name === "server") return { ...role, digest: digest(process.env.SOURCE_SERVER) };
   if (role.name === "web") return { ...role, digest: digest(process.env.SOURCE_WEB) };

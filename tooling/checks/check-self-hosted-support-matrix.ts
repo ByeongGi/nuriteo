@@ -21,7 +21,7 @@ type SupportMatrix = {
   knownLimits: KnownLimit[];
 };
 
-const matrixPath = "compat/self-hosted-v1-support-matrix.json";
+const matrixPath = "release/gates/self-hosted-v1-support-matrix.json";
 const documentationPath = "docs/release/self-hosted-v1-support-matrix.md";
 const matrix = JSON.parse(fs.readFileSync(matrixPath, "utf8")) as SupportMatrix;
 const documentation = fs.readFileSync(documentationPath, "utf8");
@@ -105,7 +105,7 @@ const browsers = JSON.parse(fs.readFileSync("compat/browser-smoke-results.json",
 assert.ok(matrix.support.find(({ id }) => id === "SHV1-BROWSER-EDGE")?.contract.includes(browsers.results.edge.version.split(".")[0]));
 assert.ok(matrix.support.find(({ id }) => id === "SHV1-BROWSER-SAFARI")?.contract.includes(browsers.results.safari.version));
 
-const compatibility = JSON.parse(fs.readFileSync("compat/self-hosted-upgrade-compatibility-v1.json", "utf8")) as {
+const compatibility = JSON.parse(fs.readFileSync("release/gates/self-hosted-upgrade-compatibility-v1.json", "utf8")) as {
   support: { direction: string; downgrade: string };
 };
 assert.equal(compatibility.support.direction, "forward-only");

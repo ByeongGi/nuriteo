@@ -8,10 +8,10 @@ import {
   validateUpgradeCompatibility,
 } from "../lib/self-hosted-upgrade-compatibility.ts";
 
-const baselineBytes = fs.readFileSync("compat/self-hosted-rc-baseline.json");
+const baselineBytes = fs.readFileSync("release/gates/self-hosted-rc-baseline.json");
 const baseline = JSON.parse(baselineBytes.toString("utf8")) as RcBaseline;
 const source = JSON.parse(
-  fs.readFileSync("compat/self-hosted-upgrade-compatibility-v1.json", "utf8"),
+  fs.readFileSync("release/gates/self-hosted-upgrade-compatibility-v1.json", "utf8"),
 ) as UpgradeCompatibility;
 const clone = (): UpgradeCompatibility => structuredClone(source);
 

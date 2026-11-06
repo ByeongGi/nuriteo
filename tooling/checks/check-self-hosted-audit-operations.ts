@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const policy = JSON.parse(fs.readFileSync("compat/platform/operations/audit-operations-policy.json", "utf8")) as {
+const policy = JSON.parse(fs.readFileSync("release/gates/platform/operations/audit-operations-policy.json", "utf8")) as {
   schemaVersion: number; taskId: string; sourceOfTruth: string;
   retention: { defaultDays: number; minimumDays: number; maximumDays: number;
     unlimitedAllowed: boolean; batchSize: number; scheduler: string; replicaCoordination: string;

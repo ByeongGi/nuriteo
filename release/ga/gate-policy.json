@@ -13,6 +13,6 @@
     "release/ga/artifacts/nuriteo-1.0.0.release.json",
     "release/ga/artifacts/channels.json",
     "release/ga/qualification-report.json",
-    "compat/platform/security/reports/SEC-004.json"
+    "release/gates/platform/security/reports/SEC-004.json"
   ]
 }

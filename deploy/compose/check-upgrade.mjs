@@ -90,7 +90,7 @@ for (const mutate of [
   const copy = structuredClone(plan);
   mutate(copy);
   const files = await import("node:fs/promises");
-  const manifest = JSON.parse(await files.readFile("compat/self-hosted-upgrade-compatibility-v1.json", "utf8"));
+  const manifest = JSON.parse(await files.readFile("release/gates/self-hosted-upgrade-compatibility-v1.json", "utf8"));
   const targetManifest = JSON.parse(await files.readFile("deploy/compose/fixtures/target-release-set-v1.json", "utf8"));
   assert.throws(() => validatePlan(copy, manifest, targetManifest));
 }
@@ -99,7 +99,7 @@ for (const mutate of [
   const copy = structuredClone(plan);
   copy.target.serverImage = copy.target.serverImage.replace(/a{64}$/u, "c".repeat(64));
   const files = await import("node:fs/promises");
-  const manifest = JSON.parse(await files.readFile("compat/self-hosted-upgrade-compatibility-v1.json", "utf8"));
+  const manifest = JSON.parse(await files.readFile("release/gates/self-hosted-upgrade-compatibility-v1.json", "utf8"));
   const targetManifest = JSON.parse(await files.readFile("deploy/compose/fixtures/target-release-set-v1.json", "utf8"));
   assert.throws(() => validatePlan(copy, manifest, targetManifest), /target server digest drift/u);
 }

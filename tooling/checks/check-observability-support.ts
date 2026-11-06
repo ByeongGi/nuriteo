@@ -160,7 +160,7 @@ const planSource = fs.readFileSync("docs/productization/service-readiness-plan.m
 assert(planSource.includes("### SG28 상태"), "service-readiness-plan must document SG28 status");
 assert(planSource.includes("PASS"), "SG28 status section must include PASS evidence");
 
-const decision = readJson("compat/launch-decision.json");
+const decision = readJson("release/gates/launch-decision.json");
 assert.equal(decision.gates.SG28, "pass", "launch-decision SG28 must be pass");
 
 console.log(

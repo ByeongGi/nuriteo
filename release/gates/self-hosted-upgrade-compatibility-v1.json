@@ -4,7 +4,7 @@
   "releaseLineage": "nuriteo-self-hosted-v1",
   "recordedAt": "2026-10-09",
   "sourceBaseline": {
-    "path": "compat/self-hosted-rc-baseline.json",
+    "path": "release/gates/self-hosted-rc-baseline.json",
     "sha256": "6e13603ba87bc75290721f81c6a5d0e30edd7b1b275668eaafd229f0aa32fccc",
     "taskId": "RC-001",
     "baselineCommit": "b3abb46aaecb00c8d84307cf1d8c213595c31d67",

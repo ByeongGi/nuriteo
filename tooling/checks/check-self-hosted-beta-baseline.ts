@@ -9,7 +9,7 @@ function assert(condition: unknown, message: string): asserts condition {
 type Artifact = { path: string; sha256: string };
 type ArtifactGroup = { aggregateSha256: string; artifacts: Artifact[] };
 
-const manifestPath = "compat/self-hosted-beta-baseline.json";
+const manifestPath = "release/gates/self-hosted-beta-baseline.json";
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
   schemaVersion: number;
   taskId: string;

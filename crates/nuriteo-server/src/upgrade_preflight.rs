@@ -8,7 +8,7 @@ use crate::database::{DatabasePool, SchemaReadiness, check_schema_readiness};
 use crate::instance_settings::InstanceSettingsRepository;
 
 const COMPATIBILITY_MANIFEST: &str =
-    include_str!("../../../compat/self-hosted-upgrade-compatibility-v1.json");
+    include_str!("../../../release/gates/self-hosted-upgrade-compatibility-v1.json");
 const SETTINGS_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Deserialize)]

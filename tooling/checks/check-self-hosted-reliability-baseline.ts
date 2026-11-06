@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 type Result = { id: string; status: string; iterations: number; threshold: string; evidence: string };
-const baseline = JSON.parse(fs.readFileSync("compat/self-hosted-v1-reliability-baseline.json", "utf8")) as {
+const baseline = JSON.parse(fs.readFileSync("release/gates/self-hosted-v1-reliability-baseline.json", "utf8")) as {
   schemaVersion: number;
   taskId: string;
   measuredAt: string;
