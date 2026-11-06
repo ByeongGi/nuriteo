@@ -64,7 +64,7 @@ export function SignInForm({
           </div>
         ) : null}
 
-        <form className={styles.form()} onSubmit={handleSubmit} aria-busy={isPending}>
+        <form className={styles.form()} method="post" onSubmit={handleSubmit} aria-busy={isPending}>
           <div className={styles.field()}>
             <label className={styles.label()} htmlFor="email">이메일</label>
             <Input

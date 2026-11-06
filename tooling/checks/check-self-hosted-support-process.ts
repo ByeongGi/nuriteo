@@ -65,7 +65,9 @@ assert.ok(drill.artifacts.every((artifact) => !/token|password|private-key|sourc
 const security = fs.readFileSync("SECURITY.md", "utf8");
 const normalizedSecurity = security.replace(/\s+/gu, " ");
 const guide = fs.readFileSync("docs/security/vulnerability-and-incident-response.md", "utf8");
-for (const term of ["Security → Report a vulnerability", "Do not open a public issue", "4 hours", "bug bounty"])
+const criticalPolicy = policy.severity.find(({ level }) => level === "critical");
+assert.ok(criticalPolicy !== undefined);
+for (const term of ["Security → Report a vulnerability", "Do not open a public issue", `${criticalPolicy.acknowledgeHours} hours`, "bug bounty"])
   assert.ok(normalizedSecurity.includes(term), `SECURITY.md missing ${term}`);
 for (const term of ["Critical", "Incident Commander", "coordinated advisory", "best-effort", "Managed cloud"])
   assert.ok(guide.includes(term), `response guide missing ${term}`);

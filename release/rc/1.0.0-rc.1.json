@@ -38,7 +38,7 @@
     { "path": "deploy/charts/nuriteo/Chart.yaml", "sha256": "0da862cf1d1e9f19be141cbf4b2e9756a4447527b08f33e86cdc0def9d7adfca" },
     { "path": "deploy/charts/nuriteo/values.yaml", "sha256": "50b9f804da7dee9f9a9ebd5b2acfb212b3f41b2fc292c0cf22d3297615a51612" },
     { "path": "deploy/charts/nuriteo/values.schema.json", "sha256": "2610b9593a122eb10bf1bccf5a7e3d7862cd39b323767be07eefc8ee94fe304f" },
-    { "path": "release/gates/self-hosted-upgrade-compatibility-v1.json", "sha256": "c5f5cb4f34be0d9723a22767e8d8de7bbc8225dcb363f3aa492d08617e599252" },
+    { "path": "release/gates/self-hosted-upgrade-compatibility-v1.json", "sha256": "b3f7a9404adf18fdee8c934a3eb52c6b6ff4c63e23783a81e241212c4b9d3df8" },
     { "path": "release/offline/inventory-v1.json", "sha256": "54747b8b25c64553e45161c35244dc3ad93927234b9e7f44a211b1baf975917a" }
   ],
   "qualifications": ["RC-002", "RC-003", "RC-004", "RC-005"]

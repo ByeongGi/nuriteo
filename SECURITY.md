@@ -17,8 +17,8 @@ Include the affected NURITEO version and image digest, reproduction steps, secur
 identifiers. Never attach passwords, tokens, private keys, Project source, raw backups, or personal data. NURITEO does
 not upload diagnostic data automatically.
 
-We acknowledge Critical reports within 4 hours, High within 24 hours, Medium within 48 hours, and Low within 5 days.
-These are response targets for the open-source project, not a paid support SLA. Severity may change after validation.
+We acknowledge Critical reports within 72 hours, High within 7 days, Medium within 14 days, and Low within 30 days.
+These are best-effort response targets for a small open-source project, not a paid support SLA. Severity may change after validation.
 
 ## Coordinated disclosure
 

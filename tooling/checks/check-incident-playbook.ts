@@ -22,7 +22,7 @@ for (const id of playbook.requiredIncidentTypes) {
   assert(incident.userCommsTemplate.length > 40, `missing user comms template: ${id}`);
   assert(document.includes(id), `incident document missing ${id}`);
 }
-assert(playbook.responseTargets.critical.includes("4 hours"), "critical response target must be explicit");
+assert(playbook.responseTargets.critical.includes("72 hours"), "critical response target must be explicit");
 assert(document.includes("NURITEO redacted Support Bundle"), "incident document must require the redacted support bundle");
 assert(document.includes("vulnerability-and-incident-response.md"), "incident document must link the response policy");
 

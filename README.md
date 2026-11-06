@@ -1,15 +1,17 @@
 # NURITEO
 
-NURITEO는 GitHub 프로젝트나 템플릿을 브라우저에서 열고 설치, 편집, 실행과 Preview까지 이어갈 수 있는 오픈소스 browser-native 개발 환경이다.
+NURITEO is an open-source browser-native development environment. Open a GitHub project or template in the browser, install it, edit it, run it, and follow the result through Preview.
 
-현재 저장소는 브라우저 Runtime과 IDE 기능을 Self-hosted 서비스로 확장하는 단계다. Managed Cloud는 현재 범위에 포함하지 않는다.
+This repository is the self-hosted product. Managed cloud is out of scope. On desktop Chrome, a Vite project can be opened, edited, and previewed. Arbitrary npm packages, mobile Safari, Docker-in-the-browser, and native addons are outside the supported set.
 
-## 개발 시작
+한국어 안내: [README.ko.md](./README.ko.md).
 
-요구 사항:
+## Develop
 
-- Node.js 24.17 이상, 25 미만
-- pnpm 11.15 이상, 12 미만
+Requirements:
+
+- Node.js 24.17 or newer, below 25
+- pnpm 11.15 or newer, below 12
 - Rust toolchain 1.97
 
 ```bash
@@ -17,31 +19,29 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev`는 PostgreSQL과 RustFS는 컨테이너로 유지하고, Core는 Rust 소스 변경 시 자동 재빌드·재시작하며, Web은 Next.js HMR로 저장 즉시 갱신한다. 기본 접속 주소는 `http://127.0.0.1:3000`이다. 종료 후에도 데이터 컨테이너는 남아 다음 실행이 빠르며 `pnpm dev:stack:down`으로 정지할 수 있다.
+`pnpm dev` keeps PostgreSQL and RustFS in containers, rebuilds and restarts Core when Rust sources change, and refreshes Web through Next.js HMR. The app is at `http://127.0.0.1:3000`. Data containers stay after shutdown so the next start is faster. Stop them with `pnpm dev:stack:down`.
 
-Backend와 Web을 독립적으로 재시작하려면 터미널을 나누어 실행한다. 첫 번째 터미널의 Backend는 PostgreSQL과 RustFS를 준비하고 Core를 실행하며, 두 번째 터미널의 Web만 자유롭게 종료하거나 다시 켤 수 있다.
+To restart Backend and Web separately, use two terminals. The first prepares PostgreSQL, RustFS, and Core. The second can stop and start Web on its own.
 
 ```bash
-# 터미널 1: DB + 오브젝트 스토리지 + Core
+# Terminal 1: database, object storage, and Core
 pnpm dev:backend
 
-# 터미널 2: Next.js Web
+# Terminal 2: Next.js Web
 pnpm dev:web
 ```
 
-`pnpm dev:fe`는 `pnpm dev:web`과 같은 FE 전용 명령이다.
+`pnpm dev:fe` is the same Web-only command as `pnpm dev:web`.
 
-프로덕션 이미지와 동일한 경계로 PostgreSQL, RustFS, Core, Web을 함께 검증하려면:
+To exercise PostgreSQL, RustFS, Core, and Web with the same boundary as the production images:
 
 ```bash
 pnpm dev:stack
 ```
 
-최초 실행 시 `.local/nuriteo-compose`에 개발 전용 인증정보와 TLS가 생성된다.
-접속 정보는 `pnpm dev:stack:credentials`, 상태는 `pnpm dev:stack:status`로 확인한다.
-`pnpm dev:stack:down`은 데이터를 보존하며, `pnpm dev:stack:reset`만 데이터와 인증정보를 삭제한다.
+The first run writes development credentials and TLS under `.local/nuriteo-compose`. Read them with `pnpm dev:stack:credentials` and check status with `pnpm dev:stack:status`. `pnpm dev:stack:down` keeps data. `pnpm dev:stack:reset` deletes data and credentials.
 
-주요 검증 명령:
+Checks:
 
 ```bash
 pnpm check:workspace
@@ -51,6 +51,6 @@ pnpm test:workspace-runtime
 cargo test --workspace
 ```
 
-## 라이선스
+## License
 
-NURITEO는 [Apache License 2.0](./LICENSE)으로 배포한다.
+NURITEO is released under the [Apache License 2.0](./LICENSE).

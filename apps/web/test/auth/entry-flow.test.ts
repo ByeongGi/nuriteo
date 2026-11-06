@@ -98,6 +98,7 @@ function testAccessibleCredentialBoundary(): void {
   assert.match(form, /<label[^>]*htmlFor="password"[^>]*>비밀번호<\/label>/u);
   assert.match(form, /autoComplete="username"/u);
   assert.match(form, /autoComplete="current-password"/u);
+  assert.match(form, /<form[^>]*method="post"/u);
   assert.match(signInHook, /await createSession\(client, \{ email, password \}\);\s+await getCurrentUser\(client\);/u);
   assert.match(signInHook, /router\.replace\(destination\)/u);
   assert.match(form, /begin\?returnTo=\$\{encodeURIComponent\(destination\)\}/u);

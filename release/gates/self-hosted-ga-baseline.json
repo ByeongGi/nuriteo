@@ -18,7 +18,7 @@
   },
   "rcArtifact": {
     "manifestPath": "release/rc/1.0.0-rc.1.json",
-    "manifestSha256": "1c1fe03aa9b4738c772007eb1501356d365a29d02ce3f55b3ebb160041ffe9e8",
+    "manifestSha256": "81b74e07376d3458e2104e48035831fed75de822ffd60b695cec0b34824ce728",
     "artifactAggregateSha256": "eeee0bcd5b4577266e3b18f07c80523982fad5950f6b6ef58d5eb8a8c2f856ea",
     "images": {
       "server": "sha256:b5a5c9b60c6bc8998513dfe067350eab59da87b6b67ac1e5cc3368ff4bfa7239",
@@ -36,9 +36,9 @@
     "nonReproducibleRelease": "must-remain-zero"
   },
   "artifacts": [
-    { "path": "release/rc/1.0.0-rc.1.json", "sha256": "1c1fe03aa9b4738c772007eb1501356d365a29d02ce3f55b3ebb160041ffe9e8", "immutable": true },
+    { "path": "release/rc/1.0.0-rc.1.json", "sha256": "81b74e07376d3458e2104e48035831fed75de822ffd60b695cec0b34824ce728", "immutable": true },
     { "path": "docs/implementation/self-hosted/evidence/GATE-006.md", "sha256": "bac7bc34a4ad02d113c93950b82cff71942fe01c4064f0e8b91cfd153890ab31", "immutable": true },
-    { "path": "release/gates/self-hosted-upgrade-compatibility-v1.json", "sha256": "c5f5cb4f34be0d9723a22767e8d8de7bbc8225dcb363f3aa492d08617e599252", "immutable": true },
+    { "path": "release/gates/self-hosted-upgrade-compatibility-v1.json", "sha256": "b3f7a9404adf18fdee8c934a3eb52c6b6ff4c63e23783a81e241212c4b9d3df8", "immutable": true },
     { "path": "release/offline/inventory-v1.json", "sha256": "54747b8b25c64553e45161c35244dc3ad93927234b9e7f44a211b1baf975917a", "immutable": true },
     { "path": "deploy/compose/compose.yaml", "sha256": "d4045603428d01a6eaf281db85db6bbeff4f35c12dbf09b57c1016d4d22fe863", "immutable": false },
     { "path": "deploy/charts/nuriteo/Chart.yaml", "sha256": "0da862cf1d1e9f19be141cbf4b2e9756a4447527b08f33e86cdc0def9d7adfca", "immutable": false },

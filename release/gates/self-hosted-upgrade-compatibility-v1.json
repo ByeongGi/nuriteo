@@ -40,7 +40,7 @@
     "registryVersion": 4,
     "definitionSource": {
       "path": "crates/nuriteo-server/src/config/instance_settings.rs",
-      "baselineSha256": "e4c578329e0c4ea9e2b7cee3df1e77264b5d34afe6623bad4ab42d530523b0eb"
+      "baselineSha256": "1fe5f3f2747e09378ac50102b900310ccdc943c89c7a833fd6aa595ae5a3334f"
     },
     "persistedAuthority": "postgresql-after-bootstrap",
     "unknownKeyPolicy": "fail-closed",

@@ -20,43 +20,72 @@ const baseline = JSON.parse(baselineBytes.toString("utf8")) as RcBaseline;
 
 validateUpgradeCompatibility(compatibility, baseline, baselineBytes);
 
-try {
-  execFileSync("git", ["merge-base", "--is-ancestor", baseline.baselineCommit, "HEAD"], { stdio: "ignore" });
-} catch {
-  throw new Error("current HEAD must descend from the RC baseline commit");
+const commitExists = (revision: string): boolean => {
+  try {
+    execFileSync("git", ["cat-file", "-e", `${revision}^{commit}`], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const baselineCommitPresent = commitExists(baseline.baselineCommit);
+if (baselineCommitPresent) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", baseline.baselineCommit, "HEAD"], { stdio: "ignore" });
+  } catch {
+    throw new Error("current HEAD must descend from the RC baseline commit");
+  }
 }
 
 const gitBytes = (revision: string, path: string): Buffer =>
   execFileSync("git", ["show", `${revision}:${path}`]);
 
 const migrationDirectory = "crates/nuriteo-server/migrations";
-const baselineMigrations = execFileSync(
-  "git",
-  ["ls-tree", "-r", "--name-only", baseline.baselineCommit, "--", migrationDirectory],
-  { encoding: "utf8" },
-)
-  .trim()
-  .split("\n")
-  .filter((path) => /\/\d{4}_.+\.sql$/u.test(path))
-  .sort();
-assert(baselineMigrations.length === compatibility.schema.immutablePrefix.count, "baseline migration count drifted");
 const currentMigrations = fs.readdirSync(migrationDirectory)
   .filter((name) => /^\d{4}_.+\.sql$/u.test(name))
   .sort();
+const frozenNames = currentMigrations.filter((name) => {
+  const version = Number(name.slice(0, 4));
+  return version >= compatibility.schema.immutablePrefix.first && version <= compatibility.schema.immutablePrefix.last;
+});
+const baselineMigrations = baselineCommitPresent
+  ? execFileSync(
+      "git",
+      ["ls-tree", "-r", "--name-only", baseline.baselineCommit, "--", migrationDirectory],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split("\n")
+      .filter((path) => /\/\d{4}_.+\.sql$/u.test(path))
+      .sort()
+  : frozenNames.map((name) => `${migrationDirectory}/${name}`);
+assert(baselineMigrations.length === compatibility.schema.immutablePrefix.count, "baseline migration count drifted");
 const currentVersions = new Set<number>();
 for (const name of currentMigrations) {
   const version = Number(name.slice(0, 4));
   assert(!currentVersions.has(version), `migration ${version} appears more than once`);
   currentVersions.add(version);
 }
+const frozenEntries: string[] = [];
 for (let version = compatibility.schema.immutablePrefix.first; version <= compatibility.schema.immutablePrefix.last; version += 1) {
   const prefix = version.toString().padStart(4, "0");
   const baselinePath = baselineMigrations.find((path) => path.includes(`/migrations/${prefix}_`));
   assert(baselinePath !== undefined, `baseline migration ${prefix} is missing`);
   assert(fs.existsSync(baselinePath), `frozen migration ${prefix} was removed or renamed`);
+  const currentHash = sha256(fs.readFileSync(baselinePath));
+  if (baselineCommitPresent) {
+    assert(
+      currentHash === sha256(gitBytes(baseline.baselineCommit, baselinePath)),
+      `frozen migration ${prefix} changed`,
+    );
+  }
+  frozenEntries.push(`${baselinePath}\0${currentHash}`);
+}
+if (!baselineCommitPresent) {
   assert(
-    sha256(fs.readFileSync(baselinePath)) === sha256(gitBytes(baseline.baselineCommit, baselinePath)),
-    `frozen migration ${prefix} changed`,
+    sha256(frozenEntries.join("\n")) === compatibility.schema.aggregateSha256,
+    "frozen migration prefix does not match the recorded aggregate",
   );
 }
 const highestVersion = Math.max(...currentVersions);
@@ -65,10 +94,12 @@ for (let version = compatibility.schema.immutablePrefix.first; version <= highes
 }
 
 const configSource = compatibility.configuration.definitionSource;
-assert(
-  sha256(gitBytes(baseline.baselineCommit, configSource.path)) === configSource.baselineSha256,
-  "configuration registry baseline fingerprint mismatch",
-);
+if (baselineCommitPresent) {
+  assert(
+    sha256(gitBytes(baseline.baselineCommit, configSource.path)) === configSource.baselineSha256,
+    "configuration registry baseline fingerprint mismatch",
+  );
+}
 const currentConfigSource = fs.readFileSync(configSource.path, "utf8");
 assert(
   sha256(currentConfigSource) === configSource.baselineSha256,

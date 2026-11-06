@@ -55,9 +55,9 @@
   ],
   "supportBundleRequired": true,
   "responseTargets": {
-    "critical": "acknowledge within 4 hours",
-    "high": "acknowledge within 24 hours and triage within 48 hours",
-    "medium": "acknowledge within 48 hours and triage within 120 hours",
-    "low": "acknowledge within 120 hours and triage within 240 hours"
+    "critical": "acknowledge within 72 hours",
+    "high": "acknowledge within 168 hours and triage within 336 hours",
+    "medium": "acknowledge within 336 hours and triage within 720 hours",
+    "low": "acknowledge within 720 hours and triage within 1440 hours"
   }
 }
