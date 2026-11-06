@@ -170,7 +170,7 @@ SDK 배포 채널을 되돌리는 것과 인스턴스 데이터베이스를 되�
 
 ### 개요와 실행 예시 `/sdk`
 
-문서 사이트의 `/sdk`는 설명만 두지 않고, 그 페이지 안에서 `@nuriteo/sdk`의 `createContainer()`로 시스템 워커와 프로세스 워커를 부팅한다. 예시는 `entrypoint: "fs-smoke"`로 워크스페이스 파일에 `hello`를 쓰고 다시 읽어 화면에 프로토콜 버전, 상태, 읽은 값, 크기를 보여 준다. 동적 JavaScript 평가는 런타임이 막으므로, 예시 소스를 방문자 입력으로 실행하지 않는다.
+문서 사이트의 `/sdk`는 편집할 수 있는 예시를 실행한다. 방문자가 고친 코드는 이 페이지에서 `createContainer`와 `runtime`을 받은 비동기 함수로 돈다. 기본 예시는 시스템 워커와 프로세스 워커를 부팅하고 `entrypoint: "fs-smoke"`로 워크스페이스 파일에 `hello`를 쓰고 다시 읽어, 반환한 객체를 보여 준다. 런타임 안의 임의 JavaScript 평가는 막혀 있으므로 `container.run`에 넣은 소스 문자열은 실행되지 않는다. 페이지는 실행이 끝난 컨테이너를 닫는다.
 
 페이지를 열 때는 Cross-Origin Isolation이 필요하다. 개발 서버는 `Cross-Origin-Embedder-Policy: require-corp`와 `Cross-Origin-Opener-Policy: same-origin`을 붙인다. 워커와 WASM은 `apps/web`의 런타임 자산 빌드를 `apps/docs/public/runtime`에 만들어 같은 출처로 제공한다.
 

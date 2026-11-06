@@ -1,38 +1,41 @@
-import { createContainer, protocolVersion } from "@nuriteo/sdk";
+import { createContainer, type Nuriteo } from "@nuriteo/sdk";
 
-export interface SdkExampleResult {
-  protocolVersion: number;
-  status: string;
-  value: unknown;
-  size: unknown;
+export interface SdkRuntimeUrls {
+  systemWorkerUrl: URL;
+  processWorkerUrl: URL;
+  systemWasmUrl: URL;
 }
 
 interface RuntimeManifest {
   revision: string;
 }
 
-export async function runSdkExample(): Promise<SdkExampleResult> {
+const AsyncFunction = Object.getPrototypeOf(async function () {
+  return undefined;
+}).constructor as new (...args: string[]) => (
+  createContainer: (options?: Record<string, unknown>) => Nuriteo,
+  runtime: SdkRuntimeUrls
+) => Promise<unknown>;
+
+export async function runSdkExample(source: string): Promise<unknown> {
   const manifestResponse = await fetch("/runtime/manifest.json");
   if (!manifestResponse.ok) throw new Error("런타임 자산 매니페스트를 읽지 못했습니다.");
   const manifest = await manifestResponse.json() as RuntimeManifest;
   const base = new URL(`/runtime/${manifest.revision}/`, location.origin);
-  const container = createContainer({
+  const runtime: SdkRuntimeUrls = {
     systemWorkerUrl: new URL("system-worker.js", base),
     processWorkerUrl: new URL("process-worker.js", base),
     systemWasmUrl: new URL("system.wasm", base)
-  });
+  };
+  const opened: Nuriteo[] = [];
+  const openContainer = (options: Record<string, unknown> = {}) => {
+    const container = createContainer({ ...runtime, ...options });
+    opened.push(container);
+    return container;
+  };
   try {
-    const ready = await container.boot({ timeoutMs: 20_000 });
-    const run = await container.run("", { entrypoint: "fs-smoke", timeoutMs: 20_000 });
-    if (!run.ok) throw new Error(run.error || "런타임 실행이 실패했습니다.");
-    const exports = run.exports as { value?: unknown; size?: unknown } | undefined;
-    return {
-      protocolVersion: ready.protocolVersion || protocolVersion,
-      status: container.status,
-      value: exports?.value,
-      size: exports?.size
-    };
+    return await new AsyncFunction("createContainer", "runtime", source)(openContainer, runtime);
   } finally {
-    await container.teardown();
+    await Promise.all(opened.map((container) => container.teardown().catch(() => undefined)));
   }
 }

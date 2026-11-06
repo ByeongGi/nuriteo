@@ -123,9 +123,18 @@ h1 {
   border: 1px solid var(--n-color-border-default);
   border-radius: 0.75rem;
   background: var(--n-color-bg-subtle);
+  color: var(--n-color-fg-default);
   font-family: var(--n-font-family-mono);
   font-size: var(--n-font-size-sm);
   line-height: 1.5;
+}
+
+.editor {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 16rem;
+  resize: vertical;
 }
 
 .result {
