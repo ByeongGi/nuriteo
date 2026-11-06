@@ -1,6 +1,6 @@
 import type * as Monaco from "monaco-editor";
 
-import type { EditorThemePreference } from "#src/projects/project-editor-theme.ts";
+import type { EditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
 
 export const STACKBLITZ_DARK_THEME = "nuriteo-stackblitz-dark";
 export const STACKBLITZ_LIGHT_THEME = "nuriteo-stackblitz-light";

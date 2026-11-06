@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import { ProjectIdeShell } from "../../src/projects/project-ide-shell.tsx";
+import { ProjectIdeShell } from "../../src/projects/_components/project-ide-shell.tsx";
 import type {
   RuntimeAdapter,
   RuntimeDiagnostic,

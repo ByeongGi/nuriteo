@@ -1,3 +1,7 @@
 export {
-  ApiError
+  ApiError,
+  ApiInvalidResponseError,
+  ApiResponseTooLargeError,
+  ApiTimeoutError,
+  ApiTransportError
 } from "@nuriteo/api-client";

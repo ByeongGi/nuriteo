@@ -67,7 +67,12 @@ async function testHistoryForwarding(): Promise<void> {
 }
 
 function testHistoryUiContract(): void {
-  const panel = read("src/projects/project-history-panel.tsx");
+  const panel = [
+    read("src/projects/_components/project-history-panel.tsx"),
+    read("src/projects/_hooks/use-project-history-panel.ts"),
+    read("src/projects/_utils/project-history.ts"),
+    read("src/projects/_schema/project-history.ts")
+  ].join("\n");
   const shell = readStudioShellSources();
   const confirmationDialog = read("src/components/ui/confirmation-dialog.tsx");
   assert.match(panel, /<ConfirmationDialog/u);

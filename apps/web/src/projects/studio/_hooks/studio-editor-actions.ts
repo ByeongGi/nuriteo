@@ -3,12 +3,12 @@
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useEffect } from "react";
 
-import { parseEditorThemePreference, writeEditorThemePreference } from "#src/projects/project-editor-theme.ts";
-import { planProjectContentReplace } from "#src/projects/studio/content-replace.ts";
-import { closeEditorFile, closeSavedEditorTabs, createEditorTabs, forgetEditorDraft, forgetEditorDraftPrefix, noteEditorDraft, openEditorFile, relocateEditorDraft, relocateEditorPath, renameEditorDraft, renameEditorPath, settleEditorDraft } from "#src/projects/studio/editor-tabs.ts";
-import type { EditorOpenMode } from "#src/projects/studio/editor-tabs.ts";
-import { visibleStudioExplorerFiles } from "#src/projects/studio/explorer-files.ts";
-import { PREVIEW_APPLY_DELAY_MS, type FileOperation, type StudioShellSession } from "#src/projects/studio/studio-shell-session.ts";
+import { parseEditorThemePreference, writeEditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
+import { planProjectContentReplace } from "@/projects/studio/_utils/content-replace.ts";
+import { closeEditorFile, closeSavedEditorTabs, createEditorTabs, forgetEditorDraft, forgetEditorDraftPrefix, noteEditorDraft, openEditorFile, relocateEditorDraft, relocateEditorPath, renameEditorDraft, renameEditorPath, settleEditorDraft } from "@/projects/studio/_utils/editor-tabs.ts";
+import type { EditorOpenMode } from "@/projects/studio/_utils/editor-tabs.ts";
+import { visibleStudioExplorerFiles } from "@/projects/studio/_utils/explorer-files.ts";
+import { PREVIEW_APPLY_DELAY_MS, type FileOperation, type StudioShellSession } from "@/projects/studio/_utils/studio-shell-session.ts";
 import type { RuntimeAdapter } from "#src/runtime/runtime-adapter.ts";
 import { previewModuleRefreshPath } from "#src/runtime/preview-import-version.ts";
 

@@ -4,7 +4,7 @@ import { listDirectProjectRoles } from "@/services/projects/api.ts";
 
 import type { Metadata } from "next";
 
-import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
+import { ProjectDashboard } from "@/projects/_components/project-dashboard.tsx";
 import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
 import { ProjectSettingsNotice, ProjectSettingsPanel, ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
 

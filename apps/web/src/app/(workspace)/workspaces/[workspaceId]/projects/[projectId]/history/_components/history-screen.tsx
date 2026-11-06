@@ -4,9 +4,9 @@ import type { Project } from "@nuriteo/api-client";
 
 import { useHistoryScreen } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/history/_hooks/use-history-screen.ts";
 import { ProjectSettingsSection } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/settings/_components/project-settings-section.tsx";
-import { ProjectHistoryPanel } from "@/projects/project-history-panel.tsx";
+import { ProjectHistoryPanel } from "@/projects/_components/project-history-panel.tsx";
 
-import type { ProjectHistoryState } from "@/projects/project-history-panel.tsx";
+import type { ProjectHistoryState } from "@/projects/_components/project-history-panel.tsx";
 
 export function ProjectHistoryScreen({ initialState, project, projectEtag }: Readonly<{ initialState: ProjectHistoryState; project: Project; projectEtag: string }>) {
   const { currentProject, etag, reloadProject, updateHead } = useHistoryScreen(project, projectEtag);

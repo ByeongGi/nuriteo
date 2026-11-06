@@ -9,7 +9,7 @@ const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../.
 const dialog = read("src/components/ui/confirmation-dialog.tsx");
 const guard = read("src/lib/use-unsaved-changes-guard.ts");
 const ide = readStudioShellSources();
-const fileSearch = read("src/projects/use-project-file-search.ts");
+const fileSearch = read("src/projects/_hooks/use-project-file-search.ts");
 
 assert.match(dialog, /@base-ui\/react\/alert-dialog/u);
 assert.match(dialog, /<AlertDialog\.Root/u);

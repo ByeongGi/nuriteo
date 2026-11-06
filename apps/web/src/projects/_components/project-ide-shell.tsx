@@ -5,16 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
-import { readEditorThemePreference } from "#src/projects/project-editor-theme.ts";
-import type { EditorThemePreference } from "#src/projects/project-editor-theme.ts";
-import { createEditorDraftState, createEditorTabs } from "#src/projects/studio/editor-tabs.ts";
-import type { EditorDraftState, EditorTabs } from "#src/projects/studio/editor-tabs.ts";
-import type { StudioConsoleEntry } from "#src/projects/studio/preview-console.ts";
-import { visibleStudioExplorerFiles } from "#src/projects/studio/explorer-files.ts";
-import { useStudioEditorActions } from "#src/projects/studio/studio-editor-actions.ts";
-import { ideStyles } from "#src/projects/studio/studio-ide-styles.ts";
-import { workbenchLayoutClass } from "#src/projects/studio/studio-shell-labels.ts";
-import { StudioActivityBar, StudioEditorColumn, StudioFileSidebar, StudioQuickOpen, StudioShellHeader } from "#src/projects/studio/studio-shell-chrome.tsx";
+import { readEditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
+import type { EditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
+import { createEditorDraftState, createEditorTabs } from "@/projects/studio/_utils/editor-tabs.ts";
+import type { EditorDraftState, EditorTabs } from "@/projects/studio/_utils/editor-tabs.ts";
+import type { StudioConsoleEntry } from "@/projects/studio/_utils/preview-console.ts";
+import { visibleStudioExplorerFiles } from "@/projects/studio/_utils/explorer-files.ts";
+import { useStudioEditorActions } from "@/projects/studio/_hooks/studio-editor-actions.ts";
+import { ideStyles } from "@/projects/studio/_components/studio-ide-styles.ts";
+import { workbenchLayoutClass } from "@/projects/studio/_utils/studio-shell-labels.ts";
+import { StudioActivityBar, StudioEditorColumn, StudioFileSidebar, StudioQuickOpen, StudioShellHeader } from "@/projects/studio/_components/studio-shell-chrome.tsx";
 import {
   EMPTY_RUNTIME_STATE,
   EMPTY_WORKSPACE_FILES,
@@ -26,14 +26,14 @@ import {
   type EditorPositionRequest,
   type FileOperation,
   type SidebarPanel
-} from "#src/projects/studio/studio-shell-session.ts";
-import { StudioPreviewConsole, StudioPreviewConsoleActions, StudioPreviewPanel, StudioPreviewPorts, useStudioPreview } from "#src/projects/studio/studio-preview-session.tsx";
-import { StudioServerSaveFailure, StudioWorkspaceRecovery, bindStudioServerSave } from "#src/projects/studio/studio-server-save.tsx";
-import { StudioTerminalDock, bindStudioTerminal } from "#src/projects/studio/studio-terminal-session.tsx";
-import { StudioWorkspaceStart, bindStudioWorkspace } from "#src/projects/studio/studio-workspace-session.tsx";
+} from "@/projects/studio/_utils/studio-shell-session.ts";
+import { StudioPreviewConsole, StudioPreviewConsoleActions, StudioPreviewPanel, StudioPreviewPorts, useStudioPreview } from "@/projects/studio/_components/studio-preview-session.tsx";
+import { StudioServerSaveFailure, StudioWorkspaceRecovery, bindStudioServerSave } from "@/projects/studio/_components/studio-server-save.tsx";
+import { StudioTerminalDock, bindStudioTerminal } from "@/projects/studio/_components/studio-terminal-session.tsx";
+import { StudioWorkspaceStart, bindStudioWorkspace } from "@/projects/studio/_components/studio-workspace-session.tsx";
 import { useUnsavedChangesGuard } from "#src/lib/use-unsaved-changes-guard.ts";
-import { useProjectContentSearch, useProjectFileSearch } from "#src/projects/use-project-file-search.ts";
-import { useProjectTerminalSessions } from "#src/projects/use-project-terminal-sessions.ts";
+import { useProjectContentSearch, useProjectFileSearch } from "@/projects/_hooks/use-project-file-search.ts";
+import { useProjectTerminalSessions } from "@/projects/_hooks/use-project-terminal-sessions.ts";
 import type { RuntimeAdapter, RuntimeRecoveryActionKind, RuntimeViewState, RuntimeWorkspaceState } from "#src/runtime/runtime-adapter.ts";
 import { createPreviewHistory } from "#src/runtime/preview-address.ts";
 import type { PreviewHistory } from "#src/runtime/preview-address.ts";

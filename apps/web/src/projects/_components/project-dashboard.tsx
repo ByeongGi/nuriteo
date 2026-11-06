@@ -1,48 +1,41 @@
 "use client";
 
-import {
-  archiveProject,
-  changeDirectProjectRole,
-  createProject,
-  deleteProject,
-  grantDirectProjectRole,
-  listProjects,
-  renameProject,
-  restoreProject,
-  revokeDirectProjectRole
-} from "@nuriteo/api-client";
 import type {
   DirectProjectRole,
-  OrganizationRole,
   Project,
   ProjectCollection,
   ProjectListState,
-  ProjectOwner,
-  ProjectRole,
-  ProjectTemplateId,
   Workspace
 } from "@nuriteo/api-client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
 import { tv } from "tailwind-variants";
 
-import { buttonVariants } from "#src/components/ui/button.styles.ts";
-import { Button } from "#src/components/ui/button.tsx";
-import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "#src/components/ui/collapsible.tsx";
-import { ConfirmationDialog } from "#src/components/ui/confirmation-dialog.tsx";
-import { SelectField, TextField } from "#src/components/ui/field.tsx";
-import { PageHeader } from "#src/components/ui/page-header.tsx";
-import { SearchField } from "#src/components/ui/search-field.tsx";
-import { SettingsGroup, SettingsRow } from "#src/components/ui/settings-group.tsx";
-import { projectError, readCsrfCredential } from "#src/lib/api/browser-security.ts";
-import type { CollaborationOperation } from "#src/lib/api/browser-security.ts";
-import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
-import { useExclusiveMutation } from "#src/lib/use-exclusive-mutation.ts";
-import { ProjectGitPanel } from "#src/projects/project-git-panel.tsx";
-import type { ProjectGitState } from "#src/projects/project-git-panel.tsx";
-import { ProjectTemplatePicker } from "#src/projects/project-template-picker.tsx";
+import { buttonVariants } from "@/components/ui/button.styles.ts";
+import { Button } from "@/components/ui/button.tsx";
+import { CollapsibleContent, CollapsiblePanel, CollapsibleRoot, CollapsibleTrigger } from "@/components/ui/collapsible.tsx";
+import { ConfirmationDialog } from "@/components/ui/confirmation-dialog.tsx";
+import { SelectField, TextField } from "@/components/ui/field.tsx";
+import { PageHeader } from "@/components/ui/page-header.tsx";
+import { SearchField } from "@/components/ui/search-field.tsx";
+import { SettingsGroup, SettingsRow } from "@/components/ui/settings-group.tsx";
+import { useProjectDashboard } from "@/projects/_hooks/use-project-dashboard.ts";
+import { ProjectGitPanel } from "@/projects/_components/project-git-panel.tsx";
+import type { ProjectGitState } from "@/projects/_components/project-git-panel.tsx";
+import { ProjectTemplatePicker } from "@/projects/_components/project-template-picker.tsx";
+import {
+  directGrantMemberLabel,
+  organizationMemberLabel,
+  organizationRoleLabel,
+  projectDetailHref,
+  projectHref,
+  projectInitial,
+  projectRoleLabel,
+  projectSettingsCopy,
+  projectStateLabel,
+  projectStudioHref,
+  roleValue
+} from "@/projects/_utils/project-dashboard.ts";
+import type { OrganizationMemberOption } from "@/projects/_utils/project-dashboard.ts";
 
 const projectDashboardStyles = tv({
   slots: {
@@ -132,56 +125,44 @@ export interface ProjectDashboardProps {
   readonly view?: "collection" | "create";
 }
 
-interface OrganizationMemberOption {
-  readonly userId: string;
-  readonly displayName: string;
-  readonly role: OrganizationRole;
-}
-
-const EMPTY_ORGANIZATION_MEMBERS: readonly OrganizationMemberOption[] = [];
-
 export function ProjectDashboard(props: ProjectDashboardProps) {
-  const router = useRouter();
-  const mutation = useExclusiveMutation();
-  const [projects, setProjects] = useState<readonly Project[]>(props.initialCollection?.items ?? []);
-  const [cursor, setCursor] = useState(props.initialCollection?.nextCursor ?? null);
-  const [project, setProject] = useState(props.initialProject);
-  const [etag, setEtag] = useState(props.initialProjectEtag);
-  const [grants, setGrants] = useState<readonly DirectProjectRole[]>(props.initialGrants ?? []);
-  const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [projectQuery, setProjectQuery] = useState("");
-  const deferredProjectQuery = useDeferredValue(projectQuery);
-  const [roleStatus, setRoleStatus] = useState<string>();
-  const [error, setError] = useState<string>();
-  const [needsReconciliation, setNeedsReconciliation] = useState(false);
-  const [confirmingProjectDelete, setConfirmingProjectDelete] = useState(false);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const paginationAbort = useRef<AbortController | undefined>(undefined);
-  const workspace = props.workspaces.find((item) => item.storageScopeId === props.selectedScope);
-  const owner: ProjectOwner | undefined = workspace === undefined
-    ? undefined
-    : { ownerType: workspace.ownerType, ownerId: workspace.ownerId };
-  const state = props.selectedState ?? "active";
-  const normalizedProjectQuery = deferredProjectQuery.trim().toLocaleLowerCase("ko-KR");
-  const visibleProjects = useMemo(() => normalizedProjectQuery === ""
-    ? projects
-    : projects.filter((item) => `${item.name} ${item.slug}`.toLocaleLowerCase("ko-KR").includes(normalizedProjectQuery)),
-  [normalizedProjectQuery, projects]);
-  const organizationMembers = props.organizationMembers ?? EMPTY_ORGANIZATION_MEMBERS;
   const {
+    addRole,
+    changeLifecycle,
+    confirmingProjectDelete,
+    create,
+    cursor,
+    error,
     grantedUserIds,
+    grants,
     hasAmbiguousMembers,
     hasAvailableMembers,
     hasUniqueMemberLabel,
-    memberByUserId
-  } = useMemo(
-    () => createProjectRoleDirectory(organizationMembers, grants),
-    [grants, organizationMembers]
-  );
-  const isSearchPending = projectQuery !== deferredProjectQuery;
-  const projectCountLabel = cursor === null
-    ? `${projects.length}개 프로젝트`
-    : `${projects.length}개 이상 프로젝트`;
+    isLoadingMore,
+    isSearchPending,
+    loadMore,
+    memberByUserId,
+    mutation,
+    needsReconciliation,
+    normalizedProjectQuery,
+    organizationMembers,
+    owner,
+    project,
+    projectCountLabel,
+    projectQuery,
+    remove,
+    rename,
+    roleStatus,
+    router,
+    selectedMemberId,
+    setConfirmingProjectDelete,
+    setProjectQuery,
+    setSelectedMemberId,
+    state,
+    updateRole,
+    visibleProjects,
+    workspace
+  } = useProjectDashboard(props);
   const detailSection = props.detailSection ?? "all";
   const styles = projectDashboardStyles({
     detailMode: project !== undefined,
@@ -189,155 +170,6 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
   });
   const sectionCopy = projectSettingsCopy(detailSection);
   const view = props.view ?? "collection";
-
-  useEffect(() => () => paginationAbort.current?.abort(), []);
-  useEffect(() => {
-    setProjects(props.initialCollection?.items ?? []);
-    setCursor(props.initialCollection?.nextCursor ?? null);
-    setProject(props.initialProject);
-    setEtag(props.initialProjectEtag);
-    setGrants(props.initialGrants ?? []);
-    setSelectedMemberId("");
-    setRoleStatus(undefined);
-    setNeedsReconciliation(false);
-    setConfirmingProjectDelete(false);
-  }, [props.initialCollection, props.initialGrants, props.initialProject, props.initialProjectEtag]);
-
-  async function mutate(operation: CollaborationOperation, action: () => Promise<void>) {
-    await mutation.run(async () => {
-      setError(undefined);
-      setNeedsReconciliation(false);
-      try {
-        await action();
-      } catch (cause) {
-        const failure = projectError(cause, operation);
-        setError(failure.message);
-        setNeedsReconciliation(failure.reconcile);
-      }
-    });
-  }
-
-  async function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (owner === undefined || workspace === undefined) return;
-    const data = new FormData(event.currentTarget);
-    await mutate("project-create", async () => {
-      const result = await createProject(createBrowserApiClient(), {
-        owner,
-        slug: String(data.get("slug") ?? ""),
-        name: String(data.get("name") ?? ""),
-        templateId: projectTemplateId(data.get("templateId"))
-      }, { csrfToken: readCsrfCredential() });
-      router.replace(projectStudioHref(workspace.storageScopeId, result.data.id));
-    });
-  }
-
-  async function rename(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (owner === undefined || project === undefined || etag === undefined) return;
-    const name = String(new FormData(event.currentTarget).get("name") ?? "");
-    await mutate("project-profile", async () => {
-      const result = await renameProject(createBrowserApiClient(), {
-        owner, projectId: project.id, etag, name
-      }, { csrfToken: readCsrfCredential() });
-      setProject(result.data);
-      setEtag(result.etag);
-      setProjects((items) => items.map((item) => item.id === result.data.id ? result.data : item));
-    });
-  }
-
-  async function changeLifecycle(action: "archive" | "restore") {
-    if (owner === undefined || project === undefined || etag === undefined) return;
-    await mutate("project-lifecycle", async () => {
-      const result = await (action === "archive" ? archiveProject : restoreProject)(
-        createBrowserApiClient(),
-        { owner, projectId: project.id, etag },
-        { csrfToken: readCsrfCredential() }
-      );
-      setProject(result.data);
-      setEtag(result.etag);
-      setProjects((items) => visibleInState(result.data, state)
-        ? upsertProject(items, result.data)
-        : items.filter((item) => item.id !== result.data.id));
-    });
-  }
-
-  async function remove() {
-    if (owner === undefined || project === undefined || etag === undefined || workspace === undefined) return;
-    setConfirmingProjectDelete(false);
-    await mutate("project-delete", async () => {
-      await deleteProject(createBrowserApiClient(), { owner, projectId: project.id, etag, name: project.name }, { csrfToken: readCsrfCredential() });
-      router.replace(projectHref(workspace.storageScopeId, state));
-    });
-  }
-
-  async function addRole(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (owner?.ownerType !== "organization" || project === undefined || etag === undefined) return;
-    const data = new FormData(event.currentTarget);
-    const selectedMember = organizationMembers.find(
-      (member) => member.userId === selectedMemberId
-    );
-    if (selectedMember === undefined || selectedMember.role === "owner" ||
-      !hasUniqueMemberLabel(selectedMember) || grantedUserIds.has(selectedMember.userId)) {
-      setSelectedMemberId("");
-      return;
-    }
-    const userId = selectedMember.userId;
-    const role = roleValue(data.get("role"));
-    setRoleStatus(undefined);
-    await mutate("project-role", async () => {
-      const result = await grantDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId, role }, { csrfToken: readCsrfCredential() });
-      if (result.data.grant !== null) setGrants((items) => [...items, result.data.grant!]);
-      setSelectedMemberId("");
-      setEtag(result.etag);
-      setProject((current) => current === undefined ? current : { ...current, version: result.data.projectVersion });
-      setRoleStatus(`${selectedMember.displayName} 멤버에게 ${projectRoleLabel(role)} 권한을 부여했습니다.`);
-    });
-  }
-
-  async function updateRole(grant: DirectProjectRole, nextRole?: ProjectRole) {
-    if (owner?.ownerType !== "organization" || project === undefined || etag === undefined) return;
-    const member = memberByUserId.get(grant.userId);
-    const memberIsActionable = member !== undefined && hasUniqueMemberLabel(member);
-    if (nextRole !== undefined && !memberIsActionable) return;
-    setRoleStatus(undefined);
-    await mutate("project-role", async () => {
-      const result = nextRole === undefined
-        ? await revokeDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId: grant.userId }, { csrfToken: readCsrfCredential() })
-        : await changeDirectProjectRole(createBrowserApiClient(), { owner, projectId: project.id, etag, userId: grant.userId, role: nextRole }, { csrfToken: readCsrfCredential() });
-      setGrants((items) => result.data.grant === null
-        ? items.filter((item) => item.userId !== grant.userId)
-        : items.map((item) => {
-          if (item.userId === grant.userId) return (result.data.grant!);
-          return (item);
-        }));
-      setEtag(result.etag);
-      setProject((current) => current === undefined ? current : { ...current, version: result.data.projectVersion });
-      setRoleStatus(nextRole === undefined
-        ? `${member?.displayName ?? "확인할 수 없는 조직 멤버"} 멤버의 직접 역할을 제거했습니다.`
-        : `${member?.displayName ?? "조직 멤버"} 멤버에게 ${projectRoleLabel(nextRole)} 권한을 부여했습니다.`);
-    });
-  }
-
-  async function loadMore() {
-    if (owner === undefined || cursor === null || isLoadingMore) return;
-    paginationAbort.current?.abort();
-    const controller = new AbortController();
-    paginationAbort.current = controller;
-    setIsLoadingMore(true);
-    setError(undefined);
-    try {
-      const result = await listProjects(createBrowserApiClient(), { owner, state, pageSize: 50, cursor }, { signal: controller.signal });
-      setProjects((items) => [...items, ...result.data.items]);
-      setCursor(result.data.nextCursor);
-    } catch (cause) {
-      setError(projectError(cause, "project-profile").message);
-    } finally {
-      if (paginationAbort.current === controller) paginationAbort.current = undefined;
-      setIsLoadingMore(false);
-    }
-  }
 
   function directGrantList() {
     if (grants.length === 0) return (<p className={styles.accessHint()}>직접 부여된 역할이 없습니다. 팀 역할 또는 조직 기본 권한이 적용될 수 있습니다.</p>);
@@ -542,131 +374,4 @@ export function ProjectDashboard(props: ProjectDashboardProps) {
       )}
     </main>
   );
-}
-
-function projectStateLabel(state: ProjectListState): string {
-  if (state === "archived") return "보관됨";
-  if (state === "all") return "전체";
-  return "활성";
-}
-
-function projectSettingsCopy(section: NonNullable<ProjectDashboardProps["detailSection"]>): {
-  readonly description: string;
-  readonly title: string;
-} {
-  if (section === "general") return { title: "일반 설정", description: "이름과 기본 표시 정보를 관리합니다." };
-  if (section === "access") return { title: "접근 권한", description: "조직 멤버에게 직접 부여한 역할을 관리합니다." };
-  if (section === "danger") return { title: "위험 영역", description: "보관, 복원과 영구 삭제 작업을 관리합니다." };
-  return { title: "프로젝트 설정", description: "이름, Git, 접근 권한과 보관 상태를 관리합니다." };
-}
-
-function projectInitial(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? "P";
-}
-
-function roleValue(value: FormDataEntryValue | null): ProjectRole {
-  return value === "admin" || value === "write" ? value : "read";
-}
-
-function projectTemplateId(value: FormDataEntryValue | null): ProjectTemplateId {
-  if (value === "vite-react" || value === "next-app") return value;
-  throw new TypeError("프로젝트 시작 템플릿을 선택하세요.");
-}
-
-function organizationMemberLabel(member: OrganizationMemberOption): string {
-  return `${member.displayName} · 조직 ${organizationRoleLabel(member.role)}`;
-}
-
-function createProjectRoleDirectory(
-  members: readonly OrganizationMemberOption[],
-  grants: readonly DirectProjectRole[]
-) {
-  const grantedUserIds = new Set(grants.map((grant) => grant.userId));
-  const memberByUserId = new Map<string, OrganizationMemberOption>();
-  const memberLabelCounts = new Map<string, number>();
-
-  for (const member of members) {
-    memberByUserId.set(member.userId, member);
-    const label = organizationMemberLabel(member);
-    memberLabelCounts.set(label, (memberLabelCounts.get(label) ?? 0) + 1);
-  }
-
-  const hasUniqueMemberLabel = (member: OrganizationMemberOption): boolean =>
-    memberLabelCounts.get(organizationMemberLabel(member)) === 1;
-  let hasAvailableMembers = false;
-  let hasAmbiguousMembers = false;
-
-  for (const member of members) {
-    if (member.role === "owner") continue;
-    const hasUniqueLabel = hasUniqueMemberLabel(member);
-    if (!hasUniqueLabel) hasAmbiguousMembers = true;
-    if (hasUniqueLabel && !grantedUserIds.has(member.userId)) hasAvailableMembers = true;
-  }
-
-  return {
-    grantedUserIds,
-    hasAmbiguousMembers,
-    hasAvailableMembers,
-    hasUniqueMemberLabel,
-    memberByUserId
-  };
-}
-
-function directGrantMemberLabel(
-  grant: DirectProjectRole,
-  grantIndex: number,
-  grants: readonly DirectProjectRole[],
-  memberByUserId: ReadonlyMap<string, OrganizationMemberOption>,
-  hasUniqueMemberLabel: (member: OrganizationMemberOption) => boolean
-): string {
-  const member = memberByUserId.get(grant.userId);
-  if (member !== undefined && hasUniqueMemberLabel(member)) return organizationMemberLabel(member);
-  const baseLabel = member === undefined
-    ? "확인할 수 없는 조직 멤버"
-    : `${organizationMemberLabel(member)} · 이름 중복`;
-  const belongsToSameGroup = (candidate: DirectProjectRole): boolean => {
-    const candidateMember = memberByUserId.get(candidate.userId);
-    return member === undefined
-      ? candidateMember === undefined
-      : candidateMember !== undefined && organizationMemberLabel(candidateMember) === organizationMemberLabel(member);
-  };
-  const ordinal = grants.slice(0, grantIndex + 1).filter(belongsToSameGroup).length;
-  const total = grants.filter(belongsToSameGroup).length;
-  return `${baseLabel} · 역할 ${ordinal}/${total}`;
-}
-
-function organizationRoleLabel(role: OrganizationRole): string {
-  return role === "owner" ? "소유자" : "멤버";
-}
-
-function projectRoleLabel(role: ProjectRole): string {
-  if (role === "admin") return "관리";
-  if (role === "write") return "쓰기";
-  return "읽기";
-}
-
-function projectHref(scope: string, state: ProjectListState): string {
-  const query = new URLSearchParams({ state });
-  return `/workspaces/${encodeURIComponent(scope)}?${query.toString()}`;
-}
-
-function projectDetailHref(scope: string, state: ProjectListState, projectId: string): string {
-  return `/workspaces/${encodeURIComponent(scope)}/projects/${encodeURIComponent(projectId)}/settings/general?${new URLSearchParams({ state }).toString()}`;
-}
-
-function projectStudioHref(scope: string, projectId: string): string {
-  return `/workspaces/${encodeURIComponent(scope)}/projects/${encodeURIComponent(projectId)}/studio`;
-}
-
-function visibleInState(project: Project, state: ProjectListState): boolean {
-  return state === "all" || project.state === state;
-}
-
-function upsertProject(projects: readonly Project[], project: Project): readonly Project[] {
-  return projects.some((item) => item.id === project.id)
-    ? projects.map((item) => {
-      if (item.id === project.id) return (project);
-      return (item);
-    })
-    : [...projects, project];
 }

@@ -401,10 +401,15 @@ function testProjectSourceContracts() {
     true,
     "workspace-first IA requires a canonical Studio route"
   );
-  const dashboard = read("src/projects/project-dashboard.tsx");
+  const dashboard = [
+    read("src/projects/_components/project-dashboard.tsx"),
+    read("src/projects/_hooks/use-project-dashboard.ts"),
+    read("src/projects/_utils/project-dashboard.ts"),
+    read("src/projects/_schema/project-dashboard.ts")
+  ].join("\n");
   const ideShell = readStudioShellSources();
-  const terminalView = read("src/projects/project-terminal-view.tsx");
-  const templatePicker = read("src/projects/project-template-picker.tsx");
+  const terminalView = read("src/projects/_components/project-terminal-view.tsx");
+  const templatePicker = read("src/projects/_components/project-template-picker.tsx");
   const legacyPage = read("src/app/(authenticated)/projects/page.tsx");
   const legacyProjectPage = read("src/app/(authenticated)/projects/[projectId]/page.tsx");
   const legacySettingsPage = read("src/app/(authenticated)/projects/[projectId]/settings/page.tsx");

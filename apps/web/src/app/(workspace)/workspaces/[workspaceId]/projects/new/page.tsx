@@ -3,7 +3,7 @@ import { getCurrentWorkspaces } from "@/services/workspaces/api.ts";
 import type { Metadata } from "next";
 import { redirect, unstable_rethrow } from "next/navigation";
 
-import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
+import { ProjectDashboard } from "@/projects/_components/project-dashboard.tsx";
 import { EntryUnavailable } from "#src/app/_components/entry-unavailable.tsx";
 import { isExplicitlySignedOut, safeRequestReference } from "#src/lib/api/presentation-error.ts";
 import { createServerApiClient } from "#src/lib/api/server-client.ts";

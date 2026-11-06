@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { planProjectContentReplace } from "../../src/projects/studio/content-replace.ts";
+import { planProjectContentReplace } from "../../src/projects/studio/_utils/content-replace.ts";
 
 const files = [
   { kind: "text", path: "src/App.tsx" },

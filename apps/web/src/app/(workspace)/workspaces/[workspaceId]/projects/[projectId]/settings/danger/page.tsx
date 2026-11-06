@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ProjectDashboard } from "#src/projects/project-dashboard.tsx";
+import { ProjectDashboard } from "@/projects/_components/project-dashboard.tsx";
 import { loadProjectContext } from "@/app/(workspace)/workspaces/[workspaceId]/projects/[projectId]/_utils/project-context.ts";
 
 export const metadata: Metadata = { title: "프로젝트 위험 영역" };

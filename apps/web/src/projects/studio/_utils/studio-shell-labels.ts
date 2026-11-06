@@ -1,6 +1,6 @@
 import type { Project } from "@nuriteo/api-client";
 
-import type { StudioConsoleEntry } from "#src/projects/studio/preview-console.ts";
+import type { StudioConsoleEntry } from "@/projects/studio/_utils/preview-console.ts";
 import type { RuntimeRecoveryActionKind } from "#src/runtime/runtime-adapter.ts";
 
 export function workbenchLayoutClass({ focusMode, previewOpen, sidebarOpen }: Readonly<{

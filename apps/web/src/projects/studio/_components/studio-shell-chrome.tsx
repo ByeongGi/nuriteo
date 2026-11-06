@@ -7,14 +7,14 @@ import { Button } from "#src/components/ui/button.tsx";
 import { Input } from "#src/components/ui/input.tsx";
 import { MenuGroupLabel, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuRoot, MenuSeparator, MenuTrigger } from "#src/components/ui/menu.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
-import { EDITOR_THEME_OPTIONS } from "#src/projects/project-editor-theme.ts";
-import { ProjectFileTree } from "#src/projects/project-file-tree.tsx";
-import { runtimeDot } from "#src/projects/studio/studio-ide-styles.ts";
-import { FILE_LIST_BATCH_SIZE, type StudioShellSession } from "#src/projects/studio/studio-shell-session.ts";
-import { runtimeLifecycleLabel } from "#src/projects/studio/studio-shell-labels.ts";
+import { EDITOR_THEME_OPTIONS } from "@/projects/_utils/project-editor-theme.ts";
+import { ProjectFileTree } from "@/projects/_components/project-file-tree.tsx";
+import { runtimeDot } from "@/projects/studio/_components/studio-ide-styles.ts";
+import { FILE_LIST_BATCH_SIZE, type StudioShellSession } from "@/projects/studio/_utils/studio-shell-session.ts";
+import { runtimeLifecycleLabel } from "@/projects/studio/_utils/studio-shell-labels.ts";
 
 const ProjectMonacoEditor = dynamic(
-  () => import("#src/projects/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
+  () => import("@/projects/_components/project-monaco-editor.tsx").then((module) => module.ProjectMonacoEditor),
   {
     loading: () => <div className="grid h-full min-h-0 place-items-center bg-surface text-xs text-muted-foreground" role="status">코드 편집기를 준비하는 중…</div>,
     ssr: false

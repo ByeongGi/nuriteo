@@ -1,12 +1,12 @@
 import type { Project } from "@nuriteo/api-client";
 import type { CSSProperties, Dispatch, FormEvent, PointerEvent as ReactPointerEvent, SetStateAction } from "react";
 
-import type { EditorThemePreference } from "#src/projects/project-editor-theme.ts";
-import type { ProjectContentSearchMatch } from "#src/projects/use-project-file-search.ts";
-import type { ProjectTerminalSession } from "#src/projects/use-project-terminal-sessions.ts";
-import type { EditorDraftState, EditorOpenMode, EditorTabs } from "#src/projects/studio/editor-tabs.ts";
-import type { StudioConsoleEntry } from "#src/projects/studio/preview-console.ts";
-import { ideStyles } from "#src/projects/studio/studio-ide-styles.ts";
+import type { EditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
+import type { ProjectContentSearchMatch } from "@/projects/_hooks/use-project-file-search.ts";
+import type { ProjectTerminalSession } from "@/projects/_hooks/use-project-terminal-sessions.ts";
+import type { EditorDraftState, EditorOpenMode, EditorTabs } from "@/projects/studio/_utils/editor-tabs.ts";
+import type { StudioConsoleEntry } from "@/projects/studio/_utils/preview-console.ts";
+import { ideStyles } from "@/projects/studio/_components/studio-ide-styles.ts";
 import type {
   RuntimeAdapter,
   RuntimeRecoveryActionKind,

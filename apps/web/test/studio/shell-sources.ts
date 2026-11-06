@@ -5,16 +5,16 @@ import { fileURLToPath } from "node:url";
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const studioShellSources = [
-  "src/projects/project-ide-shell.tsx",
-  "src/projects/studio/studio-editor-actions.ts",
-  "src/projects/studio/studio-ide-styles.ts",
-  "src/projects/studio/studio-preview-session.tsx",
-  "src/projects/studio/studio-server-save.tsx",
-  "src/projects/studio/studio-shell-chrome.tsx",
-  "src/projects/studio/studio-shell-labels.ts",
-  "src/projects/studio/studio-shell-session.ts",
-  "src/projects/studio/studio-terminal-session.tsx",
-  "src/projects/studio/studio-workspace-session.tsx"
+  "src/projects/_components/project-ide-shell.tsx",
+  "src/projects/studio/_hooks/studio-editor-actions.ts",
+  "src/projects/studio/_components/studio-ide-styles.ts",
+  "src/projects/studio/_components/studio-preview-session.tsx",
+  "src/projects/studio/_components/studio-server-save.tsx",
+  "src/projects/studio/_components/studio-shell-chrome.tsx",
+  "src/projects/studio/_utils/studio-shell-labels.ts",
+  "src/projects/studio/_utils/studio-shell-session.ts",
+  "src/projects/studio/_components/studio-terminal-session.tsx",
+  "src/projects/studio/_components/studio-workspace-session.tsx"
 ];
 
 export function readStudioShellSources(): string {

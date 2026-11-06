@@ -14,8 +14,8 @@ import {
   renameEditorDraft,
   renameEditorPath,
   settleEditorDraft
-} from "../../src/projects/studio/editor-tabs.ts";
-import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../../src/projects/studio/preview-console.ts";
+} from "../../src/projects/studio/_utils/editor-tabs.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "../../src/projects/studio/_utils/preview-console.ts";
 import { readStudioShellSources } from "./shell-sources.ts";
 
 const previewA = openEditorFile(createEditorTabs(), "src/App.tsx", "preview");
@@ -62,7 +62,7 @@ assert.deepEqual(savedClosed.openPaths, ["src/App.tsx"]);
 assert.equal(savedClosed.previewPath, undefined);
 
 const shell = readStudioShellSources();
-const tree = fs.readFileSync(new URL("../../src/projects/project-file-tree.tsx", import.meta.url), "utf8");
+const tree = fs.readFileSync(new URL("../../src/projects/_components/project-file-tree.tsx", import.meta.url), "utf8");
 assert.match(shell, /useUnsavedChangesGuard\(hasUnpublishedChanges \|\| hasUnsavedEditorChange\)/u);
 assert.match(shell, /is-preview/u);
 assert.match(shell, /onDoubleClick=\{\(\) => selectFile\(path, workspace, "pin"\)\}/u);

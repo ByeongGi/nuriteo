@@ -2,7 +2,7 @@ import type { Project } from "@nuriteo/api-client";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import { waitFor } from "storybook/test";
 
-import { ProjectIdeShell } from "#src/projects/project-ide-shell.tsx";
+import { ProjectIdeShell } from "@/projects/_components/project-ide-shell.tsx";
 import { ProjectStudioFrame } from "@/app/(studio)/projects/[projectId]/studio/_components/project-studio-screen.tsx";
 import { createStudioRuntimeFeatureLoader } from "#src/design-system/redesign/fixtures/studio-runtime-fixture.ts";
 

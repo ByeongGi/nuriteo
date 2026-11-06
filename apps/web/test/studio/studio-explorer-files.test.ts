@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { visibleStudioExplorerFiles } from "../../src/projects/studio/explorer-files.ts";
+import { visibleStudioExplorerFiles } from "../../src/projects/studio/_utils/explorer-files.ts";
 
 const files = [
   { path: "package.json" },

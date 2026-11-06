@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { Project } from "@nuriteo/api-client";
-import type { RestoredProjectHead } from "@/projects/project-history-panel.tsx";
+import type { RestoredProjectHead } from "@/projects/_components/project-history-panel.tsx";
 
 export function useHistoryScreen(project: Project, projectEtag: string) {
   const router = useRouter();

@@ -3,9 +3,9 @@
 import type { ReactNode } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
-import { ProjectTerminalView } from "#src/projects/project-terminal-view.tsx";
-import { closeEditorFile, forgetEditorDraft, openEditorFile, renameEditorDraft, renameEditorPath } from "#src/projects/studio/editor-tabs.ts";
-import { MAX_TERMINAL_COMMAND_CHARS, type StudioShellSession } from "#src/projects/studio/studio-shell-session.ts";
+import { ProjectTerminalView } from "@/projects/_components/project-terminal-view.tsx";
+import { closeEditorFile, forgetEditorDraft, openEditorFile, renameEditorDraft, renameEditorPath } from "@/projects/studio/_utils/editor-tabs.ts";
+import { MAX_TERMINAL_COMMAND_CHARS, type StudioShellSession } from "@/projects/studio/_utils/studio-shell-session.ts";
 import { previewModuleRefreshPath } from "#src/runtime/preview-import-version.ts";
 
 export function bindStudioTerminal(session: StudioShellSession): void {

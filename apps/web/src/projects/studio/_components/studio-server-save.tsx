@@ -4,8 +4,8 @@ import { Button } from "#src/components/ui/button.tsx";
 import { createBrowserApiClient } from "#src/lib/api/browser-client.ts";
 import { readCsrfCredential } from "#src/lib/api/browser-security.ts";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
-import { recoveryActionLabel, serverSavePhaseLabel } from "#src/projects/studio/studio-shell-labels.ts";
-import type { StudioShellSession } from "#src/projects/studio/studio-shell-session.ts";
+import { recoveryActionLabel, serverSavePhaseLabel } from "@/projects/studio/_utils/studio-shell-labels.ts";
+import type { StudioShellSession } from "@/projects/studio/_utils/studio-shell-session.ts";
 import type { RuntimeRecoveryActionKind } from "#src/runtime/runtime-adapter.ts";
 
 type SaveFeature = typeof import("#src/save/project-save.ts");

@@ -2,8 +2,8 @@
 
 import { Button } from "#src/components/ui/button.tsx";
 import { createRetryableLazyFeature } from "#src/lib/retryable-lazy-feature.ts";
-import { createEditorDraftState, createEditorTabs } from "#src/projects/studio/editor-tabs.ts";
-import { projectContentErrorCode, projectTemplateLabel, resumeErrorMessage, runtimeErrorCode } from "#src/projects/studio/studio-shell-labels.ts";
+import { createEditorDraftState, createEditorTabs } from "@/projects/studio/_utils/editor-tabs.ts";
+import { projectContentErrorCode, projectTemplateLabel, resumeErrorMessage, runtimeErrorCode } from "@/projects/studio/_utils/studio-shell-labels.ts";
 import {
   EMPTY_RUNTIME_STATE,
   FILE_LIST_BATCH_SIZE,
@@ -12,7 +12,7 @@ import {
   RUNTIME_MEMORY_LIMIT_BYTES,
   RUNTIME_RELAY_TIMEOUT_MS,
   type StudioShellSession
-} from "#src/projects/studio/studio-shell-session.ts";
+} from "@/projects/studio/_utils/studio-shell-session.ts";
 import { resolveRuntimeAssetRevision } from "#src/runtime/runtime-assets.ts";
 import type { RuntimeWorkspaceState } from "#src/runtime/runtime-adapter.ts";
 import { awaitWorkspaceStart } from "#src/runtime/workspace-start.ts";

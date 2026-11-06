@@ -5,10 +5,10 @@ import { useCallback, useEffect } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { Input } from "#src/components/ui/input.tsx";
-import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "#src/projects/studio/preview-console.ts";
-import type { StudioConsoleEntry } from "#src/projects/studio/preview-console.ts";
-import { previewConsoleTone } from "#src/projects/studio/studio-shell-labels.ts";
-import { PREVIEW_WINDOW_CLOSED_POLL_MS, PREVIEW_WINDOW_CONNECT_TIMEOUT_MS, type StudioShellSession } from "#src/projects/studio/studio-shell-session.ts";
+import { appendStudioConsole, freshServerLogLines, studioConsoleSourceLabel } from "@/projects/studio/_utils/preview-console.ts";
+import type { StudioConsoleEntry } from "@/projects/studio/_utils/preview-console.ts";
+import { previewConsoleTone } from "@/projects/studio/_utils/studio-shell-labels.ts";
+import { PREVIEW_WINDOW_CLOSED_POLL_MS, PREVIEW_WINDOW_CONNECT_TIMEOUT_MS, type StudioShellSession } from "@/projects/studio/_utils/studio-shell-session.ts";
 import { createPreviewHistory, movePreviewHistory, normalizePreviewAddress, recordPreviewHistory } from "#src/runtime/preview-address.ts";
 import { hotUpdatePreviewBridges } from "#src/runtime/preview-hot-update.ts";
 import { createPreviewWindowUrl } from "#src/runtime/preview-origin-contract.ts";
