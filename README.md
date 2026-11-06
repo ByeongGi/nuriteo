@@ -51,14 +51,6 @@ pnpm test:workspace-runtime
 cargo test --workspace
 ```
 
-## 문서
-
-- [문서 인덱스](./docs/README.md)
-- [Self-hosted 제품 화면](./docs/productization/self-hosted-product-ux-ui-spec.md)
-- [Self-hosted 정책](./docs/policies/README.md)
-- [지원 매트릭스](./docs/release/support-matrix.md)
-- [알려진 제한](./docs/release/known-limitations.md)
-
 ## 라이선스
 
 NURITEO는 [Apache License 2.0](./LICENSE)으로 배포한다.
