@@ -67,11 +67,8 @@ use super::super::{
 };
 use super::{
     BrowserIdentity, CURSOR_KEY_BYTES, CURSOR_PREFIX, CURSOR_TTL_SECONDS, CursorBinding,
-    CursorClaims, CursorPosition, CursorSigner, HistoricalPromotionView, MAX_CURSOR_BYTES,
-    ProjectAccessTokenIdentity, ProjectHttpError, ProjectHttpPolicy, ProjectHttpService,
-    ProjectListView, ProjectRoleListView, ProjectRoleMutationView, ProjectRoleView,
-    ProjectVersionCreateView, ProjectVersionListView, ProjectVersionView, ProjectView,
-    RecoveryCheckpointListView, RecoveryCheckpointView, RoleOperation, Runtime, SaveProjectContext,
+    CursorClaims, CursorPosition, CursorSigner, MAX_CURSOR_BYTES, ProjectHttpError,
+    ProjectHttpPolicy, ProjectHttpService, Runtime,
 };
 
 impl super::BrowserIdentity {
@@ -121,97 +118,6 @@ impl Runtime {
             user_id: fields.user_id,
             display_name,
         })
-    }
-}
-
-impl From<Project> for ProjectView {
-    fn from(project: Project) -> Self {
-        let (owner_type, owner_id) = match project.owner() {
-            ProjectOwner::User(id) => ("user", id.to_string()),
-            ProjectOwner::Organization(id) => ("organization", id.to_string()),
-        };
-        Self {
-            id: project.id().to_string(),
-            owner_type,
-            owner_id,
-            storage_scope_id: project.storage_scope_id().to_string(),
-            slug: project.slug().to_string(),
-            name: project.name().as_str().to_owned(),
-            template_id: project.template().as_str(),
-            state: match project.state() {
-                ProjectState::Active => "active",
-                ProjectState::Archived => "archived",
-            },
-            created_at: project.created_at().to_string(),
-            updated_at: project.updated_at().to_string(),
-            archived_at: project.archived_at().map(|value| value.to_string()),
-            version: project.lock_version().get(),
-        }
-    }
-}
-
-impl From<DirectProjectRoleGrant> for ProjectRoleView {
-    fn from(grant: DirectProjectRoleGrant) -> Self {
-        Self {
-            project_id: grant.project_id().to_string(),
-            organization_id: grant.organization_id().to_string(),
-            user_id: grant.user_id().to_string(),
-            role: grant.role(),
-            created_at: grant.created_at().to_string(),
-            updated_at: grant.updated_at().to_string(),
-            version: grant.lock_version().get(),
-        }
-    }
-}
-
-impl From<&ExplicitProjectVersion> for ProjectVersionView {
-    fn from(version: &ExplicitProjectVersion) -> Self {
-        Self {
-            id: version.id().to_string(),
-            project_id: version.project_id().to_string(),
-            bundle_id: version.bundle_id().to_string(),
-            name: version.name().as_str().to_owned(),
-            created_by_user_id: version.actor_user_id().to_string(),
-            source_project_version: version.source_project_version().get(),
-            created_at: version.created_at().to_string(),
-            sha256: hex_lower(version.sha256()),
-            physical_bytes: version.physical_bytes(),
-            logical_bytes: version.logical_bytes(),
-            file_count: version.file_count(),
-            format: version.format().to_owned(),
-        }
-    }
-}
-
-impl From<&RecoveryCheckpoint> for RecoveryCheckpointView {
-    fn from(checkpoint: &RecoveryCheckpoint) -> Self {
-        Self {
-            id: checkpoint.id().to_string(),
-            project_id: checkpoint.project_id().to_string(),
-            bundle_id: checkpoint.bundle_id().to_string(),
-            position: checkpoint.position(),
-            created_by_user_id: checkpoint.actor_user_id().to_string(),
-            created_at: checkpoint.created_at().to_string(),
-            sha256: hex_lower(checkpoint.sha256()),
-            physical_bytes: checkpoint.physical_bytes(),
-            logical_bytes: checkpoint.logical_bytes(),
-            file_count: checkpoint.file_count(),
-            format: checkpoint.format().to_owned(),
-        }
-    }
-}
-
-impl From<HistoricalPromotionOutcome> for HistoricalPromotionView {
-    fn from(outcome: HistoricalPromotionOutcome) -> Self {
-        Self {
-            operation_id: outcome.operation_id().to_string(),
-            reference_kind: outcome.reference_kind().as_str().to_owned(),
-            reference_id: outcome.reference_id().to_string(),
-            bundle_id: outcome.bundle_id().to_string(),
-            project_version: outcome.project_version().get(),
-            changed: outcome.changed(),
-            idempotent_retry: outcome.is_idempotent_retry(),
-        }
     }
 }
 

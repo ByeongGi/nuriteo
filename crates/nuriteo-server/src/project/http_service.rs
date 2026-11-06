@@ -111,150 +111,9 @@ pub(crate) struct Runtime {
     history: ProjectHistoryService,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum RoleOperation {
-    Grant,
-    Change,
-    Revoke,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SaveProjectContext {
-    pub(crate) actor_user_id: UserId,
-    pub(crate) project_id: ProjectId,
-    pub(crate) storage_scope_id: crate::workspace::StorageScopeId,
-    pub(crate) project_version: ProjectVersion,
-}
-
 pub(crate) struct BrowserIdentity {
     user_id: UserId,
     display_name: String,
-}
-
-pub(crate) enum ProjectAccessTokenIdentity {
-    User {
-        user_id: UserId,
-        display_name: String,
-    },
-    Project {
-        bound_project_id: ProjectId,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectView {
-    pub(crate) id: String,
-    pub(crate) owner_type: &'static str,
-    pub(crate) owner_id: String,
-    pub(crate) storage_scope_id: String,
-    pub(crate) slug: String,
-    pub(crate) name: String,
-    pub(crate) template_id: &'static str,
-    pub(crate) state: &'static str,
-    pub(crate) created_at: String,
-    pub(crate) updated_at: String,
-    pub(crate) archived_at: Option<String>,
-    pub(crate) version: i64,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectListView {
-    pub(crate) items: Vec<ProjectView>,
-    pub(crate) next_cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectRoleView {
-    project_id: String,
-    organization_id: String,
-    user_id: String,
-    role: ProjectRole,
-    created_at: String,
-    updated_at: String,
-    version: i64,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectRoleListView {
-    pub(crate) items: Vec<ProjectRoleView>,
-    pub(crate) next_cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectRoleMutationView {
-    pub(crate) changed: bool,
-    pub(crate) grant: Option<ProjectRoleView>,
-    pub(crate) project_version: i64,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectVersionView {
-    id: String,
-    project_id: String,
-    bundle_id: String,
-    name: String,
-    created_by_user_id: String,
-    source_project_version: i64,
-    created_at: String,
-    sha256: String,
-    physical_bytes: u64,
-    logical_bytes: u64,
-    file_count: u32,
-    format: String,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectVersionCreateView {
-    pub(crate) version: ProjectVersionView,
-    pub(crate) idempotent_retry: bool,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ProjectVersionListView {
-    pub(crate) items: Vec<ProjectVersionView>,
-    pub(crate) next_cursor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RecoveryCheckpointView {
-    id: String,
-    project_id: String,
-    bundle_id: String,
-    position: u8,
-    created_by_user_id: String,
-    created_at: String,
-    sha256: String,
-    physical_bytes: u64,
-    logical_bytes: u64,
-    file_count: u32,
-    format: String,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RecoveryCheckpointListView {
-    pub(crate) items: Vec<RecoveryCheckpointView>,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct HistoricalPromotionView {
-    operation_id: String,
-    reference_kind: String,
-    reference_id: String,
-    bundle_id: String,
-    pub(crate) project_version: i64,
-    changed: bool,
-    idempotent_retry: bool,
 }
 
 #[derive(Clone)]
@@ -331,7 +190,19 @@ mod tests {
     }
 }
 
+mod history;
+mod lifecycle;
 mod project_api;
-pub(crate) use project_api::*;
 mod response_cursors;
+mod roles;
+
+pub(crate) use history::{
+    HistoricalPromotionView, ProjectVersionCreateView, ProjectVersionListView, ProjectVersionView,
+    RecoveryCheckpointListView, RecoveryCheckpointView, SaveProjectContext,
+};
+pub(crate) use lifecycle::{ProjectAccessTokenIdentity, ProjectListView, ProjectView};
+pub(crate) use project_api::*;
 pub(crate) use response_cursors::*;
+pub(crate) use roles::{
+    ProjectRoleListView, ProjectRoleMutationView, ProjectRoleView, RoleOperation,
+};
