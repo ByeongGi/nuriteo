@@ -13,7 +13,7 @@ return {
   size: run.exports?.size
 };`;
 
-export function SdkExamplePage() {
+export function SdkPlayground() {
   const [source, setSource] = useState(sample);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<unknown>(undefined);
@@ -36,12 +36,7 @@ export function SdkExamplePage() {
   }
 
   return (
-    <main className="page">
-      <p className="eyebrow">@nuriteo/sdk</p>
-      <h1>브라우저에서 런타임 실행</h1>
-      <p className="lead">
-        아래 코드를 고친 뒤 실행하면, 그 내용이 이 브라우저에서 `@nuriteo/sdk`를 호출합니다. `createContainer`와 `runtime`은 이미 들어와 있습니다. 런타임 안에서는 임의 JavaScript 평가가 막혀 있어서, 컨테이너 안에서 도는 프로그램은 `fs-smoke`처럼 런타임이 제공하는 입구를 사용합니다.
-      </p>
+    <section className="playground" aria-label="SDK playground">
       <textarea
         className="code editor"
         spellCheck={false}
@@ -59,6 +54,6 @@ export function SdkExamplePage() {
       {result !== undefined ? (
         <pre className="result code"><code>{JSON.stringify(result, null, 2)}</code></pre>
       ) : null}
-    </main>
+    </section>
   );
 }

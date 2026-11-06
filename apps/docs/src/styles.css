@@ -61,24 +61,123 @@ a {
   font-size: 0.875rem;
 }
 
-.nav {
+.controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
-.nav a {
+.controls button {
+  border: 1px solid var(--n-color-border-default);
+  border-radius: 0.625rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--n-color-bg-page);
+  color: var(--n-color-fg-default);
+  font: inherit;
+  cursor: pointer;
+}
+
+.frame {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  align-items: start;
+}
+
+.side {
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow: auto;
+  padding: 0.75rem 0.75rem 2rem;
+  border-right: 1px solid var(--n-color-border-default);
+  background: var(--n-color-bg-surface);
+}
+
+.side h2 {
+  margin: 1.25rem 0.75rem 0.25rem;
+  color: var(--n-color-fg-muted);
+  font-size: var(--n-font-size-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.side a {
+  display: block;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.75rem;
   color: var(--n-color-fg-muted);
   text-decoration: none;
 }
 
-.nav a.active {
+.side a.active {
+  background: var(--n-color-bg-subtle);
   color: var(--n-color-fg-default);
 }
 
 .page {
-  max-width: 44rem;
-  margin: 0 auto;
-  padding: 3rem 1.5rem 4rem;
+  max-width: 46rem;
+  margin: 0;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+.page h2 {
+  margin: 2rem 0 0.75rem;
+  font-size: var(--n-font-size-xl);
+  line-height: var(--n-line-height-tight);
+}
+
+.page ul {
+  margin: 0 0 1.5rem;
+  padding-left: 1.25rem;
+}
+
+.links {
+  list-style: none;
+  padding-left: 0;
+}
+
+.page table {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+}
+
+.page th,
+.page td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--n-color-border-default);
+  text-align: left;
+  vertical-align: top;
+}
+
+.page th {
+  color: var(--n-color-fg-muted);
+  font-size: var(--n-font-size-sm);
+  font-weight: 650;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+
+.playground {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 800px) {
+  .frame {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    position: static;
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--n-color-border-default);
+  }
 }
 
 .eyebrow {
