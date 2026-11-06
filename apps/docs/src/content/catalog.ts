@@ -665,7 +665,7 @@ export const catalog: DocEntry[] = [
       title: "열린 포트와 워커 주소를 다룹니다.",
       lead: "services.preview는 열린 포트와 미리보기 이벤트를 냅니다. 서비스 워커가 없는 환경에서 등록하면 SdkError입니다.",
       blocks: [
-        { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.listPorts();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
+        { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.ports();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
         { type: "p", text: "resolveNuriteoWorkerAssets()가 돌려주는 필드는 systemWorkerUrl, processWorkerUrl, systemWasmUrl입니다. systemWasmUrl은 assets/system_wasm.wasm을 가리킵니다. 미리보기 서비스 워커 주소는 scriptUrl로 따로 넘깁니다. 등록 실패 코드는 ESDK_SERVICE_WORKER_UNAVAILABLE과 ESDK_SERVICE_WORKER_REGISTRATION_FAILED입니다." }
       ]
     },
@@ -675,7 +675,7 @@ export const catalog: DocEntry[] = [
       title: "Read open ports and worker URLs.",
       lead: "services.preview reports open ports and Preview events. Registering a service worker where none exists throws SdkError.",
       blocks: [
-        { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.listPorts();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
+        { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.ports();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
         { type: "p", text: "resolveNuriteoWorkerAssets() returns systemWorkerUrl, processWorkerUrl, and systemWasmUrl. systemWasmUrl points at assets/system_wasm.wasm. Pass the preview service worker separately as scriptUrl. Registration failures use ESDK_SERVICE_WORKER_UNAVAILABLE and ESDK_SERVICE_WORKER_REGISTRATION_FAILED." }
       ]
     }

@@ -87,6 +87,13 @@ assert.doesNotMatch(corpus, /postgres:\/\/[^:\s]+:[^@\s]+@/);
 const preview = byPath.get("/sdk/preview");
 assert.match(plain(preview!.ko), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
 assert.match(plain(preview!.en), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
+assert.match(plain(preview!.ko), /services\.preview\.ports\(\)/);
+assert.match(plain(preview!.en), /services\.preview\.ports\(\)/);
+assert.equal(plain(preview!.ko).includes("listPorts"), false);
+assert.equal(plain(preview!.en).includes("listPorts"), false);
+const adapters = byPath.get("/sdk/adapters");
+assert.match(plain(adapters!.ko), /listPorts/);
+assert.match(plain(adapters!.en), /listPorts/);
 
 console.log(`docs content ok: ${routes.length} routes, ${corpus.length} chars`);
 
