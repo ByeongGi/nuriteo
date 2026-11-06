@@ -88,8 +88,8 @@ export const catalog: DocEntry[] = [
       title: "저장소를 클론하고 개발 서버를 띄웁니다.",
       lead: "이 경로는 기여자와 소스를 직접 실행하는 운영자를 위한 것입니다. 이미지로 올리는 절차는 Compose와 Helm에 있습니다.",
       blocks: [
-        { type: "code", text: "pnpm install\npnpm dev" },
-        { type: "p", text: "PostgreSQL과 RustFS는 컨테이너로 남습니다. Core는 Rust 소스가 바뀌면 다시 빌드되고 재시작됩니다. Web은 http://127.0.0.1:3000 에서 Next.js HMR로 갱신됩니다." },
+        { type: "code", text: "git clone https://github.com/ByeongGi/nuriteo.git\ncd nuriteo\npnpm install\npnpm dev" },
+        { type: "p", text: "Node.js 24.17 이상 25 미만, pnpm 11.15 이상 12 미만, Rust 1.97이 필요합니다. PostgreSQL과 RustFS는 컨테이너로 남습니다. Core는 Rust 소스가 바뀌면 다시 빌드되고 재시작됩니다. Web은 http://127.0.0.1:3000 에서 Next.js HMR로 갱신됩니다. Ctrl-C는 Core와 Web만 멈추고 데이터 컨테이너는 남깁니다." },
         { type: "ul", items: [
           "pnpm dev:backend 는 Core와 데이터 스택입니다.",
           "pnpm dev:web 은 Web만 띄웁니다. pnpm dev:fe 는 같은 명령입니다.",
@@ -104,8 +104,8 @@ export const catalog: DocEntry[] = [
       title: "Clone the repository and start the dev server.",
       lead: "This path is for contributors and operators who run the source directly. Image installs are Compose and Helm.",
       blocks: [
-        { type: "code", text: "pnpm install\npnpm dev" },
-        { type: "p", text: "PostgreSQL and RustFS stay in containers. Core rebuilds and restarts when Rust sources change. Web refreshes through Next.js HMR at http://127.0.0.1:3000." },
+        { type: "code", text: "git clone https://github.com/ByeongGi/nuriteo.git\ncd nuriteo\npnpm install\npnpm dev" },
+        { type: "p", text: "Node.js 24.17 up to but not including 25, pnpm 11.15 up to but not including 12, and Rust 1.97 are required. PostgreSQL and RustFS stay in containers. Core rebuilds and restarts when Rust sources change. Web refreshes through Next.js HMR at http://127.0.0.1:3000. Ctrl-C stops Core and Web and leaves the data containers running." },
         { type: "ul", items: [
           "pnpm dev:backend runs Core and the data stack.",
           "pnpm dev:web runs Web only. pnpm dev:fe is the same command.",
@@ -124,7 +124,9 @@ export const catalog: DocEntry[] = [
       title: "한 대에서 공식 단일 호스트 구성을 띄웁니다.",
       lead: "Web만 호스트 포트를 엽니다. Core, PostgreSQL, RustFS는 Compose DNS와 내부 네트워크를 씁니다. 묶인 RustFS는 브라우저에 노출되지 않습니다.",
       blocks: [
-        { type: "p", text: "시작 순서는 저장소 준비, 마이그레이션, 첫 관리자 생성, 그다음 Core와 Web입니다. 자격 증명 기본값은 없습니다. 비밀번호, TLS, 미리보기 서명 키, 통합 자격 마스터 키는 파일이고, 값 자체는 문서에 적지 않습니다." },
+        { type: "p", text: "저장소 루트에서 아래 파일 변수를 절대 경로로 둔 뒤 스택을 올립니다. Compose 파일에는 자격 증명 기본값이 없습니다. 비밀번호, TLS, 미리보기 서명 키, 통합 자격 마스터 키의 값 자체는 문서에 적지 않습니다." },
+        { type: "code", text: "docker compose -f deploy/compose/compose.yaml up" },
+        { type: "p", text: "시작 순서는 PostgreSQL과 RustFS가 준비된 뒤 버킷 준비와 앞으로만 가는 마이그레이션, 첫 관리자 생성, Core, Web입니다. 앞 단계가 실패하면 Core와 Web은 뜨지 않습니다. 공식 수용 경계는 Linux의 Docker Compose v2입니다." },
         { type: "h2", text: "필요한 파일" },
         { type: "ul", items: [
           "NURITEO_POSTGRES_PASSWORD_FILE, NURITEO_POSTGRES_SERVER_CERT_FILE, NURITEO_POSTGRES_SERVER_KEY_FILE",
@@ -134,9 +136,11 @@ export const catalog: DocEntry[] = [
           "NURITEO_EXTERNAL_URL, NURITEO_PREVIEW_BASE_DOMAIN",
           "NURITEO_PREVIEW_SIGNING_KEY_FILE, NURITEO_MASTER_KEY_FILE, NURITEO_MASTER_KEY_VERSION"
         ] },
-        { type: "p", text: "데이터는 compose down 뒤에도 볼륨에 남습니다. 볼륨 삭제는 데이터를 지울 때만 합니다." },
+        { type: "p", text: "데이터는 compose down 뒤에도 볼륨에 남습니다. 데이터를 지울 때만 compose down --volumes 를 씁니다. Web 기본 바인드는 127.0.0.1 의 3000번 포트입니다." },
         { type: "h2", text: "외부 S3" },
-        { type: "p", text: "브라우저가 버킷에 직접 붙지 않습니다. 묶인 버킷의 CORS 정리와 외부 버킷의 CORS 계약을 섞어 쓰지 않습니다. 업그레이드는 업그레이드 페이지에 있습니다." },
+        { type: "p", text: "브라우저가 버킷에 직접 붙지 않습니다. 묶인 버킷의 CORS 정리와 외부 버킷의 CORS 계약을 섞어 쓰지 않습니다. 외부 버킷은 미리 있어야 하고, 아래 검사는 읽기 전용입니다." },
+        { type: "code", text: "docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check" },
+        { type: "p", text: "업그레이드 명령은 업그레이드 페이지에 있습니다." },
         { type: "links", items: [{ to: "/install/upgrade", label: "업그레이드" }] }
       ]
     },
@@ -146,7 +150,9 @@ export const catalog: DocEntry[] = [
       title: "Run the official single-host topology.",
       lead: "Only Web publishes a host port. Core, PostgreSQL, and RustFS use Compose DNS and an internal network. Bundled RustFS has no browser endpoint.",
       blocks: [
-        { type: "p", text: "The start order is repository preparation, migration, the first administrator, then Core and Web. There are no credential defaults. Passwords, TLS, the Preview signing key, and the integration master key are files. This page does not show secret values." },
+        { type: "p", text: "From the repository root, point the file variables below at absolute paths, then start the stack. The Compose file has no credential defaults. This page does not show passwords, TLS material, the Preview signing key, or the integration master key." },
+        { type: "code", text: "docker compose -f deploy/compose/compose.yaml up" },
+        { type: "p", text: "Startup waits until PostgreSQL and RustFS are ready, then prepares the bucket, applies forward-only migrations, creates the first administrator, and starts Core and then Web. A failed earlier step keeps Core and Web down. Official acceptance is Docker Compose v2 on Linux." },
         { type: "h2", text: "Required files" },
         { type: "ul", items: [
           "NURITEO_POSTGRES_PASSWORD_FILE, NURITEO_POSTGRES_SERVER_CERT_FILE, NURITEO_POSTGRES_SERVER_KEY_FILE",
@@ -156,9 +162,11 @@ export const catalog: DocEntry[] = [
           "NURITEO_EXTERNAL_URL, NURITEO_PREVIEW_BASE_DOMAIN",
           "NURITEO_PREVIEW_SIGNING_KEY_FILE, NURITEO_MASTER_KEY_FILE, NURITEO_MASTER_KEY_VERSION"
         ] },
-        { type: "p", text: "Data remains in volumes after compose down. Delete a volume only when the data should go away." },
+        { type: "p", text: "Data remains in volumes after compose down. Use compose down --volumes only when the data should go away. Web binds 127.0.0.1 port 3000 by default." },
         { type: "h2", text: "External S3" },
-        { type: "p", text: "The browser does not talk to the bucket directly. Do not mix the bundled bucket CORS cleanup with the external bucket CORS contract. Upgrades are on the upgrade page." },
+        { type: "p", text: "The browser does not talk to the bucket directly. Do not mix the bundled bucket CORS cleanup with the external bucket CORS contract. The external bucket must already exist. The check below is read-only." },
+        { type: "code", text: "docker compose -f deploy/compose/compose.external-s3.yaml run --rm storage-check" },
+        { type: "p", text: "Upgrade commands are on the upgrade page." },
         { type: "links", items: [{ to: "/install/upgrade", label: "Upgrade" }] }
       ]
     }
@@ -172,12 +180,15 @@ export const catalog: DocEntry[] = [
       title: "Kubernetes에는 차트로 Web과 Core를 한 릴리스로 올립니다.",
       lead: "차트는 deploy/charts/nuriteo 입니다. Kubernetes 1.29 이상입니다. PostgreSQL은 차트 밖에 둡니다. 운영 저장소는 외부 HTTPS S3 호환 저장소입니다.",
       blocks: [
+        { type: "p", text: "비공개 values 파일에는 시크릿 값을 넣지 않습니다. 이미 있는 Secret의 이름과 키만 가리킵니다. 이미지 참조는 sha256 다이제스트이고, 바뀌는 태그는 쓰지 않습니다." },
+        { type: "code", text: "helm upgrade --install nuriteo deploy/charts/nuriteo \\\n  --namespace nuriteo \\\n  --create-namespace \\\n  -f values.yaml" },
         { type: "ul", items: [
-          "Web과 Core는 한 릴리스이고 이미지 다이제스트로만 고정합니다. 변하는 태그는 쓰지 않습니다.",
-          "시크릿 값은 Helm 값이 아닙니다. 이미 있는 Secret의 이름과 키를 참조합니다.",
-          "차트는 사전 검사, 마이그레이션, 첫 관리자 작업을 순서대로 돌린 다음 Web과 Core를 만듭니다.",
-          "실패한 훅은 이전 릴리스를 남겨 둡니다."
-        ] }
+          "postgresql.existingSecret: 데이터베이스 URL과 선택적인 CA",
+          "objectStorage.existingSecret: S3 자격",
+          "applicationSecrets.existingSecret: 마스터 키, 저장 멱등 키, 미리보기 서명 키",
+          "bootstrapAdmin.existingSecret: 첫 관리자 비밀번호. bootstrap을 켤 때만"
+        ] },
+        { type: "p", text: "차트는 저장소 검사 또는 업그레이드 사전 검사, 앞으로만 가는 마이그레이션, 선택적인 첫 관리자 작업을 순서대로 돌린 다음 Web과 Core를 만듭니다. 훅이 실패하면 새 Deployment가 적용되기 전에 Helm이 멈추고, 이전 릴리스가 남습니다. 애플리케이션 주소는 HTTPS 출처의 / 이고, 하위 경로 배포는 지원하지 않습니다." }
       ]
     },
     en: {
@@ -186,12 +197,15 @@ export const catalog: DocEntry[] = [
       title: "Deploy Web and Core as one Helm release.",
       lead: "The chart is deploy/charts/nuriteo. Kubernetes 1.29 or newer is required. PostgreSQL stays outside the chart. Production storage is external HTTPS S3-compatible storage.",
       blocks: [
+        { type: "p", text: "Keep secret values out of the private values file. Point it at an existing Secret by name and key. Image references are sha256 digests. Mutable tags are not used." },
+        { type: "code", text: "helm upgrade --install nuriteo deploy/charts/nuriteo \\\n  --namespace nuriteo \\\n  --create-namespace \\\n  -f values.yaml" },
         { type: "ul", items: [
-          "Web and Core are one release and are pinned by image digest. Mutable tags are not used.",
-          "Secret values are not Helm values. Reference an existing Secret by name and key.",
-          "The chart runs preflight, migration, and the first administrator job in order, then creates Web and Core.",
-          "A failed hook leaves the previous release in place."
-        ] }
+          "postgresql.existingSecret: database URL and optional CA",
+          "objectStorage.existingSecret: S3 credentials",
+          "applicationSecrets.existingSecret: master key, save idempotency key, and Preview signing key",
+          "bootstrapAdmin.existingSecret: first administrator password, only when bootstrap is enabled"
+        ] },
+        { type: "p", text: "The chart runs a storage check or upgrade preflight, forward-only migration, and the optional first-administrator job, then creates Web and Core. A failed hook stops Helm before the new Deployments are applied and leaves the previous release in place. The application origin is an HTTPS origin at /. Subpath deployment is not supported." }
       ]
     }
   },
@@ -204,8 +218,13 @@ export const catalog: DocEntry[] = [
       title: "인스턴스 관리자 한 명을 만든 뒤 초대로 사용자를 받습니다.",
       lead: "설치가 끝나면 인스턴스 관리자 한 명이 필요합니다. Compose와 Helm 모두 bootstrap으로 이메일, 표시 이름, 비밀번호 파일을 받습니다.",
       blocks: [
-        { type: "p", text: "부트스트랩이 끝나면 그 계정으로 서명합니다. 이후 사용자는 관리자 초대로 들어옵니다. 공개 가입 페이지는 없습니다." },
-        { type: "p", text: "비밀번호는 URL에 실리지 않습니다. 서명 폼은 POST입니다." }
+        { type: "p", text: "Compose는 환경 이름으로, Helm은 bootstrapAdmin.existingSecret으로 같은 세 값을 받습니다. 비밀번호 파일의 내용은 문서에 적지 않습니다." },
+        { type: "code", text: "NURITEO_BOOTSTRAP_ADMIN_EMAIL\nNURITEO_BOOTSTRAP_ADMIN_NAME\nNURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE" },
+        { type: "ul", items: [
+          "스택을 올리면 bootstrap이 관리자 한 명을 만듭니다. 이미 만들어진 뒤의 재시작은 비밀번호를 다시 쓰지 않습니다.",
+          "Web 출처를 열고 그 계정으로 서명합니다. 서명 폼은 POST이고, 비밀번호는 URL에 실리지 않습니다.",
+          "다음 사람은 관리자 초대로 들어옵니다. 공개 가입 페이지는 없습니다."
+        ] }
       ]
     },
     en: {
@@ -214,8 +233,13 @@ export const catalog: DocEntry[] = [
       title: "Create one instance administrator, then invite people.",
       lead: "An install needs one instance administrator. Compose and Helm both take an email, a display name, and a password file through bootstrap.",
       blocks: [
-        { type: "p", text: "After bootstrap, sign in with that account. Later people enter by administrator invite. There is no public signup page." },
-        { type: "p", text: "The password is not placed in the URL. The sign-in form uses POST." }
+        { type: "p", text: "Compose reads these names from the environment. Helm reads the password from bootstrapAdmin.existingSecret. The password file contents are not written on this page." },
+        { type: "code", text: "NURITEO_BOOTSTRAP_ADMIN_EMAIL\nNURITEO_BOOTSTRAP_ADMIN_NAME\nNURITEO_BOOTSTRAP_ADMIN_PASSWORD_FILE" },
+        { type: "ul", items: [
+          "Starting the stack makes bootstrap create one administrator. A later restart does not rewrite that password.",
+          "Open the Web origin and sign in with that account. The sign-in form is POST, and the password is not placed in the URL.",
+          "The next person enters by an administrator invite. There is no public signup page."
+        ] }
       ]
     }
   },
@@ -228,7 +252,9 @@ export const catalog: DocEntry[] = [
       title: "데이터베이스 변경은 앞으로만 갑니다.",
       lead: "롤백은 Core와 Web 이미지를 이전으로 되돌리는 절차입니다. 스키마를 다운그레이드하지 않습니다. 스키마나 객체를 되돌려야 하면 복원입니다.",
       blocks: [
-        { type: "p", text: "SDK 배포 채널을 되돌리는 것과 인스턴스 데이터베이스를 되돌리는 것은 다른 일입니다. 채널 포인터만 바뀌고, 이미 설치된 데이터베이스는 다시 쓰이지 않습니다." }
+        { type: "p", text: "릴리스 계획을 만든 뒤, 저장소 루트에서 업그레이드 도우미를 실행합니다. 도우미는 읽기 전용 사전 검사, 객체 저장소 확인, 앞으로만 가는 마이그레이션, Core 교체, Web 교체 순서입니다. 마이그레이션 전에 실패하면 워크로드는 바뀌지 않습니다." },
+        { type: "code", text: "node deploy/compose/upgrade.mjs upgrade /absolute/path/to/upgrade-plan.json\nnode deploy/compose/upgrade.mjs rollback /absolute/path/to/upgrade-plan.json" },
+        { type: "p", text: "롤백은 이전 Core와 Web으로만 되돌립니다. 다운 마이그레이션은 없습니다. 스키마나 객체를 되돌려야 하면 복원입니다. SDK 배포 채널을 되돌리는 것과 인스턴스 데이터베이스를 되돌리는 것은 다른 일입니다. 채널 포인터만 바뀌고, 이미 설치된 데이터베이스는 다시 쓰이지 않습니다." }
       ]
     },
     en: {
@@ -237,7 +263,9 @@ export const catalog: DocEntry[] = [
       title: "Database changes only move forward.",
       lead: "Rollback restores the previous Core and Web images. It does not downgrade the schema. Restoring schema or objects is a restore.",
       blocks: [
-        { type: "p", text: "Moving an SDK release channel and moving an instance database are different. The channel pointer changes. An installed database is not rewritten." }
+        { type: "p", text: "After you write a release plan, run the upgrade helper from the repository root. It runs a read-only preflight, an object-storage check, forward-only migration, Core replacement, then Web replacement. A failure before migration leaves the workloads unchanged." },
+        { type: "code", text: "node deploy/compose/upgrade.mjs upgrade /absolute/path/to/upgrade-plan.json\nnode deploy/compose/upgrade.mjs rollback /absolute/path/to/upgrade-plan.json" },
+        { type: "p", text: "Rollback returns only to the previous Core and Web. There is no down migration. Restoring schema or objects is a restore. Moving an SDK release channel and moving an instance database are different. The channel pointer changes. An installed database is not rewritten." }
       ]
     }
   },
@@ -250,7 +278,13 @@ export const catalog: DocEntry[] = [
       title: "서명한 뒤 Vite 프로젝트를 열고 미리보기를 봅니다.",
       lead: "데스크톱 Chrome에서 서명 이후의 하루 경과입니다. 워크스페이스에서 프로젝트를 엽니다.",
       blocks: [
-        { type: "p", text: "되는 경로는 Vite 프로젝트를 열고, 그 프로젝트가 선언한 패키지를 설치하고, 파일을 고치고, 미리보기가 따라오는 것입니다." },
+        { type: "p", text: "되는 경로는 데스크톱 Chrome에서 다음 순서입니다. 매니지드 클라우드나 임의의 npm 전체는 이 경로에 없습니다." },
+        { type: "ul", items: [
+          "Web 출처에 서명합니다. 공개 가입은 없고, 계정은 첫 관리자 또는 관리자 초대입니다.",
+          "워크스페이스에서 Vite 프로젝트를 만들거나 엽니다.",
+          "그 프로젝트가 선언한 패키지를 설치합니다.",
+          "파일을 고치고 저장합니다. 미리보기가 갱신되고, 저장한 결과는 남습니다."
+        ] },
         { type: "links", items: [
           { to: "/use/projects", label: "프로젝트" },
           { to: "/use/preview", label: "미리보기" },
@@ -265,7 +299,13 @@ export const catalog: DocEntry[] = [
       title: "After sign-in, open a Vite project and watch Preview.",
       lead: "This is the day after sign-in on desktop Chrome. Open a project from the workspace.",
       blocks: [
-        { type: "p", text: "The path that works is to open a Vite project, install the packages it declares, edit a file, and have Preview follow." },
+        { type: "p", text: "The path that works on desktop Chrome is the sequence below. Managed cloud and arbitrary npm as a whole are not part of it." },
+        { type: "ul", items: [
+          "Sign in on the Web origin. There is no public signup. The account is the first administrator or an administrator invite.",
+          "Create or open a Vite project from the workspace.",
+          "Install the packages that project declares.",
+          "Edit a file and save it. Preview updates, and the saved result remains."
+        ] },
         { type: "links", items: [
           { to: "/use/projects", label: "Projects" },
           { to: "/use/preview", label: "Preview" },
@@ -284,7 +324,12 @@ export const catalog: DocEntry[] = [
       title: "프로젝트를 열면 저장한 파일이 남습니다.",
       lead: "프로젝트를 만들거나 엽니다. 템플릿 또는 가져온 묶음에서 시작할 수 있습니다.",
       blocks: [
-        { type: "p", text: "편집기는 저장한 내용을 프로젝트 파일로 남깁니다. 패키지 설치는 프로젝트에 선언된 의존성을 대상으로 합니다." }
+        { type: "ul", items: [
+          "워크스페이스에서 새 프로젝트를 만들거나, 이미 있는 프로젝트를 엽니다. 시작점은 템플릿 또는 가져온 묶음입니다.",
+          "편집기에서 파일을 고치고 저장합니다. 저장한 내용이 프로젝트 파일로 남습니다.",
+          "패키지 설치는 그 프로젝트가 선언한 의존성만 대상으로 합니다. 선언되지 않은 패키지를 임의로 받는 경로는 지원 범위 밖입니다."
+        ] },
+        { type: "links", items: [{ to: "/limits", label: "지원 범위" }] }
       ]
     },
     en: {
@@ -293,7 +338,12 @@ export const catalog: DocEntry[] = [
       title: "A saved edit stays in the project file.",
       lead: "Create or open a project. You can start from a template or an imported bundle.",
       blocks: [
-        { type: "p", text: "The editor keeps saved content as project files. Package installation targets the dependencies the project declares." }
+        { type: "ul", items: [
+          "Create a project from the workspace, or open one that already exists. The starting point is a template or an imported bundle.",
+          "Edit a file in the editor and save it. The saved content stays as a project file.",
+          "Package installation targets only the dependencies that project declares. Installing packages it does not declare is outside the supported path."
+        ] },
+        { type: "links", items: [{ to: "/limits", label: "Supported scope" }] }
       ]
     }
   },
@@ -306,7 +356,12 @@ export const catalog: DocEntry[] = [
       title: "미리보기는 애플리케이션과 다른 출처에서 열립니다.",
       lead: "설치와 편집이 반영되면 미리보기가 갱신됩니다. 미리보기 도메인은 설치 때 정한 와일드카드 도메인입니다.",
       blocks: [
-        { type: "p", text: "미리보기 도메인은 애플리케이션 도메인과 나뉩니다. 프로젝트 페이지가 미리보기 페이지의 저장소를 그대로 읽지 않게 하기 위해서입니다." }
+        { type: "ul", items: [
+          "프로젝트를 연 뒤 미리보기를 실행합니다. 선언된 패키지 설치와 파일 저장이 반영되면 미리보기가 갱신되고, 그 결과는 남습니다.",
+          "미리보기 주소는 설치 때 정한 와일드카드 도메인입니다. 애플리케이션 도메인과 나뉩니다. 프로젝트 페이지가 미리보기 저장소를 그대로 읽지 않기 위해서입니다.",
+          "운영 설치는 그 와일드카드의 DNS와 TLS가 역방향 프록시에서 준비된 뒤에만 미리보기를 엽니다. NURITEO_PREVIEW_WILDCARD_READY=true 는 운영자가 그 준비를 확인했다는 표시이고, NURITEO가 DNS를 대신 만들지 않습니다."
+        ] },
+        { type: "links", items: [{ to: "/install/compose", label: "Compose에서 도메인 정하기" }] }
       ]
     },
     en: {
@@ -315,7 +370,12 @@ export const catalog: DocEntry[] = [
       title: "Preview opens on a different origin from the application.",
       lead: "Preview updates as installs and edits land. The Preview domain is the wildcard domain chosen at install time.",
       blocks: [
-        { type: "p", text: "The Preview domain is separate from the application domain so the project page does not read the Preview page's storage directly." }
+        { type: "ul", items: [
+          "Open a project and run Preview. After a declared-package install or a saved edit, Preview updates and the result remains.",
+          "The Preview address is the wildcard domain chosen at install time. It is separate from the application domain so the project page does not read Preview storage directly.",
+          "A production install opens Preview only after DNS and TLS for that wildcard are ready at the reverse proxy. NURITEO_PREVIEW_WILDCARD_READY=true records that the operator checked that work. NURITEO does not create the DNS records."
+        ] },
+        { type: "links", items: [{ to: "/install/compose", label: "Choose the domain in Compose" }] }
       ]
     }
   },
@@ -328,7 +388,12 @@ export const catalog: DocEntry[] = [
       title: "파일 트리와 프로젝트 터미널을 씁니다.",
       lead: "파일 트리에서 읽고 씁니다. 프로젝트 터미널에서 선언된 패키지 매니저 명령을 실행합니다.",
       blocks: [
-        { type: "p", text: "임의 셸 제품 전체를 약속하지 않습니다. 한계는 지원 범위에 있습니다." },
+        { type: "ul", items: [
+          "파일 트리에서 프로젝트 파일을 열고, 고치고, 저장합니다.",
+          "프로젝트 터미널은 그 프로젝트가 선언한 패키지 매니저 명령을 실행합니다. 임의의 셸 전체를 제공하지 않습니다.",
+          "브라우저 안의 Docker와 네이티브 애드온은 이 터미널의 범위가 아닙니다."
+        ] },
+        { type: "p", text: "한계의 전체 목록은 지원 범위에 있습니다." },
         { type: "p", text: "관리자 화면에는 초대, 백업, 감사 로그, 레지스트리, 신원 공급자가 있습니다. 운영 절차는 설치와 보안 문서에 있습니다." },
         { type: "links", items: [
           { to: "/limits", label: "지원 범위" },
@@ -342,7 +407,12 @@ export const catalog: DocEntry[] = [
       title: "Use the file tree and the project terminal.",
       lead: "Read and write from the file tree. Run the project's declared package-manager commands in the project terminal.",
       blocks: [
-        { type: "p", text: "This is not a promise of an arbitrary shell. The boundary is the supported scope." },
+        { type: "ul", items: [
+          "Open, edit, and save project files from the file tree.",
+          "The project terminal runs the package-manager commands that project declares. It does not offer an arbitrary shell.",
+          "Docker in the browser and native addons are outside that terminal."
+        ] },
+        { type: "p", text: "The full boundary is the supported scope." },
         { type: "p", text: "Administrator screens cover invites, backups, the audit log, registries, and identity providers. Operator procedure stays in the install and security pages." },
         { type: "links", items: [
           { to: "/limits", label: "Supported scope" },
@@ -421,7 +491,8 @@ export const catalog: DocEntry[] = [
           "createNuriteoWebContainer() 입구",
           "호출의 시작, 성공, 실패 추적"
         ] },
-        { type: "p", text: "패키지에는 system_wasm.wasm, 시스템 워커, 프로세스 워커, Next·Vite·Yarn 실행 파일이 들어 있습니다. 아래 편집기의 코드는 이 페이지에서 실행됩니다. createContainer와 runtime은 이미 들어와 있습니다. 런타임 안의 임의 JavaScript 평가는 막혀 있으므로 container.run에 넣은 소스 문자열은 실행되지 않습니다." },
+        { type: "p", text: "패키지에는 system_wasm.wasm, 시스템 워커, 프로세스 워커, Next·Vite·Yarn 실행 파일이 들어 있습니다. 아래 코드는 복사할 수 있습니다. createContainer와 runtime은 편집기 안에 이미 들어와 있습니다. 런타임 안의 임의 JavaScript 평가는 막혀 있으므로 container.run에 넣은 소스 문자열은 실행되지 않습니다. 기본 예시는 entrypoint fs-smoke로 워크스페이스에 hello를 쓰고, 반환값 value는 hello, size는 5입니다." },
+        { type: "p", text: "실행은 Cross-Origin-Embedder-Policy: require-corp 와 Cross-Origin-Opener-Policy: same-origin 이 있는 문서 개발 서버에서만 합니다. GitHub Pages는 그 헤더를 붙일 수 없으므로, 공개 사이트에서는 예시를 보여 주고 부팅 성공으로 표시하지 않습니다." },
         { type: "links", items: [
           { to: "/sdk/install", label: "설치" },
           { to: "/sdk/container", label: "컨테이너" },
@@ -445,7 +516,8 @@ export const catalog: DocEntry[] = [
           "The createNuriteoWebContainer() entry",
           "Start, success, and failure traces"
         ] },
-        { type: "p", text: "The package includes system_wasm.wasm, the system worker, the process worker, and the Next, Vite, and Yarn executables. The editor below runs in this page. createContainer and runtime are already in scope. Arbitrary JavaScript evaluation inside the runtime is disabled, so a source string passed to container.run does not execute." },
+        { type: "p", text: "The package includes system_wasm.wasm, the system worker, the process worker, and the Next, Vite, and Yarn executables. The sample below can be copied. createContainer and runtime are already in scope in the editor. Arbitrary JavaScript evaluation inside the runtime is disabled, so a source string passed to container.run does not execute. The default sample uses the fs-smoke entrypoint, writes hello into the workspace, and returns value hello with size 5." },
+        { type: "p", text: "The run button works only on the docs dev server, which sends Cross-Origin-Embedder-Policy: require-corp and Cross-Origin-Opener-Policy: same-origin. GitHub Pages cannot send those headers, so the public site shows the sample and does not report a successful boot." },
         { type: "links", items: [
           { to: "/sdk/install", label: "Install" },
           { to: "/sdk/container", label: "Container" },
@@ -594,7 +666,7 @@ export const catalog: DocEntry[] = [
       lead: "services.preview는 열린 포트와 미리보기 이벤트를 냅니다. 서비스 워커가 없는 환경에서 등록하면 SdkError입니다.",
       blocks: [
         { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.listPorts();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
-        { type: "p", text: "resolveNuriteoWorkerAssets()는 시스템 워커, 프로세스 워커, assets/system_wasm.wasm 주소를 계산합니다. 미리보기 서비스 워커 주소는 scriptUrl로 따로 넘깁니다. 등록 실패 코드는 ESDK_SERVICE_WORKER_UNAVAILABLE과 ESDK_SERVICE_WORKER_REGISTRATION_FAILED입니다." }
+        { type: "p", text: "resolveNuriteoWorkerAssets()가 돌려주는 필드는 systemWorkerUrl, processWorkerUrl, systemWasmUrl입니다. systemWasmUrl은 assets/system_wasm.wasm을 가리킵니다. 미리보기 서비스 워커 주소는 scriptUrl로 따로 넘깁니다. 등록 실패 코드는 ESDK_SERVICE_WORKER_UNAVAILABLE과 ESDK_SERVICE_WORKER_REGISTRATION_FAILED입니다." }
       ]
     },
     en: {
@@ -604,7 +676,7 @@ export const catalog: DocEntry[] = [
       lead: "services.preview reports open ports and Preview events. Registering a service worker where none exists throws SdkError.",
       blocks: [
         { type: "code", text: "const assets = resolveNuriteoWorkerAssets(new URL(\"./\", import.meta.url));\nawait registerNuriteoPreviewServiceWorker({ scriptUrl: \"/preview-sw.js\" });\nawait container.services.preview.setPreviewScript(\"pnpm dev\");\nconst ports = await container.services.preview.listPorts();\nreturn { systemWorkerUrl: assets.systemWorkerUrl.href, ports };" },
-        { type: "p", text: "resolveNuriteoWorkerAssets() computes the system worker, process worker, and assets/system_wasm.wasm URLs. Pass the preview service worker separately as scriptUrl. Registration failures use ESDK_SERVICE_WORKER_UNAVAILABLE and ESDK_SERVICE_WORKER_REGISTRATION_FAILED." }
+        { type: "p", text: "resolveNuriteoWorkerAssets() returns systemWorkerUrl, processWorkerUrl, and systemWasmUrl. systemWasmUrl points at assets/system_wasm.wasm. Pass the preview service worker separately as scriptUrl. Registration failures use ESDK_SERVICE_WORKER_UNAVAILABLE and ESDK_SERVICE_WORKER_REGISTRATION_FAILED." }
       ]
     }
   },
@@ -833,6 +905,7 @@ export const catalog: DocEntry[] = [
       title: "pnpm dev가 개발 루프를 재시작합니다.",
       lead: "띄우는 명령은 소스 실행과 같습니다. 이 페이지는 코드 변경이 무엇을 다시 시작하는지 적습니다.",
       blocks: [
+        { type: "code", text: "pnpm dev\npnpm dev:web\npnpm dev:stack:down\npnpm dev:stack:reset" },
         { type: "ul", items: [
           "Rust 소스 변경은 Core를 다시 빌드하고 재시작합니다.",
           "Web 변경은 Next.js HMR로 저장 즉시 갱신됩니다. Web만 다시 띄울 때는 pnpm dev:web을 씁니다.",
@@ -849,6 +922,7 @@ export const catalog: DocEntry[] = [
       title: "pnpm dev restarts the development loop.",
       lead: "The commands match the source install. This page says which code change restarts which part.",
       blocks: [
+        { type: "code", text: "pnpm dev\npnpm dev:web\npnpm dev:stack:down\npnpm dev:stack:reset" },
         { type: "ul", items: [
           "A Rust source change rebuilds and restarts Core.",
           "A Web change refreshes through Next.js HMR. Use pnpm dev:web to start Web alone.",
@@ -875,7 +949,9 @@ export const catalog: DocEntry[] = [
           "pnpm test:web",
           "pnpm test:workspace-runtime",
           "cargo test --workspace",
-          "pnpm package:sdk 다음 pnpm test:sdk-consumer"
+          "pnpm package:sdk 다음 pnpm test:sdk-consumer",
+          "pnpm --filter @nuriteo/docs test",
+          "pnpm --filter @nuriteo/docs typecheck"
         ] }
       ]
     },
@@ -891,7 +967,9 @@ export const catalog: DocEntry[] = [
           "pnpm test:web",
           "pnpm test:workspace-runtime",
           "cargo test --workspace",
-          "pnpm package:sdk, then pnpm test:sdk-consumer"
+          "pnpm package:sdk, then pnpm test:sdk-consumer",
+          "pnpm --filter @nuriteo/docs test",
+          "pnpm --filter @nuriteo/docs typecheck"
         ] }
       ]
     }

@@ -8,9 +8,11 @@ import "./styles.css";
 const root = document.getElementById("root");
 if (!root) throw new Error("missing root");
 
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <App />
     </BrowserRouter>
   </StrictMode>
