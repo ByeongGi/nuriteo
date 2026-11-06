@@ -11,19 +11,19 @@ assert.equal(policy.taskId, "SEC-003");
 assert.equal(policy.profile, "restricted-v1");
 assert.deepEqual(policy.images, ["server", "web", "operations"]);
 
-const helpers = fs.readFileSync("charts/nuriteo/templates/_helpers.tpl", "utf8");
+const helpers = fs.readFileSync("deploy/charts/nuriteo/templates/_helpers.tpl", "utf8");
 for (const required of ["runAsNonRoot: true", "runAsUser: 65532", "runAsGroup: 65532", "type: RuntimeDefault",
   "allowPrivilegeEscalation: false", "readOnlyRootFilesystem: true", "- ALL"])
   assert.ok(helpers.includes(required), `Helm hardening helper missing: ${required}`);
 
 for (const template of policy.requiredWorkloadTemplates) {
-  const source = fs.readFileSync(`charts/nuriteo/templates/${template}`, "utf8");
+  const source = fs.readFileSync(`deploy/charts/nuriteo/templates/${template}`, "utf8");
   assert.ok(source.includes("automountServiceAccountToken: false"), `${template}: service account token must be disabled`);
   assert.ok(source.includes('include "nuriteo.podSecurityContext"'), `${template}: pod security context missing`);
   assert.ok(source.includes('include "nuriteo.containerSecurityContext"'), `${template}: container security context missing`);
 }
 
-const render = spawnSync("helm", ["template", "nuriteo", "charts/nuriteo", "--namespace", "nuriteo",
+const render = spawnSync("helm", ["template", "nuriteo", "deploy/charts/nuriteo", "--namespace", "nuriteo",
   "--set", "networkPolicy.enabled=true", "--set-string", "networkPolicy.externalEgress.cidrBlocks[0]=10.40.12.0/24"],
 { encoding: "utf8" });
 assert.equal(render.status, 0, render.stderr);
@@ -36,7 +36,7 @@ assert.equal((yaml.match(/^kind: NetworkPolicy$/gmu) ?? []).length, 4);
 for (const prohibited of [/privileged:\s*true/u, /hostNetwork:\s*true/u, /hostPID:\s*true/u, /hostIPC:\s*true/u, /hostPath:/u])
   assert.doesNotMatch(yaml, prohibited);
 
-const schema = JSON.parse(fs.readFileSync("charts/nuriteo/values.schema.json", "utf8")) as {
+const schema = JSON.parse(fs.readFileSync("deploy/charts/nuriteo/values.schema.json", "utf8")) as {
   properties: { serviceAccount: { properties: { automountServiceAccountToken: { const?: boolean } } } } };
 assert.equal(schema.properties.serviceAccount.properties.automountServiceAccountToken.const, false);
 

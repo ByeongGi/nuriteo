@@ -6,8 +6,8 @@ report="${1:-$root/release/ga/reproducible-images.json}"
 output="${2:-$root/release/ga/artifacts}"
 version="1.0.0"
 mkdir -p "$output"
-helm lint "$root/charts/nuriteo"
-helm package "$root/charts/nuriteo" --version "$version" --app-version "$version" --destination "$output" >/dev/null
+helm lint "$root/deploy/charts/nuriteo"
+helm package "$root/deploy/charts/nuriteo" --version "$version" --app-version "$version" --destination "$output" >/dev/null
 chart="$output/nuriteo-$version.tgz"
 chart_sha="$(shasum -a 256 "$chart" | awk '{print $1}')"
 jq --arg version "$version" --arg chart "$(basename "$chart")" --arg chartSha "$chart_sha" \

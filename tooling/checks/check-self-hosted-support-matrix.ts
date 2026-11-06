@@ -94,7 +94,7 @@ assert.ok(oci !== undefined);
 for (const platform of imagePolicy.platforms) assert.ok(oci.contract.includes(platform));
 for (const role of imagePolicy.roles) assert.ok(oci.contract.toLowerCase().includes(role));
 
-const chart = fs.readFileSync("charts/nuriteo/Chart.yaml", "utf8");
+const chart = fs.readFileSync("deploy/charts/nuriteo/Chart.yaml", "utf8");
 assert.match(chart, /kubeVersion: ">=1\.29\.0-0"/u);
 const kubernetes = matrix.support.find(({ id }) => id === "SHV1-KUBERNETES");
 assert.ok(kubernetes?.contract.includes("1.29 through 1.37"));

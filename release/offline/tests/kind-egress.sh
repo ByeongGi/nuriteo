@@ -8,7 +8,7 @@ fixture_image=${NURITEO_EGRESS_FIXTURE_IMAGE:-docker.io/library/busybox:1.37.0}
 created_cluster=false
 policy_file=$(mktemp "${TMPDIR:-/tmp}/nuriteo-airgap-policy.XXXXXX")
 image_archive=$(mktemp "${TMPDIR:-/tmp}/nuriteo-airgap-image.XXXXXX.tar")
-chart_dir=$(CDPATH= cd -- "$(dirname "$0")/../../../charts/nuriteo" && pwd)
+chart_dir=$(CDPATH= cd -- "$(dirname "$0")/../../../deploy/charts/nuriteo" && pwd)
 
 cleanup() {
   kubectl --context "$context" delete namespace "$namespace" --wait=false >/dev/null 2>&1 || true

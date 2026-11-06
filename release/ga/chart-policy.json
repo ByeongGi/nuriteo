@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "taskId": "REL-003",
   "version": "1.0.0",
-  "chart": "charts/nuriteo",
+  "chart": "deploy/charts/nuriteo",
   "distribution": "OCI",
   "binding": "release/ga/artifacts/nuriteo-1.0.0.chart-images.json",
   "requiredPlatforms": ["linux/amd64", "linux/arm64"],

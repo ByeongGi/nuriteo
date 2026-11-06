@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-chart="$root/charts/nuriteo"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+chart="$root/deploy/charts/nuriteo"
 fixture="$root/deploy/compose/fixtures/upgrade-rehearsal"
 cluster="${NURITEO_KIND_CLUSTER:-nuriteo-rc003}"
 namespace="${NURITEO_KIND_NAMESPACE:-nuriteo-rc003}"

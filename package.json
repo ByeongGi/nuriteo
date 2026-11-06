@@ -51,7 +51,7 @@
     "test:rc-gate": "release/rc/qualify.sh",
     "check:self-hosted-upgrade-compatibility": "node tooling/checks/check-self-hosted-upgrade-compatibility.ts",
     "test:self-hosted-upgrade-compatibility": "node --test tooling/checks/test/self-hosted-upgrade-compatibility.test.ts",
-    "check:self-hosted-helm-chart": "charts/nuriteo/tests/check-chart.sh",
+    "check:self-hosted-helm-chart": "deploy/charts/nuriteo/tests/check-chart.sh",
     "check:self-hosted-g0": "node tooling/checks/check-self-hosted-g0.ts",
     "check:self-hosted-g2": "node tooling/checks/check-self-hosted-g2.ts",
     "check:node-upgrade": "node tooling/checks/check-node-upgrade.ts",

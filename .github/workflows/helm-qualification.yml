@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/helm-qualification.yml"
-      - "charts/nuriteo/**"
+      - "deploy/charts/nuriteo/**"
       - "deploy/compose/fixtures/upgrade-rehearsal/**"
   workflow_dispatch:
 
@@ -22,8 +22,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: bash -n charts/nuriteo/tests/kind-release.sh
-      - run: charts/nuriteo/tests/check-chart.sh
+      - run: bash -n deploy/charts/nuriteo/tests/kind-release.sh
+      - run: deploy/charts/nuriteo/tests/check-chart.sh
 
   kind-release:
     name: kind install / failure / upgrade / rollback
@@ -41,4 +41,4 @@ jobs:
       - name: Verify runner dependencies
         run: command -v docker helm kubectl kind
       - name: Run complete Helm lifecycle qualification
-        run: charts/nuriteo/tests/kind-release.sh
+        run: deploy/charts/nuriteo/tests/kind-release.sh

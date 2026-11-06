@@ -56,7 +56,7 @@ assert.equal(compatibility.support.upgradeTo, "self-hosted-v1-rc-lineage");
 
 const byRole = new Map(manifest.images.map((image) => [image.role, image]));
 const render = spawnSync("helm", [
-  "template", "nuriteo", "charts/nuriteo",
+  "template", "nuriteo", "deploy/charts/nuriteo",
   "--set-string", "global.imageRegistry=registry.internal:5443/nuriteo",
   "--set-string", "images.server.repository=server",
   "--set-string", `images.server.digest=${byRole.get("server")?.digest}`,

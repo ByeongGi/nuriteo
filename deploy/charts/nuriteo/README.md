@@ -94,7 +94,7 @@ the exact digest, argv and target refs, create the Job, and only then unsuspend 
 declarative application state.
 
 ```sh
-helm template nuriteo charts/nuriteo --namespace nuriteo \
+helm template nuriteo deploy/charts/nuriteo --namespace nuriteo \
   --show-only templates/toolbox-job.yaml \
   --set toolbox.enabled=true \
   --set toolbox.operation=list > nuriteo-toolbox.yaml
@@ -113,7 +113,7 @@ operator cutover evidence; they are not presented as runtime enforcement. There 
 restore implementation.
 
 ```sh
-helm template nuriteo charts/nuriteo --namespace nuriteo \
+helm template nuriteo deploy/charts/nuriteo --namespace nuriteo \
   --show-only templates/restore-job.yaml \
   --set restore.enabled=true \
   --set-string restore.restorePointId=0199ee6c-c777-7000-8000-000000007099 \
@@ -220,9 +220,9 @@ so the product reports Preview as disabled.
 ## Validate
 
 ```sh
-helm lint --strict charts/nuriteo
-helm template nuriteo charts/nuriteo --namespace nuriteo
-charts/nuriteo/tests/check-chart.sh
+helm lint --strict deploy/charts/nuriteo
+helm template nuriteo deploy/charts/nuriteo --namespace nuriteo
+deploy/charts/nuriteo/tests/check-chart.sh
 ```
 
 The release lifecycle qualification uses a disposable kind cluster and five distinct fixture images. It
@@ -230,7 +230,7 @@ proves clean install, preflight failure fencing, forward upgrade, Helm rollback,
 of operator-owned Secrets. Podman is the local default:
 
 ```sh
-charts/nuriteo/tests/kind-release.sh
+deploy/charts/nuriteo/tests/kind-release.sh
 ```
 
 Docker-based CI uses the same test with `KIND_EXPERIMENTAL_PROVIDER=docker` and

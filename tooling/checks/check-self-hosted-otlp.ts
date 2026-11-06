@@ -37,8 +37,8 @@ const metrics = fs.readFileSync("crates/nuriteo-server/src/observability/metrics
 for (const required of ["HeaderExtractor", "SpanKind::Server", "http.route", "with_context"])
   assert.ok(metrics.includes(required), `request telemetry missing ${required}`);
 
-const chart = fs.readFileSync("charts/nuriteo/templates/core.yaml", "utf8");
-const values = fs.readFileSync("charts/nuriteo/values.yaml", "utf8");
+const chart = fs.readFileSync("deploy/charts/nuriteo/templates/core.yaml", "utf8");
+const values = fs.readFileSync("deploy/charts/nuriteo/values.yaml", "utf8");
 const compose = fs.readFileSync("deploy/compose/compose.yaml", "utf8");
 for (const deployment of [chart, compose]) {
   for (const name of ["OTEL_TRACES_EXPORTER", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER", "OTEL_EXPORTER_OTLP_PROTOCOL"])

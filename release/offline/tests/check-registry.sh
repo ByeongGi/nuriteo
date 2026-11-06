@@ -14,7 +14,7 @@ command -v podman >/dev/null 2>&1 || { echo 'podman is required' >&2; exit 1; }
 command -v skopeo >/dev/null 2>&1 || { echo 'skopeo is required' >&2; exit 1; }
 [ -f "$source_archive" ] || { echo 'source OCI archive is missing' >&2; exit 1; }
 [ -d "$certificates" ] || { echo 'registry CA directory is missing' >&2; exit 1; }
-[ -f "$chart_archive" ] || helm package "$repository/charts/nuriteo" --destination "$work" >/dev/null
+[ -f "$chart_archive" ] || helm package "$repository/deploy/charts/nuriteo" --destination "$work" >/dev/null
 
 mkdir -p "$bundle"
 node - "$repository" "$bundle" "$source_archive" "$chart_archive" <<'NODE'

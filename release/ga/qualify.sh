@@ -26,7 +26,7 @@ NURITEO_OPERATIONS_IMAGE="$NURITEO_OPERATIONS_IMAGE" \
 
 CONTAINER_RUNTIME="$runtime" "$root/crates/nuriteo-server/tests/fixtures/backup-restore/run.sh"
 NURITEO_CONTAINER_ENGINE="$runtime" "$root/deploy/compose/run-upgrade-rehearsal.sh"
-CONTAINER_RUNTIME="$runtime" "$root/charts/nuriteo/tests/kind-release.sh"
+CONTAINER_RUNTIME="$runtime" "$root/deploy/charts/nuriteo/tests/kind-release.sh"
 
 source_commit="$(jq -r .sourceCommit "$artifacts/nuriteo-1.0.0.release.json")"
 jq -n --arg sourceCommit "$source_commit" \

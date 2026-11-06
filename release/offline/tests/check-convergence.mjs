@@ -82,7 +82,7 @@ try {
 
   const chartDestination = path.dirname(path.join(bundle, artifacts.get("helm-chart").path));
   fs.mkdirSync(chartDestination, { recursive: true });
-  run("helm", ["package", "charts/nuriteo", "--destination", chartDestination]);
+  run("helm", ["package", "deploy/charts/nuriteo", "--destination", chartDestination]);
 
   const sourceCommit = rcManifest?.sourceCommit ?? run("git", ["rev-parse", "HEAD"]);
   const manifest = buildManifest(inventory, bundle, sourceCommit, "2026-10-11T00:00:00.000Z");

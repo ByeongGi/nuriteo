@@ -14,7 +14,7 @@ NURITEO_COMPOSE_SKIP_APP_BUILD=1 \
 NURITEO_SERVER_IMAGE=localhost/nuriteo-server:1.0.0-rc.1 \
 NURITEO_WEB_IMAGE=localhost/nuriteo-web:1.0.0-rc.1 \
   deploy/compose/test-compose.sh
-charts/nuriteo/tests/kind-release.sh
+deploy/charts/nuriteo/tests/kind-release.sh
 CONTAINER_RUNTIME="$runtime" crates/nuriteo-server/tests/fixtures/backup-restore/run.sh
 
 printf '%s\n' '{"status":"pass","gate":"GATE-006","release":"1.0.0-rc.1","compose":true,"helm":true,"restore":true,"airgap":true}'
