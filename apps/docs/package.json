@@ -1,0 +1,27 @@
+{
+  "name": "@nuriteo/docs",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm runtime:assets && vite",
+    "build": "pnpm runtime:assets && vite build",
+    "preview": "vite preview",
+    "runtime:assets": "node --experimental-strip-types ../web/tooling/build-runtime-assets.ts --out-dir public/runtime",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@nuriteo/sdk": "workspace:*",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-router": "7.9.4"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.3",
+    "@types/react-dom": "19.0.3",
+    "@vitejs/plugin-react": "5.0.4",
+    "typescript": "6.0.3",
+    "vite": "7.1.5"
+  }
+}

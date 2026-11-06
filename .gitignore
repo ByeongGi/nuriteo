@@ -9,6 +9,7 @@
 /apps/*/node_modules/
 /apps/*/dist/
 /apps/web/public/runtime/
+/apps/docs/public/runtime/
 /apps/web/storybook-static/
 /apps/web/.next-e2e/
 /tests/**/node_modules/

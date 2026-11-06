@@ -32,7 +32,7 @@
 /use/preview              미리보기
 /use/files                파일과 터미널
 /limits                   지원 범위
-/sdk                      SDK 개요
+/sdk                      SDK 개요와 브라우저에서 실행되는 예시
 /sdk/install              설치
 /sdk/container            런타임 컨테이너
 /sdk/filesystem           파일
@@ -168,7 +168,13 @@ SDK 배포 채널을 되돌리는 것과 인스턴스 데이터베이스를 되�
 
 `@nuriteo/sdk`는 브라우저 페이지 안에 NURITEO 런타임을 붙이는 라이브러리다. 셀프호스트 서버가 아니다. 파일, 패키지, 미리보기, 프로젝트 동작은 호출하는 쪽이 어댑터를 연결한다. 패키지는 그 입구와 브라우저 런타임 자산을 담는다.
 
-### 개요 `/sdk`
+### 개요와 실행 예시 `/sdk`
+
+문서 사이트의 `/sdk`는 설명만 두지 않고, 그 페이지 안에서 `@nuriteo/sdk`의 `createContainer()`로 시스템 워커와 프로세스 워커를 부팅한다. 예시는 `entrypoint: "fs-smoke"`로 워크스페이스 파일에 `hello`를 쓰고 다시 읽어 화면에 프로토콜 버전, 상태, 읽은 값, 크기를 보여 준다. 동적 JavaScript 평가는 런타임이 막으므로, 예시 소스를 방문자 입력으로 실행하지 않는다.
+
+페이지를 열 때는 Cross-Origin Isolation이 필요하다. 개발 서버는 `Cross-Origin-Embedder-Policy: require-corp`와 `Cross-Origin-Opener-Policy: same-origin`을 붙인다. 워커와 WASM은 `apps/web`의 런타임 자산 빌드를 `apps/docs/public/runtime`에 만들어 같은 출처로 제공한다.
+
+### 개요에서 설명할 기능
 
 제공하는 것:
 
