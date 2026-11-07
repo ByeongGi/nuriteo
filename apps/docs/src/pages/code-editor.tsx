@@ -4,7 +4,9 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { useDocsPreferences } from "../preferences.tsx";
 import { createHighlighterCoreSync } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import bash from "shiki/langs/bash.mjs";
@@ -68,12 +70,43 @@ const surfaceTheme = EditorView.theme({
 });
 
 export function CodeBlock({ text }: { text: string }) {
+  const { lang } = useDocsPreferences();
+  const language = codeLanguage(text);
   const html = highlighter.codeToHtml(text, {
-    lang: codeLanguage(text),
+    lang: language,
     themes: { light: "github-light", dark: "github-dark" },
     defaultColor: false
   });
-  return <div className="shiki-block mb-6" dangerouslySetInnerHTML={{ __html: html }} />;
+  const label = language === "javascript" ? "JavaScript" : "Shell";
+  return (
+    <figure className="shiki-block mb-6 overflow-hidden rounded-lg border border-border bg-surface">
+      <figcaption className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5">
+        <span className="font-mono text-xs text-muted-foreground">{label}</span>
+        <CopyButton text={text} copied={lang === "ko" ? "복사됨" : "Copied"} idle={lang === "ko" ? "복사" : "Copy"} />
+      </figcaption>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </figure>
+  );
+}
+
+function CopyButton({ text, copied, idle }: { text: string; copied: string; idle: string }) {
+  const [done, setDone] = useState(false);
+
+  async function onCopy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      window.setTimeout(() => setDone(false), 1500);
+    } catch {
+      setDone(false);
+    }
+  }
+
+  return (
+    <button className="text-xs text-muted-foreground hover:text-foreground" type="button" onClick={() => void onCopy()}>
+      {done ? copied : idle}
+    </button>
+  );
 }
 
 export function CodeEditor({

@@ -121,9 +121,9 @@ html[data-theme-mode="dark"] .shiki-block .shiki span {
 .shiki-block .shiki {
   margin: 0;
   overflow: auto;
-  border: 1px solid var(--n-color-border-default);
-  border-radius: var(--n-radius-lg);
-  background: var(--n-color-bg-surface);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   padding: 0.9rem 1rem;
   font-family: var(--n-font-family-mono);
   font-size: var(--n-font-size-sm);
