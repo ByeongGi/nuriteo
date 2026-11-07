@@ -6,6 +6,7 @@ import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button.tsx";
 import { useDocsPreferences } from "../preferences.tsx";
 import { createHighlighterCoreSync } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
@@ -103,9 +104,9 @@ function CopyButton({ text, copied, idle }: { text: string; copied: string; idle
   }
 
   return (
-    <button className="text-xs text-muted-foreground hover:text-foreground" type="button" onClick={() => void onCopy()}>
+    <Button className="h-7 px-2 text-muted-foreground" variant="ghost" size="sm" type="button" onClick={() => void onCopy()}>
       {done ? copied : idle}
-    </button>
+    </Button>
   );
 }
 

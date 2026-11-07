@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { runSdkExample } from "../example/run-sdk-example.ts";
+import { Button } from "@/components/ui/button.tsx";
 import { useDocsPreferences } from "../preferences.tsx";
 import { CodeEditor } from "./code-editor.tsx";
 
@@ -74,8 +75,7 @@ export function SdkPlayground() {
           <p className="m-0 text-sm font-semibold">{copy.title}</p>
           <p className="m-0 mt-1 text-xs text-muted-foreground">{copy.note}</p>
         </div>
-        <button
-          className="rounded-lg bg-primary px-3 py-2 text-sm text-on-primary disabled:cursor-not-allowed disabled:opacity-60"
+        <Button
           type="button"
           onClick={() => {
             if (!isolated) return;
@@ -85,7 +85,7 @@ export function SdkPlayground() {
           disabled={pending || !isolated}
         >
           {pending ? copy.running : copy.run}
-        </button>
+        </Button>
       </div>
       <div className="grid min-[801px]:grid-cols-2">
         <div className="border-b border-border min-[801px]:border-r min-[801px]:border-b-0">
