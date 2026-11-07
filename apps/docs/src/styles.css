@@ -76,6 +76,10 @@
     min-height: 100%;
   }
 
+  html {
+    scroll-padding-top: calc(var(--n-layout-header-height) + 1.25rem);
+  }
+
   body {
     margin: 0;
     background: var(--n-color-bg-page);
