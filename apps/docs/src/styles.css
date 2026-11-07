@@ -14,6 +14,10 @@
   --color-sidebar: var(--n-color-bg-sidebar);
   --color-subtle: var(--n-color-bg-subtle);
   --color-surface: var(--n-color-bg-surface);
+  --color-card: var(--n-color-bg-surface);
+  --color-card-foreground: var(--n-color-fg-default);
+  --color-popover: var(--n-color-bg-surface);
+  --color-popover-foreground: var(--n-color-fg-default);
   --color-raised: var(--n-color-bg-raised);
   --color-overlay: var(--n-color-bg-overlay);
   --color-hover: var(--n-color-bg-hover);

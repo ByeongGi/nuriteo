@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { runSdkExample } from "../example/run-sdk-example.ts";
+import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Separator } from "@/components/ui/separator.tsx";
 import { useDocsPreferences } from "../preferences.tsx";
 import { CodeEditor } from "./code-editor.tsx";
 
@@ -69,11 +72,11 @@ export function SdkPlayground() {
   const copy = playgroundCopy[lang];
 
   return (
-    <section className="mt-2 overflow-hidden rounded-lg border border-border bg-surface" aria-label="SDK playground">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+    <Card className="mt-2 gap-0 overflow-hidden py-0 shadow-none" aria-label="SDK playground">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b py-3">
         <div>
-          <p className="m-0 text-sm font-semibold">{copy.title}</p>
-          <p className="m-0 mt-1 text-xs text-muted-foreground">{copy.note}</p>
+          <CardTitle className="text-sm">{copy.title}</CardTitle>
+          <CardDescription className="mt-1 text-xs">{copy.note}</CardDescription>
         </div>
         <Button
           type="button"
@@ -86,14 +89,14 @@ export function SdkPlayground() {
         >
           {pending ? copy.running : copy.run}
         </Button>
-      </div>
+      </CardHeader>
       <div className="grid min-[801px]:grid-cols-2">
-        <div className="border-b border-border min-[801px]:border-r min-[801px]:border-b-0">
+        <div className="border-b min-[801px]:border-r min-[801px]:border-b-0">
           <CodeEditor text={sample} label={copy.editorLabel} onChange={setSource} />
         </div>
         <Workspace copy={copy} error={error} isolated={isolated} isolatedNote={isolatedLimit[lang]} pending={pending} result={result} />
       </div>
-    </section>
+    </Card>
   );
 }
 
@@ -154,18 +157,20 @@ function Workspace({
         <p className="m-0 text-xs font-semibold text-muted-foreground">{copy.workspace}</p>
         <p className="m-0 text-xs text-muted-foreground">{pending ? copy.updating : status}</p>
       </div>
-      {isolated ? null : <p className="m-0 text-sm" role="note">{isolatedNote}</p>}
-      {error ? <p className="m-0 mb-3 text-sm text-danger" role="alert">{error}</p> : null}
+      {isolated ? null : <Alert className="mb-3"><AlertDescription>{isolatedNote}</AlertDescription></Alert>}
+      {error ? <Alert className="mb-3" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
       {note !== null ? <p className="m-0 mb-3 text-sm">{note}</p> : null}
       {file && value !== null ? (
-        <article className="mb-4 overflow-hidden rounded-lg border border-border bg-surface">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2">
+        <Card className="mb-4 gap-0 overflow-hidden py-0 shadow-none">
+          <div className="flex items-center justify-between gap-3 px-3 py-2">
             <p className="m-0 font-mono text-xs">{file}</p>
             {size !== null ? <p className="m-0 text-xs text-muted-foreground">{size} B</p> : null}
           </div>
+          <Separator />
           <pre className="m-0 px-3 py-3 font-mono text-sm leading-relaxed"><code>{value}</code></pre>
-          <p className="m-0 border-t border-border px-3 py-2 text-xs text-muted-foreground">{copy.fileLabel}</p>
-        </article>
+          <Separator />
+          <p className="m-0 px-3 py-2 text-xs text-muted-foreground">{copy.fileLabel}</p>
+        </Card>
       ) : null}
       {result !== undefined ? (
         <>

@@ -6,7 +6,9 @@ import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
 
+import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
+import { Card } from "@/components/ui/card.tsx";
 import { useDocsPreferences } from "../preferences.tsx";
 import { createHighlighterCoreSync } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
@@ -80,13 +82,13 @@ export function CodeBlock({ text }: { text: string }) {
   });
   const label = language === "javascript" ? "JavaScript" : "Shell";
   return (
-    <figure className="shiki-block mb-6 overflow-hidden rounded-lg border border-border bg-surface">
-      <figcaption className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5">
-        <span className="font-mono text-xs text-muted-foreground">{label}</span>
+    <Card className="shiki-block mb-6 gap-0 overflow-hidden py-0 shadow-none">
+      <div className="flex items-center justify-between gap-3 border-b px-3 py-1.5">
+        <Badge className="font-mono" variant="secondary">{label}</Badge>
         <CopyButton text={text} copied={lang === "ko" ? "복사됨" : "Copied"} idle={lang === "ko" ? "복사" : "Copy"} />
-      </figcaption>
+      </div>
       <div dangerouslySetInnerHTML={{ __html: html }} />
-    </figure>
+    </Card>
   );
 }
 
