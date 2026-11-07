@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
 
@@ -22,7 +23,7 @@ function pagesFontUrls(): Plugin {
 
 export default defineConfig(({ command }) => ({
   base: command === "build" ? pagesBase : "/",
-  plugins: [react(), pagesFontUrls()],
+  plugins: [tailwindcss(), react(), pagesFontUrls()],
   server: { headers: isolation, port: 5174 },
   preview: { headers: isolation, port: 5174 }
 }));
