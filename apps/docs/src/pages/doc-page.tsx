@@ -25,44 +25,43 @@ export function DocPage() {
   const next = catalog[index + 1];
 
   const titleClass = entry.path === "/"
-    ? "mb-4 text-3xl font-semibold tracking-tight text-pretty max-[800px]:text-2xl"
-    : "mb-4 text-2xl font-semibold tracking-tight text-pretty";
+    ? "mb-4 text-4xl font-semibold tracking-tight text-pretty max-[800px]:text-3xl"
+    : "mb-4 text-3xl font-semibold tracking-tight text-pretty max-[800px]:text-2xl";
   const headings = copy.blocks.flatMap((block, index) => block.type === "h2" ? [{ id: sectionId(index), text: block.text }] : []);
   const onThisPage = lang === "ko" ? "이 페이지" : "On this page";
-  const wideMain = headings.length === 0 ? "min-[1180px]:col-span-2" : "";
 
   return (
-    <>
-      <main id="docs-content" className={`min-w-0 px-6 pt-10 pb-16 max-[800px]:px-4 max-[800px]:pt-7 min-[801px]:px-8 ${wideMain}`}>
-        <header className="mb-8 max-w-[42rem] border-b border-border pb-6">
-          <p className="mb-2.5 text-sm font-medium text-primary">{copy.eyebrow}</p>
-          <h1 className={titleClass}>{copy.title}</h1>
-          <p className="m-0 text-lg text-pretty text-muted-foreground">{copy.lead}</p>
-        </header>
-        {headings.length > 0 ? (
-          <details className="mb-8 max-w-[42rem] rounded-lg border border-border px-3 py-2 min-[1180px]:hidden">
-            <summary className="cursor-pointer text-sm">{onThisPage}</summary>
-            <PageOutline headings={headings} />
-          </details>
-        ) : null}
-        <div className="max-w-[42rem]">
+    <main id="docs-content" className="min-w-0 px-6 pt-10 pb-16 max-[800px]:px-4 max-[800px]:pt-7 min-[801px]:px-8">
+      <div className="min-[1180px]:grid min-[1180px]:grid-cols-[minmax(0,45rem)_14.5rem] min-[1180px]:items-start min-[1180px]:gap-x-8">
+        <div className="min-w-0 max-w-[45rem]">
+          <header className="mb-8 border-b border-border pb-6">
+            <p className="mb-3 text-sm text-muted-foreground">{copy.eyebrow}</p>
+            <h1 className={titleClass}>{copy.title}</h1>
+            <p className="m-0 text-lg text-pretty text-muted-foreground">{copy.lead}</p>
+          </header>
+          {headings.length > 0 ? (
+            <details className="mb-8 rounded-lg border border-border px-3 py-2 min-[1180px]:hidden">
+              <summary className="cursor-pointer text-sm font-medium">{onThisPage}</summary>
+              <PageOutline headings={headings} />
+            </details>
+          ) : null}
           {copy.blocks.map((block, blockIndex) => (
             <BlockView key={blockIndex} block={block} entryway={entry.path === "/"} index={blockIndex} />
           ))}
         </div>
-        {entry.playground ? <div className="mt-8"><SdkPlayground /></div> : null}
-        <nav className="mt-14 grid max-w-[42rem] gap-3 sm:grid-cols-2" aria-label={lang === "ko" ? "이전 다음" : "Previous and next"}>
-          {previous ? <PagerLink entry={previous} lang={lang} direction="prev" /> : <span />}
-          {next ? <PagerLink entry={next} lang={lang} direction="next" /> : null}
-        </nav>
-      </main>
-      {headings.length > 0 ? (
-        <aside className="sticky top-header hidden max-h-[calc(100vh-var(--spacing-header))] self-start overflow-auto border-l border-border px-4 pt-10 pb-8 min-[1180px]:block" aria-label={onThisPage}>
-          <p className="mb-3 text-sm font-medium">{onThisPage}</p>
-          <PageOutline headings={headings} />
-        </aside>
-      ) : null}
-    </>
+        {headings.length > 0 ? (
+          <aside className="sticky top-header hidden max-h-[calc(100vh-var(--spacing-header))] self-start overflow-auto pb-8 min-[1180px]:block" aria-label={onThisPage}>
+            <p className="mb-3 text-sm font-semibold">{onThisPage}</p>
+            <PageOutline headings={headings} />
+          </aside>
+        ) : null}
+      </div>
+      {entry.playground ? <div className="mt-10 max-w-[72rem]"><SdkPlayground /></div> : null}
+      <nav className="mt-14 grid max-w-[45rem] gap-3 sm:grid-cols-2" aria-label={lang === "ko" ? "이전 다음" : "Previous and next"}>
+        {previous ? <PagerLink entry={previous} lang={lang} direction="prev" /> : <span />}
+        {next ? <PagerLink entry={next} lang={lang} direction="next" /> : null}
+      </nav>
+    </main>
   );
 }
 
@@ -140,7 +139,7 @@ export function DocControls() {
 
 function BlockView({ block, entryway, index }: { block: Block; entryway: boolean; index: number }) {
   if (block.type === "p") return <p className="mb-4 text-pretty">{block.text}</p>;
-  if (block.type === "h2") return <h2 id={sectionId(index)} className="mt-10 mb-3 text-xl tracking-tight text-pretty">{block.text}</h2>;
+  if (block.type === "h2") return <h2 id={sectionId(index)} className="mt-12 mb-4 text-2xl font-semibold tracking-tight text-pretty">{block.text}</h2>;
   if (block.type === "ul") {
     return (
       <ul className="mb-6 list-disc pl-5 [&_li+li]:mt-1.5">
