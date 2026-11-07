@@ -18,10 +18,10 @@ const AsyncFunction = Object.getPrototypeOf(async function () {
 ) => Promise<unknown>;
 
 export async function runSdkExample(source: string): Promise<unknown> {
-  const manifestResponse = await fetch("/runtime/manifest.json");
+  const manifestResponse = await fetch(`${import.meta.env.BASE_URL}runtime/manifest.json`);
   if (!manifestResponse.ok) throw new Error("런타임 자산 매니페스트를 읽지 못했습니다.");
   const manifest = await manifestResponse.json() as RuntimeManifest;
-  const base = new URL(`/runtime/${manifest.revision}/`, location.origin);
+  const base = new URL(`${import.meta.env.BASE_URL}runtime/${manifest.revision}/`, location.origin);
   const runtime: SdkRuntimeUrls = {
     systemWorkerUrl: new URL("system-worker.js", base),
     processWorkerUrl: new URL("process-worker.js", base),

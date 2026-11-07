@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm runtime:assets && vite",
-    "build": "vite build && node --experimental-strip-types tooling/write-pages.ts",
+    "build": "pnpm runtime:assets && vite build && node --experimental-strip-types tooling/write-pages.ts",
     "preview": "vite preview",
     "test": "node --experimental-strip-types src/content/catalog.test.ts",
     "runtime:assets": "node --experimental-strip-types ../web/tooling/build-runtime-assets.ts --out-dir public/runtime",

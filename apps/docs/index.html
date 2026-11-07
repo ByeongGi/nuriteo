@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
     <title>NURITEO 문서</title>
+    <script>
+      (async function enableDocsIsolation() {
+        if (window.crossOriginIsolated || !("serviceWorker" in navigator)) return;
+        const base = "%BASE_URL%";
+        const marker = "nuriteo-docs-isolation-reload";
+        try {
+          await navigator.serviceWorker.register(base + "coi-serviceworker.js", { scope: base });
+          await navigator.serviceWorker.ready;
+          if (sessionStorage.getItem(marker) === "1") return;
+          sessionStorage.setItem(marker, "1");
+          location.reload();
+        } catch (error) {
+          console.error(error);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
