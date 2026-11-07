@@ -34,6 +34,8 @@ export function SdkPlayground() {
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<unknown>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [ran, setRan] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
   const token = useRef(0);
   const chain = useRef(Promise.resolve());
   const timer = useRef(0);
@@ -48,9 +50,11 @@ export function SdkPlayground() {
         const value = await runSdkExample(code);
         if (id !== token.current) return;
         setResult(value);
+        setRan(true);
       } catch (caught) {
         if (id !== token.current) return;
         setResult(undefined);
+        setRan(true);
         setError(caught instanceof Error ? caught.message : "실행하지 못했습니다.");
       } finally {
         if (id === token.current) setPending(false);
@@ -78,23 +82,35 @@ export function SdkPlayground() {
           <CardTitle className="text-sm">{copy.title}</CardTitle>
           <CardDescription className="mt-1 text-xs">{copy.note}</CardDescription>
         </div>
-        <Button
-          type="button"
-          onClick={() => {
-            if (!isolated) return;
-            window.clearTimeout(timer.current);
-            execute(source);
-          }}
-          disabled={pending || !isolated}
-        >
-          {pending ? copy.running : copy.run}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => {
+              setSource(sample);
+              setEditorKey((key) => key + 1);
+            }}
+          >
+            {copy.reset}
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              if (!isolated) return;
+              window.clearTimeout(timer.current);
+              execute(source);
+            }}
+            disabled={pending || !isolated}
+          >
+            {pending ? copy.running : copy.run}
+          </Button>
+        </div>
       </CardHeader>
       <div className="grid min-[801px]:grid-cols-2">
         <div className="border-b min-[801px]:border-r min-[801px]:border-b-0">
-          <CodeEditor text={sample} label={copy.editorLabel} onChange={setSource} />
+          <CodeEditor key={editorKey} text={sample} label={copy.editorLabel} onChange={setSource} />
         </div>
-        <Workspace copy={copy} error={error} isolated={isolated} isolatedNote={isolatedLimit[lang]} pending={pending} result={result} />
+        <Workspace copy={copy} error={error} isolated={isolated} isolatedNote={isolatedLimit[lang]} pending={pending} ran={ran} result={result} />
       </div>
     </Card>
   );
@@ -102,12 +118,14 @@ export function SdkPlayground() {
 
 const playgroundCopy = {
   ko: {
-    title: "이 브라우저의 런타임",
-    note: "코드를 고치면 잠시 뒤 이 페이지가 그 함수를 다시 실행하고 오른쪽 워크스페이스를 갱신합니다. createContainer와 runtime이 주입됩니다.",
+    title: "샌드박스",
+    note: "왼쪽 sandbox.mjs의 note를 고치면 오른쪽 샌드박스 결과가 그 값으로 바뀝니다. 런타임 파일은 fs-smoke가 쓴 hello로 남습니다.",
     run: "다시 실행",
     running: "갱신 중",
-    editorLabel: "SDK 예시 코드",
-    workspace: "워크스페이스",
+    reset: "처음 코드",
+    editorLabel: "sandbox.mjs",
+    workspace: "샌드박스 결과",
+    sandboxResult: "고친 값",
     updating: "런타임을 갱신하는 중",
     idle: "런타임을 부팅하는 중",
     fileLabel: "런타임이 쓴 파일",
@@ -115,12 +133,14 @@ const playgroundCopy = {
     emptyReturn: "반환값이 없습니다."
   },
   en: {
-    title: "Runtime in this browser",
-    note: "Editing the code runs that function again in this page and refreshes the workspace. createContainer and runtime are injected.",
+    title: "Sandbox",
+    note: "Change note in sandbox.mjs and the sandbox result on the right becomes that value. The runtime file stays hello, written by fs-smoke.",
     run: "Run again",
     running: "Updating",
-    editorLabel: "SDK sample",
-    workspace: "Workspace",
+    reset: "Reset",
+    editorLabel: "sandbox.mjs",
+    workspace: "Sandbox result",
+    sandboxResult: "Edited value",
     updating: "Updating the runtime",
     idle: "Booting the runtime",
     fileLabel: "File written by the runtime",
@@ -135,6 +155,7 @@ function Workspace({
   isolated,
   isolatedNote,
   pending,
+  ran,
   result
 }: {
   copy: (typeof playgroundCopy)[keyof typeof playgroundCopy];
@@ -142,6 +163,7 @@ function Workspace({
   isolated: boolean;
   isolatedNote: string;
   pending: boolean;
+  ran: boolean;
   result: unknown;
 }) {
   const record = isRecord(result) ? result : null;
@@ -159,7 +181,12 @@ function Workspace({
       </div>
       {isolated ? null : <Alert className="mb-3"><AlertDescription>{isolatedNote}</AlertDescription></Alert>}
       {error ? <Alert className="mb-3" variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
-      {note !== null ? <p className="m-0 mb-3 text-sm">{note}</p> : null}
+      {note !== null ? (
+        <Card className="mb-4 shadow-none">
+          <p className="m-0 text-xs text-muted-foreground">{copy.sandboxResult}</p>
+          <p className="m-0 mt-2 font-mono text-2xl" data-sandbox-result="">{note}</p>
+        </Card>
+      ) : null}
       {file && value !== null ? (
         <Card className="mb-4 gap-0 overflow-hidden py-0 shadow-none">
           <div className="flex items-center justify-between gap-3 px-3 py-2">
@@ -178,7 +205,8 @@ function Workspace({
           <pre className="m-0 overflow-auto font-mono text-sm leading-relaxed text-foreground"><code>{JSON.stringify(result, null, 2)}</code></pre>
         </>
       ) : null}
-      {isolated && !error && result === undefined ? <p className="m-0 text-sm text-muted-foreground">{copy.idle}</p> : null}
+      {ran && !error && result === undefined ? <p className="m-0 text-sm text-muted-foreground">{copy.emptyReturn}</p> : null}
+      {isolated && !error && !ran ? <p className="m-0 text-sm text-muted-foreground">{pending ? copy.updating : copy.idle}</p> : null}
     </div>
   );
 }

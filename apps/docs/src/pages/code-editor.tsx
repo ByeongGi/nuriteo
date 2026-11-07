@@ -122,7 +122,10 @@ export function CodeEditor({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="min-h-64 overflow-hidden bg-surface">
+    <div className="min-h-80 overflow-hidden bg-surface">
+      <div className="border-b px-3 py-1.5">
+        <Badge className="font-mono" variant="secondary">{label}</Badge>
+      </div>
       <CodeSurface text={text} label={label} onChange={onChange} />
     </div>
   );
