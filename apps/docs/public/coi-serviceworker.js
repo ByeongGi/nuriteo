@@ -15,7 +15,14 @@ self.addEventListener("fetch", (event) => {
 });
 
 async function isolate(request) {
-  const response = await fetch(request);
+  // Chrome fails a navigation (net::ERR_FAILED) when this worker follows a
+  // redirect itself. GitHub Pages redirects /sdk to /sdk/, so hand that
+  // redirect back and add isolation headers on the response that stays.
+  const response = request.mode === "navigate"
+    ? await fetch(request, { redirect: "manual" })
+    : await fetch(request);
+  if (request.mode === "navigate" && response.status >= 300 && response.status < 400) return response;
+  if (response.status === 0) return response;
   const headers = new Headers(response.headers);
   headers.set("Cross-Origin-Embedder-Policy", "require-corp");
   headers.set("Cross-Origin-Opener-Policy", "same-origin");

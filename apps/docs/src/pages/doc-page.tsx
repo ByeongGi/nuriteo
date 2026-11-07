@@ -85,7 +85,7 @@ export function DocSectionNav() {
           <Link
             key={section.title}
             className={`shrink-0 rounded-md px-3 py-1.5 text-sm no-underline ${active ? "font-medium text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            to={section.entries[0].path}
+            to={pageHref(section.entries[0].path)}
             aria-current={active ? "true" : undefined}
           >
             {section.title}
@@ -159,7 +159,7 @@ function SidebarLinks({ lang, path }: { lang: Lang; path: string }) {
             return (
               <Link
                 key={entry.path}
-                to={entry.path}
+                to={pageHref(entry.path)}
                 aria-current={current ? "page" : undefined}
                 className={`block rounded-md px-3 py-1.5 text-sm no-underline hover:text-foreground ${current ? "font-medium text-primary" : "text-muted-foreground"}`}
               >
@@ -209,11 +209,11 @@ function BlockView({ block, entryway, index }: { block: Block; entryway: boolean
           <li key={item.to} className={entryway ? "" : "border-b border-border"}>
             {entryway
               ? <Card className="shadow-none">{item.to.startsWith("/")
-                ? <Link className="block px-4 py-3 text-foreground no-underline" to={item.to}>{item.label}</Link>
+                ? <Link className="block px-4 py-3 text-foreground no-underline" to={pageHref(item.to)}>{item.label}</Link>
                 : <a className="block px-4 py-3 text-foreground no-underline" href={item.to}>{item.label}</a>}
               </Card>
               : item.to.startsWith("/")
-                ? <Link className="block px-0.5 py-3 text-foreground no-underline hover:text-link" to={item.to}>{item.label}</Link>
+                ? <Link className="block px-0.5 py-3 text-foreground no-underline hover:text-link" to={pageHref(item.to)}>{item.label}</Link>
                 : <a className="block px-0.5 py-3 text-foreground no-underline hover:text-link" href={item.to}>{item.label}</a>}
           </li>
         ))}
@@ -246,7 +246,7 @@ function PagerLink({ entry, lang, direction }: { entry: DocEntry; lang: Lang; di
     : (lang === "ko" ? "다음" : "Next");
   return (
     <Card className={`shadow-none ${direction === "next" ? "sm:text-right" : ""}`}>
-      <Link className="block px-4 py-3 no-underline" to={entry.path}>
+      <Link className="block px-4 py-3 no-underline" to={pageHref(entry.path)}>
         <span className="text-xs text-muted-foreground">{label}</span>
         <span className="mt-1 block text-foreground">{entry[lang].nav}</span>
       </Link>
@@ -316,6 +316,11 @@ function groupCatalog(lang: Lang) {
     else sections.push({ title, entries: [entry] });
   }
   return sections;
+}
+
+function pageHref(path: string): string {
+  if (path === "/" || path.endsWith("/")) return path;
+  return `${path}/`;
 }
 
 function normalizePath(pathname: string): string {
