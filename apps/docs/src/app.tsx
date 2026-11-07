@@ -24,7 +24,7 @@ export function App() {
           </NavLink>
           <DocControls />
         </header>
-        <div className="mx-auto w-full max-w-[90rem] items-start min-[801px]:grid min-[801px]:grid-cols-[16rem_minmax(0,1fr)]">
+        <div className="mx-auto w-full max-w-[90rem] items-start min-[801px]:grid min-[801px]:grid-cols-[16rem_minmax(0,1fr)] min-[1180px]:grid-cols-[16rem_minmax(0,1fr)_15rem]">
           <DocSidebar />
           <Routes>
             <Route path="*" element={<DocPage />} />
