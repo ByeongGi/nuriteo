@@ -491,7 +491,7 @@ export const catalog: DocEntry[] = [
           "createNuriteoWebContainer() 입구",
           "호출의 시작, 성공, 실패 추적"
         ] },
-        { type: "p", text: "패키지에는 system_wasm.wasm, 시스템 워커, 프로세스 워커, Next·Vite·Yarn 실행 파일이 들어 있습니다. 아래 코드는 복사할 수 있습니다. createContainer와 runtime은 편집기 안에 이미 들어와 있습니다. 런타임 안의 임의 JavaScript 평가는 막혀 있으므로 container.run에 넣은 소스 문자열은 실행되지 않습니다. 기본 예시는 entrypoint fs-smoke로 워크스페이스에 hello를 쓰고, 반환값 value는 hello, size는 5입니다." },
+        { type: "p", text: "패키지에는 system_wasm.wasm, 시스템 워커, 프로세스 워커, Next·Vite·Yarn 실행 파일이 들어 있습니다. 아래 편집기의 코드를 고치면 이 페이지가 그 함수를 다시 실행하고, 오른쪽 워크스페이스를 갱신합니다. createContainer와 runtime은 편집기 안에 이미 들어와 있습니다. 런타임 안의 임의 JavaScript 평가는 막혀 있으므로 container.run에 넣은 소스 문자열은 실행되지 않습니다. 기본 예시는 entrypoint fs-smoke로 워크스페이스에 hello를 쓰고, 반환값 value는 hello, size는 5입니다." },
         { type: "p", text: "실행에는 Cross-Origin-Embedder-Policy: require-corp 와 Cross-Origin-Opener-Policy: same-origin 이 필요합니다. 문서 개발 서버는 그 헤더를 직접 붙입니다. GitHub Pages는 헤더를 직접 붙이지 못하므로, 공개 사이트는 서비스 워커가 같은 헤더를 더하고 한 번 다시 연 뒤 이 브라우저에서 예시를 실행합니다. 격리가 되지 않으면 부팅 성공으로 표시하지 않습니다." },
         { type: "links", items: [
           { to: "/sdk/install", label: "설치" },
@@ -516,7 +516,7 @@ export const catalog: DocEntry[] = [
           "The createNuriteoWebContainer() entry",
           "Start, success, and failure traces"
         ] },
-        { type: "p", text: "The package includes system_wasm.wasm, the system worker, the process worker, and the Next, Vite, and Yarn executables. The sample below can be copied. createContainer and runtime are already in scope in the editor. Arbitrary JavaScript evaluation inside the runtime is disabled, so a source string passed to container.run does not execute. The default sample uses the fs-smoke entrypoint, writes hello into the workspace, and returns value hello with size 5." },
+        { type: "p", text: "The package includes system_wasm.wasm, the system worker, the process worker, and the Next, Vite, and Yarn executables. Changing the code in the editor below runs that function again in this page and refreshes the workspace beside it. createContainer and runtime are already in scope in the editor. Arbitrary JavaScript evaluation inside the runtime is disabled, so a source string passed to container.run does not execute. The default sample uses the fs-smoke entrypoint, writes hello into the workspace, and returns value hello with size 5." },
         { type: "p", text: "Running needs Cross-Origin-Embedder-Policy: require-corp and Cross-Origin-Opener-Policy: same-origin. The docs dev server sends those headers itself. GitHub Pages cannot send them directly, so the public site adds the same headers from a service worker, reloads once, and then runs the sample in this browser. If isolation does not start, the page does not report a successful boot." },
         { type: "links", items: [
           { to: "/sdk/install", label: "Install" },
