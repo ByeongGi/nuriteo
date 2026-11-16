@@ -106,9 +106,30 @@ const marked = createShellRuntime({
 const skippedPipe = await marked.run("echo kept || echo skipped | cat");
 assert.equal(skippedPipe.exitCode, 0);
 assert.equal(skippedPipe.stdout, "kept\n");
+const listed = await shell.run("echo one; echo two");
+assert.equal(listed.exitCode, 0);
+assert.equal(listed.stdout, "one\ntwo\n");
+const listedAfterFailure = await shell.run("false; echo after");
+assert.equal(listedAfterFailure.exitCode, 0);
+assert.equal(listedAfterFailure.stdout, "after\n");
+assert.equal(listedAfterFailure.stderr, "nope\n");
+const listedFailure = await shell.run("echo one; false");
+assert.equal(listedFailure.exitCode, 2);
+assert.equal(listedFailure.stdout, "one\n");
+assert.equal(listedFailure.stderr, "nope\n");
+const listedPipe = await marked.run("echo one; echo two | cat");
+assert.equal(listedPipe.exitCode, 0);
+assert.equal(listedPipe.stdout, "one\ncat\n");
+const skippedThenList = await marked.run("echo kept || echo skipped | cat; echo later | cat");
+assert.equal(skippedThenList.exitCode, 0);
+assert.equal(skippedThenList.stdout, "kept\ncat\n");
+const failedPipeThenList = await shell.run("false | echo hi; echo after");
+assert.equal(failedPipeThenList.exitCode, 0);
+assert.equal(failedPipeThenList.stdout, "after\n");
+assert.equal(failedPipeThenList.stderr, "nope\n");
 console.log(`shell or operator pipeOr=${JSON.stringify(pipeFallback.stdout)} pipeOrExit=${pipeFallback.exitCode} skippedPipe=${JSON.stringify(skippedPipe.stdout)} skippedPipeExit=${skippedPipe.exitCode}`);
+console.log(`shell command list listed=${JSON.stringify(listed.stdout)} listedExit=${listed.exitCode} afterFailure=${JSON.stringify(listedAfterFailure.stdout)} afterFailureExit=${listedAfterFailure.exitCode} listedPipe=${JSON.stringify(listedPipe.stdout)} skippedThenList=${JSON.stringify(skippedThenList.stdout)} failedPipeThenList=${JSON.stringify(failedPipeThenList.stdout)}`);
 for (const command of [
-  "echo ok; echo injected",
   "echo ok & echo background",
   "echo ok >> stolen",
   "echo ok < secret",

@@ -26,7 +26,7 @@ export interface ShellCommandRegistry {
   resolve(name: string, env?: RuntimeEnv, cwd?: string): ShellCommand;
 }
 
-export type ShellOp = "&&" | "||" | "|" | null;
+export type ShellOp = "&&" | "||" | "|" | ";" | null;
 
 export interface ShellStep {
   op: ShellOp;
