@@ -89,7 +89,14 @@ const chainedOr = await projectShell.run("ls ../../ && echo skipped || echo reco
 assert.equal(chainedOr.exitCode, 0);
 assert.equal(chainedOr.stdout, "recovered\n");
 assert.match(chainedOr.stderr, /Permission denied/);
-console.log(`shell or operator skipped=${JSON.stringify(skippedOr.stdout)} recovered=${JSON.stringify(recoveredOr.stdout)} recoveredExit=${recoveredOr.exitCode} chained=${JSON.stringify(chainedOr.stdout)}`);
+const pipeOr = await projectShell.run("ls ../../ | echo hi || echo recovered");
+assert.equal(pipeOr.exitCode, 0);
+assert.equal(pipeOr.stdout, "recovered\n");
+const skippedPipe = await projectShell.run("echo kept || echo skipped | cat");
+assert.equal(skippedPipe.exitCode, 0);
+assert.equal(skippedPipe.stdout, "kept\n");
+assert.equal(skippedPipe.stderr, "");
+console.log(`shell or operator skipped=${JSON.stringify(skippedOr.stdout)} recovered=${JSON.stringify(recoveredOr.stdout)} recoveredExit=${recoveredOr.exitCode} chained=${JSON.stringify(chainedOr.stdout)} pipeOr=${JSON.stringify(pipeOr.stdout)} pipeOrExit=${pipeOr.exitCode} skippedPipe=${JSON.stringify(skippedPipe.stdout)} skippedPipeExit=${skippedPipe.exitCode}`);
 
 const scriptController = createPreviewWorkflowController();
 scriptController.loadViteReactTemplate();

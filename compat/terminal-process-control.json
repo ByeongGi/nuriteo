@@ -35,7 +35,7 @@
     "unsupported": ["background jobs", "command substitution", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"],
     "orOperator": {
       "status": "supported",
-      "semantics": "|| runs the next command only when the previous command exits non-zero. The list exit code is the exit code of the last command that ran. &&, ||, and | stay one left-to-right step list. A failing pipeline stage still stops that pipe."
+      "semantics": "|| runs the next command only when the previous command exits non-zero. The list exit code is the exit code of the last command that ran. A pipeline is bound to the command it follows, so a skipped && or || command skips its | consumers. A failing pipeline stage skips later | stages and still allows a following || command to run."
     }
   },
   "posixPty": {

@@ -29,6 +29,8 @@ Observable result:
 - `echo kept || echo skipped` prints `kept` and exits 0. The second command does not run.
 - A command that exits non-zero, then `|| echo recovered`, prints `recovered` and exits 0.
 - `ls ../../ && echo skipped || echo recovered` prints `recovered` when `ls` exits non-zero. `&&` and `||` stay one left-to-right list, matching the bash rule above.
+- `false | echo hi || echo recovered` prints `recovered` and exits 0. A failed pipeline stage skips later `|` stages, and the `||` command still runs.
+- `echo kept || echo skipped | cat` prints `kept` and exits 0. The pipe belongs to the command that did not run, so `cat` does not run.
 - `;`, `&`, command substitution, `>>`, `<`, and `{` stay syntax errors.
 
 Command lists, append redirect, and the other unsupported grammar entries stay unsupported. Background jobs and command substitution stay out because the release boundary already excludes host job control and a host shell.

@@ -1,7 +1,7 @@
 import { join } from "../../node-runtime/src/builtins/path.ts";
 import { createAsyncCliModuleEvaluator } from "../../node-runtime/src/package-managers/cli-evaluator.ts";
 import { containsNativeFallback } from "../../node-runtime/src/package-managers/native-fallback.ts";
-import { shellChainContinues, shellStepRuns } from "../../node-runtime/src/shell/operators.ts";
+import { nextShellAction } from "../../node-runtime/src/shell/operators.ts";
 import { parseShell } from "../../node-runtime/src/shell/parser.ts";
 import type { ShellStep } from "../../node-runtime/src/shell/types.ts";
 import type { RuntimeEnv } from "../../node-runtime/src/types.ts";
@@ -50,13 +50,17 @@ export async function executeWorkspacePackageScript(
   let stderr = "";
   let stdin = "";
   let exitCode = 0;
+  let skipPipeTail = false;
   for (let index = 0; index < steps.length; index += 1) {
     const step = steps[index]!;
     const nextStep = steps[index + 1];
-    if (!shellStepRuns(step.op, exitCode)) {
+    const action = nextShellAction(step.op, exitCode, skipPipeTail);
+    if (action.kind === "skip") {
       stdin = "";
+      skipPipeTail = action.skipPipeTail;
       continue;
     }
+    skipPipeTail = false;
     const command = parsePackageScriptCommand(step.argv, workflow.projectRoot);
     if (!command.entry) {
       return {
@@ -75,7 +79,6 @@ export async function executeWorkspacePackageScript(
       stdout += result.stdout;
     }
     stdin = nextStep?.op === "|" ? result.stdout : "";
-    if (!shellChainContinues(exitCode, nextStep?.op)) break;
   }
 
   return { stdout, stderr, exitCode };
@@ -122,13 +125,17 @@ export async function executeWorkspacePackageLifecycles(
       let stderr = "";
       let stdin = "";
       let exitCode = 0;
+      let skipPipeTail = false;
       for (let index = 0; index < steps.length; index += 1) {
         const step = steps[index]!;
         const nextStep = steps[index + 1];
-        if (!shellStepRuns(step.op, exitCode)) {
+        const action = nextShellAction(step.op, exitCode, skipPipeTail);
+        if (action.kind === "skip") {
           stdin = "";
+          skipPipeTail = action.skipPipeTail;
           continue;
         }
+        skipPipeTail = false;
         const command = parsePackageScriptCommand(
           step.argv,
           workflow.projectRoot,
@@ -141,7 +148,6 @@ export async function executeWorkspacePackageLifecycles(
         if (command.redirect) workflow.workspace.writeText(command.redirect, result.stdout);
         else if (nextStep?.op !== "|") stdout += result.stdout;
         stdin = nextStep?.op === "|" ? result.stdout : "";
-        if (!shellChainContinues(exitCode, nextStep?.op)) break;
       }
       results.push({ command: commandText, event, packagePath, stdout, stderr, exitCode });
     }

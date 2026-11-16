@@ -3,10 +3,10 @@ import type { ShellOp } from "./types.ts";
 export function shellStepRuns(op: ShellOp, previousExitCode: number): boolean {
   switch (op) {
     case "&&":
+    case "|":
       return previousExitCode === 0;
     case "||":
       return previousExitCode !== 0;
-    case "|":
     case null:
       return true;
     default: {
@@ -16,7 +16,14 @@ export function shellStepRuns(op: ShellOp, previousExitCode: number): boolean {
   }
 }
 
-export function shellChainContinues(exitCode: number, nextOp: ShellOp | undefined): boolean {
-  if (exitCode === 0) return true;
-  return nextOp === "&&" || nextOp === "||";
+export function nextShellAction(
+  op: ShellOp,
+  previousExitCode: number,
+  skipPipeTail: boolean
+): { kind: "run" } | { kind: "skip"; skipPipeTail: boolean } {
+  if (skipPipeTail && op === "|") return { kind: "skip", skipPipeTail: true };
+  if (!shellStepRuns(op, previousExitCode)) {
+    return { kind: "skip", skipPipeTail: op === "&&" || op === "||" || op === "|" };
+  }
+  return { kind: "run" };
 }

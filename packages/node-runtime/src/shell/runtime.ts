@@ -1,5 +1,5 @@
 import { createCommandRegistry, shebangCommand } from "./commands.ts";
-import { shellChainContinues, shellStepRuns } from "./operators.ts";
+import { nextShellAction } from "./operators.ts";
 import { parseShell } from "./parser.ts";
 import type { RuntimeEnv } from "../types.ts";
 import type { ShellCommand, ShellCommandRegistry, ShellRunOptions, ShellRunResult, ShellRuntimeOptions } from "./types.ts";
@@ -30,16 +30,20 @@ export class ShellRuntime {
     let stderr = "";
     let exitCode = 0;
     let outputTruncatedBytes = 0;
+    let skipPipeTail = false;
 
     for (let index = 0; index < steps.length; index += 1) {
       if (options.signal?.aborted) return cancelledShellResult(stdout, stderr, this.files, options.signal.reason);
       const step = steps[index];
       if (!step) continue;
       const nextStep = steps[index + 1];
-      if (!shellStepRuns(step.op, exitCode)) {
+      const action = nextShellAction(step.op, exitCode, skipPipeTail);
+      if (action.kind === "skip") {
         stdin = "";
+        skipPipeTail = action.skipPipeTail;
         continue;
       }
+      skipPipeTail = false;
       const { argv, redirect } = extractRedirect(step.argv);
       const streamed = { stderr: false, stdout: false };
       const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
@@ -78,7 +82,6 @@ export class ShellRuntime {
       } else {
         stdin = "";
       }
-      if (!shellChainContinues(exitCode, nextStep?.op)) break;
     }
 
     return {

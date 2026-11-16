@@ -90,6 +90,22 @@ const chainedOr = await shell.run("false && echo skipped || echo recovered");
 assert.equal(chainedOr.exitCode, 0);
 assert.equal(chainedOr.stdout, "recovered\n");
 assert.equal(chainedOr.stderr, "nope\n");
+const pipeFallback = await shell.run("false | echo hi || echo recovered");
+assert.equal(pipeFallback.exitCode, 0);
+assert.equal(pipeFallback.stdout, "recovered\n");
+const marked = createShellRuntime({
+  commands: {
+    echo({ argv }) {
+      return { stdout: `${argv.slice(1).join(" ")}\n`, stderr: "", exitCode: 0 };
+    },
+    cat() {
+      return { stdout: "cat\n", stderr: "", exitCode: 0 };
+    }
+  }
+});
+const skippedPipe = await marked.run("echo kept || echo skipped | cat");
+assert.equal(skippedPipe.exitCode, 0);
+assert.equal(skippedPipe.stdout, "kept\n");
 for (const command of [
   "echo ok; echo injected",
   "echo ok & echo background",
