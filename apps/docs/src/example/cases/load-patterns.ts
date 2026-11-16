@@ -7,6 +7,7 @@ export const REPLACED_ENTRY = "replaced-entry\n";
 export const MISSING_PATH = "/workspace/missing.txt";
 
 const SCRIPT_SRC = /<script\b[^>]*\bsrc="([^"]+)"[^>]*>/i;
+const SCRIPT_TAG = /<script\b[^>]*\bsrc="[^"]+"[^>]*>\s*<\/script>/i;
 
 export function publishedExamplePath(kind: ContainerCaseKind, filePath: string): string {
   return `examples/${kind}/${filePath}`;
@@ -17,6 +18,12 @@ export function scriptSrcFromHtml(html: string): string | null {
   const src = match?.[1];
   if (!src) return null;
   return src.replace(/^\/+/, "");
+}
+
+export function spaPreviewDocument(html: string, script: string): string | null {
+  if (!scriptSrcFromHtml(html) || !SCRIPT_TAG.test(html)) return null;
+  const source = script.replaceAll("</script", "<\\/script");
+  return html.replace(SCRIPT_TAG, `<script type="module">\n${source}\n</script>`);
 }
 
 export function filesWithPrefix(files: readonly ContainerCaseFile[], prefix: string): ContainerCaseFile[] {

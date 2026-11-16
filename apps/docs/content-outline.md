@@ -209,7 +209,7 @@ npm install @nuriteo/sdk@beta
 
 `createContainer()`와 `Nuriteo`. `boot`, `run`, `teardown`, `status`, `metrics`, `systemMetrics`. 서비스 모음은 `services`에 있다.
 
-페이지는 SPA와 Next.js 소스를 동적 import로 불러 파일 어댑터에 올린 뒤 엔트리 파일을 다시 읽는다. 같은 페이지에서 파일을 하나씩 쓰고, 공개한 주소에서 파일 하나를 가져오고, 엔트리만 바꾸고, HTML의 script src만 따르고, 한 디렉터리만 올리고, 없는 경로의 거부를 확인한다. 두 케이스는 같은 마운트 코드를 쓴다. 이 마운트는 패키지를 설치하거나 개발 서버를 시작하지 않는다. Next 케이스의 `previewScript`는 `pnpm dev`이고, SPA 케이스에는 개발 서버 스크립트가 없다. Next 레이아웃에는 module script src가 없어 그 단계는 실행하지 않는다. 런타임 안의 임의 JavaScript 평가는 막혀 있다.
+페이지는 SPA와 Next.js 소스를 동적 import로 불러 에디터에 연다. SPA의 `src/main.js` 위쪽 `greeting`, `place`, `action`을 고치면 브라우저 화면이 바뀐다. 이름을 입력하고 버튼을 누르면 그 인사가 명단에 남는다. 적용하면 에디터 내용을 파일 어댑터에 쓰고 컨테이너를 부팅한 뒤 그 파일을 다시 읽는다. SPA 화면은 브라우저가 그 모듈을 실행한 결과다. 런타임은 그 스크립트를 평가하지 않는다. 같은 페이지는 파일을 파일 어댑터에 올린 뒤 엔트리 파일을 다시 읽기도 한다. 같은 페이지에서 파일을 하나씩 쓰고, 공개한 주소에서 파일 하나를 가져오고, 엔트리만 바꾸고, HTML의 script src만 따르고, 한 디렉터리만 올리고, 없는 경로의 거부를 확인한다. 두 케이스는 같은 마운트 코드를 쓴다. 이 마운트는 패키지를 설치하거나 개발 서버를 시작하지 않는다. Next 케이스의 `previewScript`는 `pnpm dev`이고, SPA 케이스에는 개발 서버 스크립트가 없다. Next 레이아웃에는 module script src가 없어 그 단계는 실행하지 않는다. 런타임 안의 임의 JavaScript 평가는 막혀 있다.
 
 ### 파일 `/sdk/filesystem`
 

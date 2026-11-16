@@ -2,16 +2,31 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils.ts";
 import { loadContainerCase } from "../example/cases/load-case.ts";
-import { publishedExamplePath, scriptSrcFromHtml } from "../example/cases/load-patterns.ts";
-import { loadActions, runLoadAction, type ContainerCaseMount, type LoadAction } from "../example/cases/mount-case.ts";
+import { publishedExamplePath, scriptSrcFromHtml, spaPreviewDocument } from "../example/cases/load-patterns.ts";
+import { loadActions, mountEditorDraft, runLoadAction, type CaseAction, type ContainerCaseMount, type LoadAction } from "../example/cases/mount-case.ts";
 import { containerCaseKinds, type ContainerCase, type ContainerCaseKind } from "../example/cases/types.ts";
 import { useDocsPreferences } from "../preferences.tsx";
+import { CodeEditor } from "./code-editor.tsx";
+
+const PREVIEW_INPUT_MS = 200;
+
+type SpaPreview =
+  | { kind: "loading" }
+  | { kind: "ready"; doc: string }
+  | { kind: "unavailable" };
 
 const copy = {
   ko: {
-    title: "불러온 파일을 컨테이너에서 다시 읽습니다",
-    text: "케이스를 고르면 그 모듈만 import합니다. 각 행은 파일을 올리는 방식만 바꾸고, 한 번 부팅한 뒤 엔트리를 다시 읽습니다. 패키지 설치와 개발 서버는 실행하지 않습니다.",
+    title: "에디터를 컨테이너 파일에 붙입니다",
+    text: "SPA의 src/main.js 위쪽 greeting, place, action을 고치면 아래 화면이 바뀝니다. 이름을 입력하고 버튼을 누르면 그 인사가 명단에 남습니다. 적용은 그 내용을 컨테이너에 쓰고 다시 읽습니다. 런타임은 이 스크립트를 평가하지 않고, Next 개발 서버도 켜지지 않습니다.",
     mounting: "올리는 중",
+    applying: "적용하는 중",
+    apply: "에디터 내용을 컨테이너에 쓰고 다시 읽습니다",
+    browserPreview: "브라우저가 실행한 SPA",
+    previewHint: "이름을 입력하고 남기기를 누릅니다.",
+    previewLoading: "화면을 준비하고 있습니다.",
+    previewUnavailable: "index.html에서 module script를 찾지 못했습니다.",
+    nextSourceOnly: "이 파일은 에디터에서 고칩니다. 적용하면 컨테이너가 소스를 다시 읽습니다. 이 페이지는 Next를 렌더하지 않습니다.",
     idle: "아직 올리지 않았습니다.",
     isolated: "이 호스트는 Cross-Origin Isolation이 없습니다. 파일은 볼 수 있습니다. 부팅은 실행하지 않습니다.",
     failed: "마운트하지 못했습니다.",
@@ -34,16 +49,24 @@ const copy = {
       replace: { title: "엔트리만 바꿉니다", detail: "트리를 올린 뒤 엔트리에 replaced-entry를 씁니다." },
       script: { title: "HTML이 가리키는 스크립트만 올립니다", detail: "index.html과 그 module script만 씁니다." },
       prefix: { title: "한 디렉터리만 올립니다", detail: "SPA는 src/, Next는 app/ 아래만 씁니다." },
-      missing: { title: "없는 경로를 읽습니다", detail: "missing.txt는 거부되고 엔트리 읽기는 성공합니다." }
+      missing: { title: "없는 경로를 읽습니다", detail: "missing.txt는 거부되고 엔트리 읽기는 성공합니다." },
+      editor: { title: "에디터 내용을 컨테이너에 적용했습니다", detail: "에디터에 있던 파일을 쓰고 다시 읽었습니다." }
     }
   },
   en: {
-    title: "Read the loaded files back from the container",
-    text: "Choosing a case imports only that module. Each row changes how the files are written, then boots once and reads the entry back. This page does not install packages or start the dev server.",
+    title: "Attach an editor to the container files",
+    text: "Change greeting, place, and action at the top of the SPA src/main.js and the screen below updates. Type a name and press the button to keep that greeting on the list. Apply writes that buffer into the container and reads it back. The runtime does not evaluate the script, and the Next dev server does not start.",
     mounting: "Mounting",
+    applying: "Applying",
+    apply: "Write the editor into the container and read it back",
     idle: "Nothing is mounted yet.",
     isolated: "This host is not cross-origin isolated. You can read the files. Boot does not run.",
     failed: "The mount failed.",
+    browserPreview: "SPA run by the browser",
+    previewHint: "Type a name, then press the button to keep it.",
+    previewLoading: "Preparing the screen.",
+    previewUnavailable: "No module script was found in index.html.",
+    nextSourceOnly: "Edit this file in the editor. Apply makes the container read the source back. This page does not render Next.",
     previewNone: "No dev-server script",
     status: "status just after boot",
     protocol: "protocol",
@@ -63,7 +86,8 @@ const copy = {
       replace: { title: "Replace only the entry", detail: "Write the tree, then replace the entry with replaced-entry." },
       script: { title: "Load the script the HTML points at", detail: "Write index.html and the module script it names." },
       prefix: { title: "Load one directory", detail: "Write only src/ for the SPA, or app/ for Next." },
-      missing: { title: "Read a path that was never written", detail: "missing.txt rejects. The entry read still succeeds." }
+      missing: { title: "Read a path that was never written", detail: "missing.txt rejects. The entry read still succeeds." },
+      editor: { title: "Applied the editor to the container", detail: "Wrote the editor files and read them back." }
     }
   }
 } as const;
@@ -76,7 +100,9 @@ export function ContainerCases() {
   const [kind, setKind] = useState<ContainerCaseKind>("spa");
   const [project, setProject] = useState<ContainerCase | null>(null);
   const [filePath, setFilePath] = useState<string>("src/main.js");
-  const [chosen, setChosen] = useState<LoadAction | null>(null);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+  const draftsRef = useRef<Readonly<Record<string, string>>>({});
+  const [chosen, setChosen] = useState<CaseAction | null>(null);
   const [pending, setPending] = useState(false);
   const [mount, setMount] = useState<ContainerCaseMount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +110,18 @@ export function ContainerCases() {
   const isolated = window.crossOriginIsolated;
   const indexHtml = project?.files.find((file) => file.path === "index.html")?.contents;
   const scriptPath = indexHtml ? scriptSrcFromHtml(indexHtml) : null;
-  const selected = project?.files.find((file) => file.path === filePath) ?? null;
+  const draft = drafts[filePath] ?? "";
+  const draftHtml = drafts["index.html"];
+  const draftScript = drafts["src/main.js"];
+  const [preview, setPreview] = useState<SpaPreview>({ kind: "loading" });
 
   useEffect(() => {
     let current = true;
     void loadContainerCase(kind).then((loaded) => {
       if (!current) return;
+      const nextDrafts = Object.fromEntries(loaded.files.map((file) => [file.path, file.contents]));
+      draftsRef.current = nextDrafts;
+      setDrafts(nextDrafts);
       setProject(loaded);
       setFilePath(loaded.entry);
     });
@@ -98,15 +130,30 @@ export function ContainerCases() {
     };
   }, [kind]);
 
+  useEffect(() => {
+    if (kind !== "spa" || draftHtml === undefined || draftScript === undefined) {
+      setPreview({ kind: "loading" });
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const doc = spaPreviewDocument(draftHtml, draftScript);
+      setPreview(doc === null ? { kind: "unavailable" } : { kind: "ready", doc });
+    }, PREVIEW_INPUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [kind, draftHtml, draftScript]);
+
   function choose(nextKind: ContainerCaseKind) {
     if (nextKind === kind) return;
     token.current += 1;
     setKind(nextKind);
     setProject(null);
+    draftsRef.current = {};
+    setDrafts({});
     setChosen(null);
     setMount(null);
     setError(null);
     setPending(false);
+    setPreview({ kind: "loading" });
   }
 
   function actionDetail(action: LoadAction): string {
@@ -119,6 +166,36 @@ export function ContainerCases() {
   function actionDisabled(action: LoadAction): boolean {
     if (!isolated || pending || project === null) return true;
     return action === "script" && scriptPath === null;
+  }
+
+  function onEdit(value: string) {
+    const next = { ...draftsRef.current, [filePath]: value };
+    draftsRef.current = next;
+    setDrafts(next);
+  }
+
+  async function applyEditor() {
+    if (!project) return;
+    const id = token.current + 1;
+    token.current = id;
+    setChosen("editor");
+    setPending(true);
+    setError(null);
+    setMount(null);
+    const files = project.files.map((file) => ({
+      path: file.path,
+      contents: draftsRef.current[file.path] ?? file.contents
+    }));
+    try {
+      const result = await mountEditorDraft({ kind, files, readPath: filePath });
+      if (id !== token.current) return;
+      setMount(result);
+    } catch (caught) {
+      if (id !== token.current) return;
+      setError(caught instanceof Error ? caught.message : text.failed);
+    } finally {
+      if (id === token.current) setPending(false);
+    }
   }
 
   async function run(action: LoadAction) {
@@ -165,28 +242,52 @@ export function ContainerCases() {
           );
         })}
       </ul>
-      {project ? (
-        <div className="grid docs-sidebar:grid-cols-[16rem_minmax(0,1fr)]">
-          <ul className="m-0 list-none border-b border-border p-0 docs-sidebar:border-r docs-sidebar:border-b-0">
-            {project.files.map((file) => {
-              const active = file.path === filePath;
-              return (
-                <li key={file.path}>
-                  <button
-                    className={cn("block w-full px-4 py-2 text-left font-mono text-sm", active ? "bg-selected text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => setFilePath(file.path)}
-                  >
-                    {file.path}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <pre className="m-0 overflow-auto px-4 py-3 font-mono text-sm leading-relaxed"><code>{selected?.contents}</code></pre>
+      <div className="@container border-t border-border">
+        <div className="grid items-start @min-[64rem]:grid-cols-2">
+          <LivePreview kind={kind} preview={preview} text={text} />
+          {project ? (
+            <div className="border-t border-border @min-[64rem]:border-t-0 @min-[64rem]:border-l">
+              <ul className="m-0 flex list-none gap-1 overflow-x-auto p-2">
+                {project.files.map((file) => {
+                  const active = file.path === filePath;
+                  return (
+                    <li key={file.path}>
+                      <button
+                        className={cn("rounded-md px-3 py-1.5 text-left font-mono text-sm whitespace-nowrap", active ? "bg-selected text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground")}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setFilePath(file.path)}
+                      >
+                        {file.path}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <CodeEditor key={`${kind}:${filePath}`} initialText={draft} label={filePath} onChange={onEdit} />
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </div>
+      <ul className="m-0 list-none border-t border-border p-0">
+        <li className="border-b border-border">
+          <button
+            className={cn("block w-full px-4 py-3 text-left disabled:cursor-not-allowed", actionRowClass(chosen === "editor", !isolated || pending || project === null))}
+            type="button"
+            aria-pressed={chosen === "editor"}
+            disabled={!isolated || pending || project === null}
+            onClick={() => void applyEditor()}
+          >
+            <span className={cn("font-medium", !isolated || pending || project === null ? "text-muted-foreground" : "text-foreground")}>
+              {text.apply}
+            </span>
+            <span className="mt-1 block text-sm text-muted-foreground">{text.actions.editor.detail}</span>
+          </button>
+        </li>
+      </ul>
+      <div className="px-4 pb-4">
+        <MountResult text={text} error={error} isolated={isolated} mount={mount} pending={pending} pendingLabel={chosen === "editor" ? text.applying : text.mounting} />
+      </div>
       <ul className="m-0 list-none border-t border-border p-0">
         {loadActions.map((action) => {
           const item = text.actions[action];
@@ -208,9 +309,6 @@ export function ContainerCases() {
           );
         })}
       </ul>
-      <div className="px-4 pb-4">
-        <MountResult text={text} error={error} isolated={isolated} mount={mount} pending={pending} />
-      </div>
     </figure>
   );
 }
@@ -226,17 +324,19 @@ function MountResult({
   error,
   isolated,
   mount,
-  pending
+  pending,
+  pendingLabel
 }: {
   text: CaseCopy;
   error: string | null;
   isolated: boolean;
   mount: ContainerCaseMount | null;
   pending: boolean;
+  pendingLabel: string;
 }) {
   if (!isolated) return <p className="mt-3 mb-0 text-sm text-muted-foreground">{text.isolated}</p>;
   if (error) return <p className="mt-3 mb-0 text-sm text-foreground">{error}</p>;
-  if (pending) return <p className="mt-3 mb-0 text-sm text-muted-foreground">{text.mounting}</p>;
+  if (pending) return <p className="mt-3 mb-0 text-sm text-muted-foreground">{pendingLabel}</p>;
   if (!mount) return <p className="mt-3 mb-0 text-sm text-muted-foreground">{text.idle}</p>;
   const preview = mount.previewScript ?? text.previewNone;
   const children = mount.listing.map((item) => `${item.type} ${item.path}`);
@@ -251,6 +351,36 @@ function MountResult({
       <pre className="m-0 overflow-auto font-mono text-sm leading-relaxed"><code>{mount.entry}</code></pre>
     </div>
   );
+}
+
+function LivePreview({ kind, preview, text }: { kind: ContainerCaseKind; preview: SpaPreview; text: CaseCopy }) {
+  if (kind === "next") {
+    return <p className="m-0 px-4 py-4 text-sm text-muted-foreground">{text.nextSourceOnly}</p>;
+  }
+  return (
+    <div>
+      <div className="px-4 py-3">
+        <p className="m-0 text-sm font-medium text-foreground">{text.browserPreview}</p>
+        <p className="mt-1 mb-0 text-sm text-muted-foreground">{text.previewHint}</p>
+      </div>
+      <PreviewSurface preview={preview} title={text.browserPreview} loading={text.previewLoading} unavailable={text.previewUnavailable} />
+    </div>
+  );
+}
+
+function PreviewSurface({ preview, title, loading, unavailable }: { preview: SpaPreview; title: string; loading: string; unavailable: string }) {
+  switch (preview.kind) {
+    case "ready":
+      return <iframe className="h-96 w-full border-0" sandbox="allow-scripts" srcDoc={preview.doc} title={title} />;
+    case "unavailable":
+      return <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">{unavailable}</p>;
+    case "loading":
+      return <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">{loading}</p>;
+    default: {
+      const exhaustive: never = preview;
+      return exhaustive;
+    }
+  }
 }
 
 function PathList({ label, paths }: { label: string; paths: readonly string[] }) {

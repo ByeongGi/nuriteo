@@ -20,8 +20,15 @@ export const loadActions = ["all", "each", "fetch", "replace", "script", "prefix
 
 export type LoadAction = (typeof loadActions)[number];
 
+export type CaseAction = LoadAction | "editor";
+
+export interface OpenedCaseFile {
+  path: string;
+  text: string;
+}
+
 export interface ContainerCaseMount {
-  action: LoadAction;
+  action: CaseAction;
   protocolVersion: number;
   status: string;
   kind: ContainerCaseKind;
@@ -31,6 +38,7 @@ export interface ContainerCaseMount {
   written: readonly string[];
   listing: readonly NuriteoFileEntry[];
   rejectedPath: string | null;
+  openedFiles: readonly OpenedCaseFile[] | null;
 }
 
 interface LoadPlan {
@@ -67,7 +75,51 @@ export async function runLoadAction(input: {
       entry,
       written: plan.written,
       listing,
-      rejectedPath
+      rejectedPath,
+      openedFiles: null
+    };
+  } finally {
+    await container.teardown();
+  }
+}
+
+export async function mountEditorDraft(input: {
+  kind: ContainerCaseKind;
+  files: readonly ContainerCaseFile[];
+  readPath: string;
+}): Promise<ContainerCaseMount> {
+  const project = await loadContainerCase(input.kind);
+  const runtime = await loadSdkRuntime();
+  const entryPath = workspacePath(input.readPath);
+  const plan = mappedPlan(input.files, entryPath);
+  const container = createContainer({
+    ...runtime,
+    services: { filesystem: plan.filesystem }
+  });
+  try {
+    const ready = await container.boot({ timeoutMs: MOUNT_CASE_BOOT_MS });
+    const openedFiles: OpenedCaseFile[] = [];
+    for (const file of input.files) {
+      openedFiles.push({
+        path: file.path,
+        text: await readText(container.services.fs, workspacePath(file.path))
+      });
+    }
+    const entry = openedFiles.find((file) => file.path === input.readPath)?.text ?? "";
+    const listing = await container.services.fs.readdir("/workspace");
+    const status = container.status;
+    return {
+      action: "editor",
+      protocolVersion: ready.protocolVersion,
+      status,
+      kind: project.kind,
+      previewScript: project.previewScript,
+      entryPath,
+      entry,
+      written: plan.written,
+      listing,
+      rejectedPath: null,
+      openedFiles
     };
   } finally {
     await container.teardown();

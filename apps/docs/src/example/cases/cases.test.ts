@@ -9,6 +9,7 @@ import {
   publishedExamplePath,
   REPLACED_ENTRY,
   scriptSrcFromHtml,
+  spaPreviewDocument,
   writeFilesInOrder
 } from "./load-patterns.ts";
 import { listWorkspace, memoryFilesystem, workspacePath } from "./memory-filesystem.ts";
@@ -45,6 +46,21 @@ assert.ok(spaHtml);
 assert.ok(nextLayout);
 assert.equal(scriptSrcFromHtml(spaHtml.contents), "src/main.js");
 assert.equal(scriptSrcFromHtml(nextLayout.contents), null);
+const spaScript = spa.files.find((file) => file.path === "src/main.js");
+assert.ok(spaScript);
+const preview = spaPreviewDocument(spaHtml.contents, spaScript.contents);
+assert.ok(preview);
+assert.match(preview, /spa-ready/);
+assert.match(spaScript.contents, /const greeting = "안녕하세요"/);
+assert.match(spaScript.contents, /name="visitor"/);
+assert.match(spaScript.contents, /addEventListener\("click"/);
+assert.match(spaScript.contents, /type="button"/);
+assert.match(spaHtml.contents, /min-height: 2\.5rem/);
+assert.equal(preview.includes('src="/src/main.js"'), false);
+assert.equal(spaPreviewDocument(nextLayout.contents, spaScript.contents), null);
+const escaped = spaPreviewDocument(spaHtml.contents, "const marker = '</script>';\n");
+assert.ok(escaped);
+assert.equal(escaped.includes("'</script>'"), false);
 assert.equal(caseDirectory("spa"), "src/");
 assert.equal(caseDirectory("next"), "app/");
 assert.deepEqual(filesWithPrefix(spa.files, "src/").map((file) => file.path), ["src/main.js"]);

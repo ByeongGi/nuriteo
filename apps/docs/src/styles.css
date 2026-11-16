@@ -82,7 +82,7 @@
   --spacing-scroll-offset: calc(var(--n-layout-header-height) + 1.25rem);
   --breakpoint-docs-sidebar: 801px;
   --breakpoint-docs-sections: 1100px;
-  --breakpoint-docs-outline: 1180px;
+  --breakpoint-docs-outline: 1440px;
 }
 
 @layer base {

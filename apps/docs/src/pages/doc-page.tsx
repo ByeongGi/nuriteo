@@ -39,19 +39,18 @@ export function DocPage() {
   const headings = pageOutline(copy.blocks);
   const onThisPage = lang === "ko" ? "이 페이지" : "On this page";
   const wide = entry.path === "/";
-  const measure = wide ? "max-w-3xl" : "max-w-[43rem]";
 
   return (
     <>
       <main id="docs-content" className={cn("min-w-0 px-5 pt-7 pb-16 docs-sidebar:px-10 docs-sidebar:pt-10", headings.length === 0 && "docs-outline:col-span-2")}>
-        <header className={`mb-8 ${measure}`}>
+        <header className="mb-8">
           <Breadcrumb entry={entry} lang={lang} />
           {wide ? <p className="mb-3 text-sm text-muted-foreground">{copy.eyebrow}</p> : null}
           <h1 className={titleClass}>{copy.title}</h1>
           <p className="m-0 text-lg text-pretty text-muted-foreground"><RichText text={copy.lead} /></p>
         </header>
         {headings.length > 0 ? (
-          <Collapsible className={cn("mb-8 rounded-lg border docs-outline:hidden", measure)}>
+          <Collapsible className="mb-8 rounded-lg border docs-outline:hidden">
             <CollapsibleTrigger className="w-full px-3 py-2 text-left text-sm">{onThisPage}</CollapsibleTrigger>
             <CollapsibleContent className="px-1 pb-2">
               <PageOutline headings={headings} />
@@ -59,12 +58,12 @@ export function DocPage() {
           </Collapsible>
         ) : null}
         {copy.blocks.map((block, blockIndex) => (
-          <div key={blockIndex} className={block.type === "playground" ? "my-10" : measure}>
+          <div key={blockIndex} className={block.type === "playground" ? "my-10" : undefined}>
             <BlockView block={block} index={blockIndex} />
           </div>
         ))}
         {entry.playground && !copy.blocks.some((block) => block.type === "playground") ? <div className="my-10"><SdkPlayground /></div> : null}
-        <nav className={`mt-16 grid gap-3 border-t border-border pt-6 sm:grid-cols-2 ${measure}`} aria-label={lang === "ko" ? "이전 다음" : "Previous and next"}>
+        <nav className="mt-16 grid gap-3 border-t border-border pt-6 sm:grid-cols-2" aria-label={lang === "ko" ? "이전 다음" : "Previous and next"}>
           {previous ? <PagerLink entry={previous} lang={lang} direction="prev" /> : <span />}
           {next ? <PagerLink entry={next} lang={lang} direction="next" /> : null}
         </nav>
