@@ -106,6 +106,7 @@ const marked = createShellRuntime({
 const skippedPipe = await marked.run("echo kept || echo skipped | cat");
 assert.equal(skippedPipe.exitCode, 0);
 assert.equal(skippedPipe.stdout, "kept\n");
+console.log(`shell or operator pipeOr=${JSON.stringify(pipeFallback.stdout)} pipeOrExit=${pipeFallback.exitCode} skippedPipe=${JSON.stringify(skippedPipe.stdout)} skippedPipeExit=${skippedPipe.exitCode}`);
 for (const command of [
   "echo ok; echo injected",
   "echo ok & echo background",
@@ -122,6 +123,7 @@ await assert.rejects(
 assert.equal((await shell.run("echo '$() & ; ||'" )).stdout, "$() & ; ||\n");
 assert.equal((await shell.run("echo 'value;not-an-operator'" )).stdout, "value;not-an-operator\n");
 
+assert.equal((await shell.run("echo marker > src/keep")).exitCode, 0);
 await shell.run("cd packages/../src");
 await shell.run("export MODE=development");
 assert.equal(shell.cwd, "/workspace/my app/src");
