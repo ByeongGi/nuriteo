@@ -1,4 +1,5 @@
 import { createCommandRegistry, shebangCommand } from "./commands.ts";
+import { shellChainContinues, shellStepRuns } from "./operators.ts";
 import { parseShell } from "./parser.ts";
 import type { RuntimeEnv } from "../types.ts";
 import type { ShellCommand, ShellCommandRegistry, ShellRunOptions, ShellRunResult, ShellRuntimeOptions } from "./types.ts";
@@ -35,7 +36,10 @@ export class ShellRuntime {
       const step = steps[index];
       if (!step) continue;
       const nextStep = steps[index + 1];
-      if (step.op === "&&" && exitCode !== 0) break;
+      if (!shellStepRuns(step.op, exitCode)) {
+        stdin = "";
+        continue;
+      }
       const { argv, redirect } = extractRedirect(step.argv);
       const streamed = { stderr: false, stdout: false };
       const result = await this.runCommand(argv, stdin, commandOutputOptions(options, streamed, nextStep?.op === "|"));
@@ -74,7 +78,7 @@ export class ShellRuntime {
       } else {
         stdin = "";
       }
-      if (exitCode !== 0) break;
+      if (!shellChainContinues(exitCode, nextStep?.op)) break;
     }
 
     return {

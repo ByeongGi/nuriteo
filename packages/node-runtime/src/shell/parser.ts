@@ -10,18 +10,20 @@ export class ShellSyntaxError extends Error {
 
 import type { ShellStep } from "./types.ts";
 
+const supportedForms = "argv/quotes, pipelines (|), &&, ||, and stdout overwrite (>)";
+
 export function parseShell(input: string): ShellStep[] {
   assertSupportedSyntax(input);
   const tokens = tokenize(input);
-  if (tokens.includes("||") || tokens.includes(";")) {
-    throw new ShellSyntaxError("unsupported shell syntax: only pipelines (|), &&, and stdout overwrite (>) are supported");
+  if (tokens.includes(";")) {
+    throw new ShellSyntaxError(`unsupported shell syntax: command lists (;); supported forms are ${supportedForms}`);
   }
   const commands: ShellStep[] = [];
   let current: string[] = [];
   let op: ShellStep["op"] = null;
 
   for (const token of tokens) {
-    if (token === "&&" || token === "|") {
+    if (token === "&&" || token === "||" || token === "|") {
       if (current.length === 0) throw new ShellSyntaxError("missing command");
       commands.push({ op, argv: current });
       current = [];
@@ -42,13 +44,13 @@ function assertSupportedSyntax(input: string): void {
     [/(^|[^&])&($|[^&])/, "background jobs (&)"],
     [/>>|<</, "append and heredoc redirects"],
     [/(^|\s)<(?!<)/, "stdin file redirects"],
-    [/\|\||;/, "OR and command-list operators"],
+    [/;/, "command lists (;)"],
     [/[{}]/, "shell blocks and brace expansion"]
   ];
   for (const [pattern, feature] of unsupported) {
     if (pattern.test(syntax)) {
       throw new ShellSyntaxError(
-        `unsupported shell syntax: ${feature}; supported forms are argv/quotes, pipelines (|), &&, and stdout overwrite (>)`
+        `unsupported shell syntax: ${feature}; supported forms are ${supportedForms}`
       );
     }
   }
@@ -94,6 +96,12 @@ export function tokenize(input: string): string[] {
     if (char === "&" && input[index + 1] === "&") {
       push();
       tokens.push("&&");
+      index += 1;
+      continue;
+    }
+    if (char === "|" && input[index + 1] === "|") {
+      push();
+      tokens.push("||");
       index += 1;
       continue;
     }

@@ -78,6 +78,18 @@ assert.equal(project.readText("src/generated.txt"), "created\n");
 assert.equal((await projectShell.run("ls ../../")).exitCode, 1);
 assert.equal((await projectShell.run("cd ../../")).exitCode, 1);
 assert.equal((await projectShell.run("pwd")).stdout, "/workspace/app/src\n");
+const skippedOr = await projectShell.run("echo kept || echo skipped");
+assert.equal(skippedOr.exitCode, 0);
+assert.equal(skippedOr.stdout, "kept\n");
+const recoveredOr = await projectShell.run("ls ../../ || echo recovered");
+assert.equal(recoveredOr.exitCode, 0);
+assert.equal(recoveredOr.stdout, "recovered\n");
+assert.match(recoveredOr.stderr, /Permission denied/);
+const chainedOr = await projectShell.run("ls ../../ && echo skipped || echo recovered");
+assert.equal(chainedOr.exitCode, 0);
+assert.equal(chainedOr.stdout, "recovered\n");
+assert.match(chainedOr.stderr, /Permission denied/);
+console.log(`shell or operator skipped=${JSON.stringify(skippedOr.stdout)} recovered=${JSON.stringify(recoveredOr.stdout)} recoveredExit=${recoveredOr.exitCode} chained=${JSON.stringify(chainedOr.stdout)}`);
 
 const scriptController = createPreviewWorkflowController();
 scriptController.loadViteReactTemplate();

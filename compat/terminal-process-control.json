@@ -30,9 +30,13 @@
     "gracefulSignalTimeoutMs": 500
   },
   "shellGrammar": {
-    "supported": ["quoted argv", "pipeline", "AND operator", "stdout overwrite"],
+    "supported": ["quoted argv", "pipeline", "AND operator", "OR operator", "stdout overwrite"],
     "diagnosticCode": "ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX",
-    "unsupported": ["background jobs", "command substitution", "OR operator", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"]
+    "unsupported": ["background jobs", "command substitution", "command lists", "heredoc", "append redirect", "stdin redirect", "shell blocks"],
+    "orOperator": {
+      "status": "supported",
+      "semantics": "|| runs the next command only when the previous command exits non-zero. The list exit code is the exit code of the last command that ran. &&, ||, and | stay one left-to-right step list. A failing pipeline stage still stops that pipe."
+    }
   },
   "posixPty": {
     "status": "partial",

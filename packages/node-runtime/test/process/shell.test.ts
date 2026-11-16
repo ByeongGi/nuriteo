@@ -79,7 +79,17 @@ assert.deepEqual(nestedOutputChunks, [{ stream: "stdout", data: "nested-output\n
 const bin = await shell.run("hello");
 assert.equal(bin.stdout, "from-bin\n");
 
-await assert.rejects(() => shell.run("echo ok || echo nope"), ShellSyntaxError);
+const recovered = await shell.run("false || echo recovered");
+assert.equal(recovered.exitCode, 0);
+assert.equal(recovered.stdout, "recovered\n");
+assert.equal(recovered.stderr, "nope\n");
+const skippedOr = await shell.run("echo ok || echo nope");
+assert.equal(skippedOr.exitCode, 0);
+assert.equal(skippedOr.stdout, "ok\n");
+const chainedOr = await shell.run("false && echo skipped || echo recovered");
+assert.equal(chainedOr.exitCode, 0);
+assert.equal(chainedOr.stdout, "recovered\n");
+assert.equal(chainedOr.stderr, "nope\n");
 for (const command of [
   "echo ok; echo injected",
   "echo ok & echo background",
