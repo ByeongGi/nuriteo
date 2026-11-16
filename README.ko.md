@@ -2,7 +2,7 @@
 
 NURITEO는 GitHub 프로젝트나 템플릿을 브라우저에서 열고 설치, 편집, 실행과 Preview까지 이어갈 수 있는 오픈소스 browser-native 개발 환경이다.
 
-현재 저장소는 브라우저 Runtime과 IDE 기능을 Self-hosted 서비스로 확장하는 단계다. Managed Cloud는 현재 범위에 포함하지 않는다. 데스크톱 Chrome에서 Vite 프로젝트를 열고 수정하고 Preview할 수 있다. 임의의 npm 패키지, 모바일 Safari, 브라우저 안의 Docker, 네이티브 애드온은 지원 범위 밖이다.
+현재 저장소는 브라우저 Runtime과 IDE 기능을 Self-hosted 서비스로 확장하는 단계다. Managed Cloud, 결제, 폰홈 활성화는 현재 범위에 포함하지 않는다. 데스크톱 Chrome에서 Vite 프로젝트를 열고 수정하고 Preview할 수 있다. 임의의 npm 패키지, 모바일 Safari, 브라우저 안의 Docker, 직접 TCP 데이터베이스, 네이티브 애드온, 임의 네이티브 바이너리는 지원 범위 밖이다.
 
 English guide: [README.md](./README.md).
 

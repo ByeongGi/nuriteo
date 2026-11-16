@@ -2,7 +2,7 @@
 
 NURITEO is an open-source browser-native development environment. Open a GitHub project or template in the browser, install it, edit it, run it, and follow the result through Preview.
 
-This repository is the self-hosted product. Managed cloud is out of scope. On desktop Chrome, a Vite project can be opened, edited, and previewed. Arbitrary npm packages, mobile Safari, Docker-in-the-browser, and native addons are outside the supported set.
+This repository is the self-hosted product. Managed cloud, billing, and phone-home activation are out of scope. On desktop Chrome, a Vite project can be opened, edited, and previewed. Arbitrary npm packages, mobile Safari, Docker in the browser, direct TCP databases, native addons, and arbitrary native binaries are outside the supported set.
 
 한국어 안내: [README.ko.md](./README.ko.md).
 

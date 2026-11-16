@@ -1,6 +1,6 @@
 # Peer terminal comparison
 
-This note records one terminal capability that StackBlitz, GitHub Codespaces, and CodeSandbox already give a desktop browser user, and that this repository still marks unsupported. The selected capability is the shell OR operator, `||`.
+This note records the one terminal capability selected from StackBlitz, GitHub Codespaces, and CodeSandbox. The capability is the shell OR operator, `||`. Before this change, `shellGrammar.unsupported` included `OR operator`. `shellGrammar.orOperator.status` is now `supported`.
 
 ## What the peers document
 
@@ -14,15 +14,15 @@ Bash defines the OR operator those bash sessions already run. The [Bash referenc
 
 ## What this repository already records
 
-`compat/terminal-process-control.json` records the product shell grammar before this change. `shellGrammar.supported` lists quoted argv, a pipeline, the AND operator, and stdout overwrite. `shellGrammar.unsupported` lists background jobs, command substitution, the OR operator, command lists, heredoc, append redirect, stdin redirect, and shell blocks. The diagnostic code is `ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX`.
+Before this change, `compat/terminal-process-control.json` listed quoted argv, a pipeline, the AND operator, and stdout overwrite in `shellGrammar.supported`. `shellGrammar.unsupported` included background jobs, command substitution, the OR operator, command lists, heredoc, append redirect, stdin redirect, and shell blocks. After this change, `OR operator` is in `shellGrammar.supported`, and `shellGrammar.orOperator.status` is `supported`. The other unsupported entries stay unsupported. The diagnostic code remains `ERR_NURITEO_UNSUPPORTED_SHELL_SYNTAX`.
 
 Before this change, `packages/node-runtime/test/process/shell.test.ts` drove `createShellRuntime().run("echo ok || echo nope")` and expected `ShellSyntaxError`. That test still rejects command lists, background jobs, append redirect, stdin redirect, and command substitution. The preview terminal reaches the same parser through `createPreviewShellSession().run()`, which calls `createTerminalSession().run()`. The shipped check is `packages/workspace-runtime/test/terminal-session-control.test.ts`.
 
 The whole terminal contract stays `partial`. Host kernel PTY, background job control, and command substitution stay unsupported. `README.ko.md` and `docs/release/known-limitations.md` still exclude managed cloud, billing, phone-home activation, Docker in the browser, direct TCP databases, native addons, arbitrary native binaries, arbitrary npm packages, and mobile Safari. This comparison does not change those boundaries.
 
-## The one capability to ship
+## The capability that shipped
 
-Ship the OR operator on the existing shell step list. A desktop Chrome user can type it in the self-hosted editor terminal.
+The OR operator is on the existing shell step list. A desktop Chrome user can type it in the self-hosted editor terminal.
 
 Observable result:
 
