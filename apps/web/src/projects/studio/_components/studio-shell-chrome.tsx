@@ -1,12 +1,15 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "#src/components/ui/button.tsx";
 import { Input } from "#src/components/ui/input.tsx";
 import { MenuGroupLabel, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRadioGroup, MenuRadioItem, MenuRadioItemIndicator, MenuRoot, MenuSeparator, MenuTrigger } from "#src/components/ui/menu.tsx";
 import { SearchField } from "#src/components/ui/search-field.tsx";
+import { editorLanguageLabel } from "@/projects/_utils/project-editor-language.ts";
+import { DEFAULT_EDITOR_SETTINGS, EDITOR_FONT_SIZES, parseEditorFontSize, readEditorSettings, writeEditorSettings } from "@/projects/_utils/project-editor-settings.ts";
+import type { EditorSettings } from "@/projects/_utils/project-editor-settings.ts";
 import { EDITOR_THEME_OPTIONS } from "@/projects/_utils/project-editor-theme.ts";
 import { ProjectFileTree } from "@/projects/_components/project-file-tree.tsx";
 import { runtimeDot } from "@/projects/studio/_components/studio-ide-styles.ts";
@@ -344,16 +347,24 @@ export function StudioEditorColumn({ children, session }: { readonly children: R
     workspace,
     workspaceScope
   } = session;
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(DEFAULT_EDITOR_SETTINGS);
+  useEffect(() => {
+    setEditorSettings(readEditorSettings());
+  }, []);
+  function updateEditorSettings(next: EditorSettings): void {
+    setEditorSettings(next);
+    writeEditorSettings(next);
+  }
   const applyDraftLabel = isSaving ? ("적용 중…") : ("로컬 초안에 적용");
   const activeBufferClass = activeBufferDirty ? ("is-dirty") : ("");
   const splitEditorValue = splitPath === selectedPath ? (editorContent) : (splitContent);
   function splitEditorPane() {
-    if (isEditorSplit && splitPath) return (<div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={splitEditorValue} onChange={handleSplitEditorChange} /></div>);
+    if (isEditorSplit && splitPath) return (<div className={css.splitPane()}><div className={css.splitPaneBar()}><span title={splitPath}>{splitPath}</span><Button type="button" size="icon" variant="ghost" aria-label="분할 편집기 닫기" onClick={closeSplit}>×</Button></div><ProjectMonacoEditor editorSettings={editorSettings} path={splitPath} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} themePreference={editorThemePreference} value={splitEditorValue} onChange={handleSplitEditorChange} /></div>);
     return (null);
   }
   const editorPriorityPaths = splitPath ? ([...openPaths, splitPath]) : (openPaths);
   function editorSurface() {
-    if (selectedPath) return (<div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={editorPriorityPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={handlePrimaryEditorChange} />{splitEditorPane()}</div></div>);
+    if (selectedPath) return (<div className={css.editorHost()}><div className={css.editorPanes()} data-split={isEditorSplit}><ProjectMonacoEditor editorSettings={editorSettings} formatRequestId={editorFormatRequestId} path={selectedPath} priorityPaths={editorPriorityPaths} projectKey={`${workspaceScope}:${project.id}`} readOnly={!canWriteLocalDraft} readWorkspaceText={readWorkspaceText} revealPosition={editorPositionRequest} themePreference={editorThemePreference} value={editorContent} workspaceFiles={workspace?.files} onDiagnosticsChange={setEditorDiagnostics} onChange={handlePrimaryEditorChange} />{splitEditorPane()}</div></div>);
     return (<div className={css.editorEmpty()}><span aria-hidden="true">⌘</span><strong>편집할 파일을 선택하세요</strong><p>왼쪽 파일 목록에서 선택하거나 <kbd>⌘P</kbd>로 빠르게 찾을 수 있습니다.</p></div>);
   }
   function editorBreadcrumbs() {
@@ -405,6 +416,40 @@ export function StudioEditorColumn({ children, session }: { readonly children: R
                             ))}
                           </MenuRadioGroup>
                           <MenuSeparator />
+                          <MenuRadioGroup value={String(editorSettings.fontSize)} onValueChange={(value) => updateEditorSettings({ ...editorSettings, fontSize: parseEditorFontSize(value) })}>
+                            <MenuGroupLabel>글자 크기</MenuGroupLabel>
+                            {EDITOR_FONT_SIZES.map((size) => (
+                              <MenuRadioItem closeOnClick key={size} value={String(size)}>
+                                <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                                <span className="tabular-nums">{size}</span>
+                              </MenuRadioItem>
+                            ))}
+                          </MenuRadioGroup>
+                          <MenuSeparator />
+                          <MenuRadioGroup value={editorSettings.wordWrap} onValueChange={(value) => updateEditorSettings({ ...editorSettings, wordWrap: value === "on" ? "on" : "off" })}>
+                            <MenuGroupLabel>줄바꿈</MenuGroupLabel>
+                            <MenuRadioItem closeOnClick value="off">
+                              <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                              <span>끄기</span>
+                            </MenuRadioItem>
+                            <MenuRadioItem closeOnClick value="on">
+                              <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                              <span>켜기</span>
+                            </MenuRadioItem>
+                          </MenuRadioGroup>
+                          <MenuSeparator />
+                          <MenuRadioGroup value={editorSettings.minimap ? "on" : "off"} onValueChange={(value) => updateEditorSettings({ ...editorSettings, minimap: value === "on" })}>
+                            <MenuGroupLabel>미니맵</MenuGroupLabel>
+                            <MenuRadioItem closeOnClick value="off">
+                              <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                              <span>끄기</span>
+                            </MenuRadioItem>
+                            <MenuRadioItem closeOnClick value="on">
+                              <MenuRadioItemIndicator className="data-[unchecked]:invisible" keepMounted aria-hidden="true">✓</MenuRadioItemIndicator>
+                              <span>켜기</span>
+                            </MenuRadioItem>
+                          </MenuRadioGroup>
+                          <MenuSeparator />
                           <MenuItem disabled={openPaths.length === 0} onClick={closeSavedFiles}><span aria-hidden="true" /><span>저장된 편집기 닫기</span></MenuItem>
                           <MenuItem disabled={openPaths.length === 0} onClick={closeAllFiles}><span aria-hidden="true" /><span>모든 편집기 닫기</span></MenuItem>
                         </MenuPopup>
@@ -415,7 +460,7 @@ export function StudioEditorColumn({ children, session }: { readonly children: R
               </div>
               {editorBreadcrumbs()}
               {editorSurface()}
-              <div className={css.status()}><span><i className={activeBufferClass} aria-hidden="true" />{editorStatus}</span><span>{editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{applyDraftLabel}</Button></div>
+              <div className={css.status()}><span><i className={activeBufferClass} aria-hidden="true" />{editorStatus}</span><span className="tabular-nums">{editorLanguageLabel(selectedPath)} · {editorLineCount}줄 · {editorContent.length}자 · UTF-8</span><Button aria-label="로컬 초안에 적용" type="button" size="sm" disabled={!selectedPath || isSaving || !canWriteLocalDraft} onClick={saveSelectedFile}>{applyDraftLabel}</Button></div>
             </section>
             {children}
           </div>

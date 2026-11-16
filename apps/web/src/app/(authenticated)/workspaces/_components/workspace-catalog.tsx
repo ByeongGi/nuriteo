@@ -9,7 +9,7 @@ import { buttonVariants } from "@/components/ui/button.styles.ts";
 import { PageHeader } from "@/components/ui/page-header.tsx";
 import { SegmentedControl } from "@/components/ui/segmented-control.tsx";
 import { SearchField } from "@/components/ui/search-field.tsx";
-import { workspaceOwnerLabel } from "@/lib/workspace-selection.ts";
+import { workspaceOwnerLabel, workspacePlaceLabel } from "@/lib/workspace-selection.ts";
 
 const workspaceScreenStyles = tv({
   slots: {
@@ -34,7 +34,7 @@ const workspaceScreenStyles = tv({
     rowMeta: "flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground",
     type: "inline-flex items-center gap-1.5 rounded-full bg-subtle px-2 py-0.5",
     rowDescription: "truncate text-[var(--n-font-size-2xs)] text-subtle-foreground",
-    arrow: "grid size-8 place-items-center rounded-md text-lg text-subtle-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground max-[32rem]:col-start-2 max-[32rem]:row-start-2 max-[32rem]:hidden",
+    arrow: "grid size-8 place-items-center rounded-md text-lg text-subtle-foreground transition-transform motion-safe:group-hover:translate-x-0.5 group-hover:text-foreground max-[32rem]:col-start-2 max-[32rem]:row-start-2 max-[32rem]:hidden",
     emptyPage: "mx-auto mt-12 grid max-w-lg justify-items-start gap-3 rounded-lg border border-muted-border bg-surface p-6 [&_h1]:m-0 [&_h1]:text-xl [&_p]:m-0 [&_p]:text-sm [&_p]:text-muted-foreground",
     emptyActions: "flex flex-wrap gap-2 max-[48rem]:w-full max-[48rem]:flex-col"
   }
@@ -140,12 +140,7 @@ export function WorkspaceCatalog({ workspaces }: Readonly<{
                       <strong className={styles.rowTitle()}>{workspace.displayLabel}</strong>
                       <span className={styles.rowMeta()}>
                         <span className={styles.type()}>{workspaceOwnerLabel(workspace)} 워크스페이스</span>
-                        <span className={styles.rowDescription()}>{(function () {
-    if (workspace.ownerType === "user") {
-        return ("개인 작업 공간");
-    }
-    return ("팀과 공유하는 작업 공간");
-})()}</span>
+                        <span className={styles.rowDescription()}>{workspacePlaceLabel(workspace)}</span>
                       </span>
                     </span>
                     <span className={styles.arrow()} aria-hidden="true">›</span>

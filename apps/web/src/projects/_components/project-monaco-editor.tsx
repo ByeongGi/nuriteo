@@ -7,8 +7,17 @@ import "../../../node_modules/monaco-editor/esm/vs/language/css/monaco.contribut
 import "../../../node_modules/monaco-editor/esm/vs/language/html/monaco.contribution.js";
 import "../../../node_modules/monaco-editor/esm/vs/language/json/monaco.contribution.js";
 import "../../../node_modules/monaco-editor/esm/vs/language/typescript/monaco.contribution.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/graphql/register.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/ini/register.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/markdown/register.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/mdx/register.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/xml/register.js";
+import "../../../node_modules/monaco-editor/esm/vs/languages/definitions/yaml/register.js";
 import { useEffect, useRef, useState } from "react";
 
+import { editorLanguageForPath } from "@/projects/_utils/project-editor-language.ts";
+import { DEFAULT_EDITOR_SETTINGS } from "@/projects/_utils/project-editor-settings.ts";
+import type { EditorSettings } from "@/projects/_utils/project-editor-settings.ts";
 import { EDITOR_THEME_CHANGE_EVENT, parseEditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
 import type { EditorThemePreference } from "@/projects/_utils/project-editor-theme.ts";
 import { defineProjectMonacoThemes, resolveProjectMonacoTheme } from "@/projects/_utils/project-monaco-theme.ts";
@@ -19,11 +28,16 @@ loader.config({ monaco });
 configureMonacoTypeScript();
 defineProjectMonacoThemes(monaco);
 
+const COMPACT_EDITOR_WIDTH = 520;
+const EDITOR_LINE_HEIGHT = 22;
 const EDITOR_PADDING = {
   bottom: 12,
   top: 12
 } as const;
+const EDITOR_TAB_SIZE = 2;
 const MIN_LINE_NUMBER_CHARACTERS = 3;
+const MINIMAP_MAX_COLUMN = 80;
+const STICKY_SCROLL_MAX_LINES = 5;
 
 if (typeof globalThis.Worker !== "undefined") {
   globalThis.MonacoEnvironment = {
@@ -46,6 +60,7 @@ if (typeof globalThis.Worker !== "undefined") {
 }
 
 interface Props {
+  readonly editorSettings?: EditorSettings | undefined;
   readonly formatRequestId?: number | undefined;
   readonly path: string;
   readonly priorityPaths?: readonly string[] | undefined;
@@ -73,7 +88,7 @@ export interface EditorPositionRequest {
   readonly requestId: number;
 }
 
-export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsChange, path, priorityPaths = [], projectKey, readOnly, readWorkspaceText, revealPosition, themePreference, value, workspaceFiles }: Props) {
+export function ProjectMonacoEditor({ editorSettings = DEFAULT_EDITOR_SETTINGS, formatRequestId, onChange, onDiagnosticsChange, path, priorityPaths = [], projectKey, readOnly, readWorkspaceText, revealPosition, themePreference, value, workspaceFiles }: Props) {
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const mountedMonacoRef = useRef<Parameters<OnMount>[1] | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -118,7 +133,7 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const updateLayout = () => setIsCompact(host.clientWidth < 520);
+    const updateLayout = () => setIsCompact(host.clientWidth < COMPACT_EDITOR_WIDTH);
     const observer = new ResizeObserver(updateLayout);
     observer.observe(host);
     updateLayout();
@@ -153,6 +168,10 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
     if (synchronizesWorkspace) disposeProjectMonacoWorkspace(projectKey);
   }, [projectKey, synchronizesWorkspace]);
 
+  useEffect(() => {
+    editorRef.current?.updateOptions(editorOptions(editorSettings, isCompact));
+  }, [editorSettings, isCompact]);
+
   const onMount: OnMount = (editor, mountedMonaco) => {
     editorRef.current = editor;
     mountedMonacoRef.current = mountedMonaco;
@@ -164,7 +183,7 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
     <div className="h-full min-h-0 min-w-0 overflow-hidden" ref={hostRef}>
       <Editor
         height="100%"
-        language={languageForPath(path)}
+        language={editorLanguageForPath(path)}
         loading={<div className="grid h-full place-items-center bg-surface text-xs text-muted-foreground" role="status">코드 편집기를 준비하는 중…</div>}
         onChange={(nextValue) => onChange(nextValue ?? "")}
         onValidate={(markers) => onDiagnosticsChange?.(markers.map((marker) => ({
@@ -175,29 +194,9 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
         })))}
         onMount={onMount}
         options={{
-          accessibilitySupport: "auto",
+          ...editorOptions(editorSettings, isCompact),
           ariaLabel: `${path} 편집기`,
-          automaticLayout: true,
-          bracketPairColorization: { enabled: true },
-          contextmenu: true,
-          cursorBlinking: "smooth",
-          fixedOverflowWidgets: true,
-          folding: true,
-          fontFamily: "var(--n-font-family-mono)",
-          fontSize: 13,
-          formatOnPaste: true,
-          glyphMargin: !isCompact,
-          lineHeight: 22,
-          lineNumbersMinChars: MIN_LINE_NUMBER_CHARACTERS,
-          minimap: { enabled: !isCompact, maxColumn: 80, renderCharacters: false },
-          padding: EDITOR_PADDING,
-          readOnly,
-          renderWhitespace: "selection",
-          scrollBeyondLastLine: false,
-          smoothScrolling: true,
-          tabSize: 2,
-          useShadowDOM: false,
-          wordWrap: "off"
+          readOnly
         }}
         keepCurrentModel
         path={monacoModelPath(projectKey, path)}
@@ -209,19 +208,45 @@ export function ProjectMonacoEditor({ formatRequestId, onChange, onDiagnosticsCh
   );
 }
 
-function languageForPath(path: string): string {
-  const extension = path.split(".").at(-1)?.toLocaleLowerCase();
-  const languages: Readonly<Record<string, string>> = {
-    css: "css",
-    html: "html",
-    js: "javascript",
-    json: "json",
-    jsx: "javascript",
-    less: "less",
-    md: "markdown",
-    scss: "scss",
-    ts: "typescript",
-    tsx: "typescript"
+function editorOptions(settings: EditorSettings, isCompact: boolean): monaco.editor.IStandaloneEditorConstructionOptions {
+  return {
+    accessibilitySupport: "auto",
+    automaticLayout: true,
+    bracketPairColorization: { enabled: true },
+    contextmenu: true,
+    cursorBlinking: "smooth",
+    cursorSmoothCaretAnimation: "on",
+    fixedOverflowWidgets: true,
+    folding: true,
+    foldingHighlight: true,
+    fontFamily: "var(--n-font-family-mono)",
+    fontSize: settings.fontSize,
+    formatOnPaste: true,
+    glyphMargin: !isCompact,
+    guides: { bracketPairs: true, indentation: true },
+    hover: { enabled: "on" },
+    lightbulb: { enabled: monaco.editor.ShowLightbulbIconMode.OnCode },
+    lineHeight: EDITOR_LINE_HEIGHT,
+    lineNumbersMinChars: MIN_LINE_NUMBER_CHARACTERS,
+    linkedEditing: true,
+    matchBrackets: "always",
+    minimap: { enabled: settings.minimap && !isCompact, maxColumn: MINIMAP_MAX_COLUMN, renderCharacters: false },
+    multiCursorModifier: "alt",
+    occurrencesHighlight: "singleFile",
+    padding: EDITOR_PADDING,
+    parameterHints: { enabled: true },
+    quickSuggestions: true,
+    renderLineHighlight: "line",
+    renderWhitespace: "selection",
+    scrollBeyondLastLine: false,
+    selectionHighlight: true,
+    showFoldingControls: "mouseover",
+    smoothScrolling: true,
+    stickyScroll: { enabled: !isCompact, maxLineCount: STICKY_SCROLL_MAX_LINES },
+    suggest: { preview: true, showSnippets: true, showWords: true },
+    tabCompletion: "on",
+    tabSize: EDITOR_TAB_SIZE,
+    useShadowDOM: false,
+    wordWrap: settings.wordWrap
   };
-  return extension === undefined ? "plaintext" : languages[extension] ?? "plaintext";
 }

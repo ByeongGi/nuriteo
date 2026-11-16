@@ -21,3 +21,8 @@ export function resolveWorkspaceSelection(
 export function workspaceOwnerLabel(workspace: Workspace): string {
   return workspace.ownerType === "user" ? "개인" : "조직";
 }
+
+export function workspacePlaceLabel(workspace: Workspace): string {
+  if (workspace.ownerType === "user") return "개인 작업 공간";
+  return "팀과 공유하는 작업 공간";
+}

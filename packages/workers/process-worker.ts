@@ -8,6 +8,7 @@ import { createProcessWorkerRuntime } from "../browser-host/src/process/worker-r
 import { SystemWasmClient } from "../browser-host/src/process/system-wasm-client.ts";
 import { SystemWasmVirtualPty } from "../browser-host/src/process/virtual-pty.ts";
 import { installWebAssemblyMemoryLimit } from "../browser-host/src/resources/index.ts";
+import { MODULE_WORKER_BLOB_TYPE, moduleWorkerBlobSource } from "./inline-module-worker.ts";
 
 const YARN_BUNDLE_SHA256 = "443ed69e76443b89afddccfc9faec1ff16eb5e500979cc079c696dec4c3d94ee";
 const YARN_ENTRY_SHA256 = "148e19db309ec9eaf7720b28df811337906eea8a1758deaa54afee60a6305e04";
@@ -234,17 +235,7 @@ async function evaluateCli(message) {
     response = await evaluateCliModuleWorkerMessage(message, {
       ...(httpBridge ? { httpBridge } : {}),
       ...pinnedFactories,
-      nestedWorkerFactory: (request) => {
-        const worker = new Worker(new URL("./cli-nested-worker.ts", import.meta.url), { type: "module" });
-        worker.postMessage({ type: "cli:nested:init", request });
-        return {
-          postMessage: (value) => worker.postMessage(value),
-          terminate: () => worker.terminate(),
-          onMessage: (listener) => worker.addEventListener("message", (event) => listener(event.data)),
-          onError: (listener) => worker.addEventListener("error", (event) => listener(new Error(event.message))),
-          onExit: () => {}
-        };
-      }
+      nestedWorkerFactory: (request) => createCliNestedWorkerPort(request)
     });
     if (readRolldownWasiDirectory && response.result?.workspaceSnapshot) {
       const workspace = MemoryPackageManagerWorkspace.fromSnapshot(response.result.workspaceSnapshot);
@@ -266,6 +257,74 @@ async function evaluateCli(message) {
     response = { id: message.id, error: error instanceof Error ? error.message : String(error), type: "cli:result" };
   }
   self.postMessage(response);
+}
+
+function createCliNestedWorkerPort(request) {
+  const workerUrl = new URL("./cli-nested-worker.ts", import.meta.url);
+  let worker = null;
+  const pending = [];
+  const messageListeners = new Set();
+  const errorListeners = new Set();
+  let terminated = false;
+  const ready = workerUrl.pathname.endsWith(".ts")
+    ? Promise.resolve(new Worker(workerUrl, { type: "module" }))
+    : fetch(workerUrl).then(async (response) => {
+      if (!response.ok) throw new Error("CLI nested worker file is missing");
+      return createModuleWorkerFromSource(await response.text(), new URL("./", workerUrl).href);
+    });
+  void ready.then((created) => {
+    if (terminated) {
+      created.terminate();
+      return;
+    }
+    worker = created;
+    created.addEventListener("message", (event) => {
+      for (const listener of messageListeners) listener(event.data);
+    });
+    created.addEventListener("error", (event) => {
+      const error = new Error(event.message || "CLI nested worker failed");
+      for (const listener of errorListeners) listener(error);
+    });
+    created.postMessage({ type: "cli:nested:init", request });
+    for (const value of pending) created.postMessage(value);
+    pending.length = 0;
+  }).catch((error) => {
+    const wrapped = error instanceof Error ? error : new Error(String(error));
+    for (const listener of errorListeners) listener(wrapped);
+  });
+  return {
+    postMessage(value) {
+      if (terminated) return;
+      if (worker) worker.postMessage(value);
+      else pending.push(value);
+    },
+    terminate() {
+      terminated = true;
+      return worker ? worker.terminate() : undefined;
+    },
+    onMessage(listener) {
+      messageListeners.add(listener);
+    },
+    onError(listener) {
+      errorListeners.add(listener);
+    },
+    onExit() {}
+  };
+}
+
+function createModuleWorkerFromSource(source, assetBase) {
+  const jsContent = moduleWorkerBlobSource(source, assetBase);
+  const blob = new Blob([jsContent], { type: MODULE_WORKER_BLOB_TYPE });
+  let objectUrl;
+  try {
+    objectUrl = URL.createObjectURL(blob);
+    const worker = new Worker(objectUrl, { type: "module" });
+    worker.addEventListener("error", () => URL.revokeObjectURL(objectUrl));
+    return worker;
+  } catch {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    return new Worker(`data:text/javascript;charset=utf-8,${encodeURIComponent(jsContent)}`, { type: "module" });
+  }
 }
 
 function isPinnedBundlerEntrypoint(entry) {

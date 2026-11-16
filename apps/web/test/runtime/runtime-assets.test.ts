@@ -39,6 +39,8 @@ try {
   assert.doesNotMatch(nestedWorker, /new URL\("\.\.\/vendor\//u);
   assert.doesNotMatch(rolldown, /"\/vendor\/vite-8\.2\.0\/assets/u);
   assert.match(processWorker, /cli-nested-worker\.js/u);
+  assert.match(processWorker, /text\/javascript;charset=utf-8/u);
+  assert.match(processWorker, /createObjectURL/u);
   assert.match(rolldown, /new URL\("\.\/assets\/rolldown-binding\.wasm",\s*import\.meta\.url\)/u);
 } finally {
   fs.rmSync(temporaryRoot, { force: true, recursive: true });

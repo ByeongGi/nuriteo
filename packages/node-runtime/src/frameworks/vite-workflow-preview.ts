@@ -19,23 +19,25 @@ export function transformViteModuleSource(
 ): string {
   if (!/\.(?:[cm]?jsx?|tsx?)$/.test(path)) return source;
   const finish = (value: string) => applyPreviewCommonJs(path, value, context);
+  const rewrite = (value: string) => prepareBrowserModuleSource(path, value, resolveSpecifier);
+  const runnable = browserPreviewModuleSource(path, source);
   if (moduleTransformSource === "vite-cli") {
-    return finish(rewriteBrowserModuleImports(`// transformed by vite-cli\n${source}`, resolveSpecifier));
+    return finish(rewrite(`// transformed by vite-cli\n${runnable}`));
   }
-  const rewrite = (value: string) => rewriteBrowserModuleImports(value, resolveSpecifier);
-  // Adapter preview path: emit browser-runnable ESM for TS/JSX so React/Vite edits show up.
-  if (/\.(?:[cm]?tsx?|jsx)$/.test(path)) {
-    try {
-      const result = transpileTypeScript(source, {
-        fileName: path,
-        jsx: /\.(?:jsx|tsx)$/.test(path) ? "react-jsx" : "react"
-      });
-      return finish(rewrite(result.code));
-    } catch {
-      return finish(rewrite(source));
-    }
+  return finish(rewrite(runnable));
+}
+
+export function browserPreviewModuleSource(path: string, source: string): string {
+  const fileName = path.split("?")[0]?.split("#")[0] ?? path;
+  if (!/\.(?:[cm]?tsx?|jsx)$/u.test(fileName)) return source;
+  try {
+    return transpileTypeScript(source, {
+      fileName,
+      jsx: /\.(?:jsx|tsx)$/u.test(fileName) ? "react-jsx" : "react"
+    }).code.replace(/\/\/# sourceMappingURL=\S+/gu, "");
+  } catch {
+    return source;
   }
-  return finish(rewrite(source));
 }
 
 export function previewExportTarget(manifest: { exports?: unknown }, subpath: string): string | undefined {
@@ -142,6 +144,37 @@ export function resolveInstalledPreviewSpecifier(
   return resolved.endsWith(".json") ? `${url}?nuriteo-module=json` : url;
 }
 
+export function prepareBrowserModuleSource(
+  path: string,
+  source: string,
+  resolveSpecifier?: (specifier: string) => string | undefined
+): string {
+  return relativizeRootSpecifiers(path, rewriteBrowserModuleImports(source, resolveSpecifier));
+}
+
+export function relativizeRootSpecifiers(fromPath: string, source: string): string {
+  const fromDirectory = parentPath(fromPath.startsWith("/") ? fromPath : `/${fromPath}`);
+  return source.replace(
+    /(?<![\w$.])(from\s+|import\s*\(\s*|import\s+)(["'])(\/[^"']+)\2/g,
+    (full, keyword: string, quote: string, specifier: string) => {
+      if (specifier.startsWith("//")) return full;
+      const cut = specifier.search(/[?#]/u);
+      const pathname = cut < 0 ? specifier : specifier.slice(0, cut);
+      const suffix = cut < 0 ? "" : specifier.slice(cut);
+      return `${keyword}${quote}${relativeSpecifier(fromDirectory, pathname)}${suffix}${quote}`;
+    }
+  );
+}
+
+function relativeSpecifier(fromDirectory: string, targetPath: string): string {
+  const fromParts = fromDirectory.split("/").filter(Boolean);
+  const targetParts = targetPath.split("/").filter(Boolean);
+  let shared = 0;
+  while (shared < fromParts.length && shared < targetParts.length && fromParts[shared] === targetParts[shared]) shared += 1;
+  const parts = [...Array.from({ length: fromParts.length - shared }, () => ".."), ...targetParts.slice(shared)];
+  return parts.length === 0 ? "." : parts.join("/");
+}
+
 export function rewriteBrowserModuleImports(source: string, resolveSpecifier?: (specifier: string) => string | undefined): string {
   let next = source.replace(
     /import\s+["'](\.[^"']+\.(?:css|scss|sass|less))["'];?/g,
@@ -150,9 +183,10 @@ export function rewriteBrowserModuleImports(source: string, resolveSpecifier?: (
     )
   );
   next = next.replace(
-    /from\s+["'](\.[^"']+)["']/g,
+    /(?<![\w$.])(?:from\s+|import\s+)["'](\.[^"']+)["']/g,
     (full, specifier: string) => {
-      if (/\.[a-z0-9]+$/i.test(specifier)) return full;
+      const pathname = specifier.split("?")[0]?.split("#")[0] ?? specifier;
+      if (/\.[a-z0-9]+$/iu.test(pathname)) return full;
       return full.replace(specifier, `${specifier}.js`);
     }
   );

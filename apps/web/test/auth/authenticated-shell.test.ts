@@ -6,7 +6,8 @@ import type { Workspace } from "@nuriteo/api-client";
 
 import {
   resolveWorkspaceSelection,
-  workspaceOwnerLabel
+  workspaceOwnerLabel,
+  workspacePlaceLabel
 } from "../../src/lib/workspace-selection.ts";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -41,6 +42,8 @@ function testSelectionContract(): void {
   assert.equal(resolveWorkspaceSelection([], undefined), undefined);
   assert.equal(workspaceOwnerLabel(personal), "개인");
   assert.equal(workspaceOwnerLabel(organization), "조직");
+  assert.equal(workspacePlaceLabel(personal), "개인 작업 공간");
+  assert.equal(workspacePlaceLabel(organization), "팀과 공유하는 작업 공간");
 }
 
 function testRequestScopedAuthenticatedBoundary(): void {

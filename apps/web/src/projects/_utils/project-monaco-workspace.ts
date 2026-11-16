@@ -1,5 +1,10 @@
 import * as monaco from "monaco-editor";
 
+import { editorLanguageForPath } from "@/projects/_utils/project-editor-language.ts";
+import { selectTypeScriptModelPaths } from "@/projects/_utils/project-typescript-models.ts";
+import { packageNamesFromManifest, projectTypeScriptOptionsFromWorkspace } from "@/projects/_utils/project-typescript-options.ts";
+import type { ProjectTypeScriptOptions } from "@/projects/_utils/project-typescript-options.ts";
+
 interface ProjectTextFile {
   readonly kind: "text" | "binary";
   readonly path: string;
@@ -12,9 +17,7 @@ interface SyncProjectWorkspaceInput {
   readonly readText: (path: string) => string;
 }
 
-const MAX_SYNCED_SOURCE_MODELS = 500;
 const MANIFEST_PATH = "package.json";
-const SUPPORTED_MODEL_PATH = /(?:^|\/)(?:[^/]+\.(?:[cm]?[jt]sx?|json)|[^/]+\.d\.ts)$/u;
 const WORKSPACE_DECLARATIONS_PATH = "__nuriteo__/workspace-modules.d.ts";
 const managedModelsByProject = new Map<string, Set<string>>();
 let typescriptDefaultsConfigured = false;
@@ -23,23 +26,7 @@ export function configureMonacoTypeScript(): void {
   if (typescriptDefaultsConfigured) return;
   typescriptDefaultsConfigured = true;
 
-  const compilerOptions: monaco.typescript.CompilerOptions = {
-    allowImportingTsExtensions: true,
-    allowJs: true,
-    allowNonTsExtensions: true,
-    allowSyntheticDefaultImports: true,
-    esModuleInterop: true,
-    jsx: monaco.typescript.JsxEmit.Preserve,
-    module: monaco.typescript.ModuleKind.ESNext,
-    moduleResolution: monaco.typescript.ModuleResolutionKind.NodeJs,
-    noEmit: true,
-    resolveJsonModule: true,
-    skipLibCheck: true,
-    target: monaco.typescript.ScriptTarget.ESNext
-  };
-
   for (const defaults of [monaco.typescript.typescriptDefaults, monaco.typescript.javascriptDefaults]) {
-    defaults.setCompilerOptions(compilerOptions);
     defaults.setDiagnosticsOptions({ onlyVisible: true });
     defaults.setEagerModelSync(true);
   }
@@ -51,9 +38,10 @@ export function monacoModelPath(projectKey: string, path: string): string {
 
 export function syncProjectMonacoWorkspace(input: SyncProjectWorkspaceInput): void {
   configureMonacoTypeScript();
+  applyProjectTypeScriptOptions(input);
   const managedUris = managedModelsByProject.get(input.projectKey) ?? new Set<string>();
   const nextManagedUris = new Set<string>();
-  const selectedFiles = selectWorkspaceFiles(input.files, input.priorityPaths);
+  const selectedFiles = selectWorkspaceFiles(input);
 
   for (const file of selectedFiles) {
     let value: string;
@@ -66,7 +54,7 @@ export function syncProjectMonacoWorkspace(input: SyncProjectWorkspaceInput): vo
     nextManagedUris.add(uri.toString());
     const model = monaco.editor.getModel(uri);
     if (model === null) {
-      monaco.editor.createModel(value, languageForPath(file.path), uri);
+      monaco.editor.createModel(value, editorLanguageForPath(file.path), uri);
     } else if (model.getValue() !== value && !isModelAttachedToEditor(model)) {
       model.setValue(value);
     }
@@ -97,20 +85,109 @@ export function disposeProjectMonacoWorkspace(projectKey: string): void {
   for (const uri of managedUris) monaco.editor.getModel(monaco.Uri.parse(uri))?.dispose();
 }
 
-function selectWorkspaceFiles(files: readonly ProjectTextFile[], priorityPaths: readonly string[]): readonly ProjectTextFile[] {
-  const priority = new Map(priorityPaths.map((path, index) => [path, index]));
-  return files
-    .filter((file) => file.kind === "text" && SUPPORTED_MODEL_PATH.test(file.path))
-    .toSorted((left, right) => filePriority(left.path, priority) - filePriority(right.path, priority))
-    .slice(0, MAX_SYNCED_SOURCE_MODELS);
+function selectWorkspaceFiles(input: SyncProjectWorkspaceInput): readonly ProjectTextFile[] {
+  const filesByPath = new Map(input.files.filter((file) => file.kind === "text").map((file) => [file.path, file]));
+  const packageNames = new Set(packageNamesFromManifest(readManifest(input)));
+  return selectTypeScriptModelPaths({
+    files: input.files,
+    packageNames,
+    priorityPaths: input.priorityPaths
+  }).flatMap((path) => {
+    const file = filesByPath.get(path);
+    return file === undefined ? [] : [file];
+  });
 }
 
-function filePriority(path: string, priority: ReadonlyMap<string, number>): number {
-  const openFileIndex = priority.get(path);
-  if (openFileIndex !== undefined) return openFileIndex;
-  if (path === MANIFEST_PATH || /(?:^|\/)tsconfig[^/]*\.json$/u.test(path)) return 1_000;
-  if (path.endsWith(".d.ts")) return 2_000;
-  return 3_000;
+function applyProjectTypeScriptOptions(input: SyncProjectWorkspaceInput): void {
+  const options = projectTypeScriptOptionsFromWorkspace((path) => {
+    try {
+      return input.readText(path);
+    } catch {
+      return undefined;
+    }
+  });
+  const compilerOptions = monacoCompilerOptions(options);
+  for (const defaults of [monaco.typescript.typescriptDefaults, monaco.typescript.javascriptDefaults]) {
+    defaults.setCompilerOptions(compilerOptions);
+  }
+}
+
+function monacoCompilerOptions(options: ProjectTypeScriptOptions): monaco.typescript.CompilerOptions {
+  const compilerOptions: monaco.typescript.CompilerOptions = {
+    allowImportingTsExtensions: true,
+    allowJs: options.allowJs,
+    allowNonTsExtensions: true,
+    allowSyntheticDefaultImports: options.allowSyntheticDefaultImports,
+    checkJs: options.checkJs,
+    esModuleInterop: options.esModuleInterop,
+    experimentalDecorators: options.experimentalDecorators,
+    forceConsistentCasingInFileNames: options.forceConsistentCasingInFileNames,
+    isolatedModules: options.isolatedModules,
+    jsx: monacoJsx(options.jsx),
+    module: options.module === "commonjs" ? monaco.typescript.ModuleKind.CommonJS : monaco.typescript.ModuleKind.ESNext,
+    moduleResolution: monaco.typescript.ModuleResolutionKind.NodeJs,
+    noEmit: true,
+    noUnusedLocals: options.noUnusedLocals,
+    noUnusedParameters: options.noUnusedParameters,
+    resolveJsonModule: options.resolveJsonModule,
+    skipLibCheck: options.skipLibCheck,
+    strict: options.strict,
+    target: monacoTarget(options.target)
+  };
+  if (options.baseUrl !== undefined) compilerOptions.baseUrl = options.baseUrl;
+  if (options.lib !== undefined) compilerOptions.lib = [...options.lib];
+  if (options.paths !== undefined) compilerOptions.paths = copyPaths(options.paths);
+  return compilerOptions;
+}
+
+function monacoJsx(jsx: ProjectTypeScriptOptions["jsx"]): monaco.typescript.JsxEmit {
+  switch (jsx) {
+    case "preserve":
+      return monaco.typescript.JsxEmit.Preserve;
+    case "react":
+      return monaco.typescript.JsxEmit.React;
+    case "react-jsx":
+      return monaco.typescript.JsxEmit.ReactJSX;
+    case "react-jsxdev":
+      return monaco.typescript.JsxEmit.ReactJSXDev;
+    case "react-native":
+      return monaco.typescript.JsxEmit.ReactNative;
+    default: {
+      const unreachable: never = jsx;
+      return unreachable;
+    }
+  }
+}
+
+function monacoTarget(target: ProjectTypeScriptOptions["target"]): monaco.typescript.ScriptTarget {
+  switch (target) {
+    case "es5":
+      return monaco.typescript.ScriptTarget.ES5;
+    case "es2015":
+      return monaco.typescript.ScriptTarget.ES2015;
+    case "es2016":
+      return monaco.typescript.ScriptTarget.ES2016;
+    case "es2017":
+      return monaco.typescript.ScriptTarget.ES2017;
+    case "es2018":
+      return monaco.typescript.ScriptTarget.ES2018;
+    case "es2019":
+      return monaco.typescript.ScriptTarget.ES2019;
+    case "es2020":
+      return monaco.typescript.ScriptTarget.ES2020;
+    case "esnext":
+      return monaco.typescript.ScriptTarget.ESNext;
+    default: {
+      const unreachable: never = target;
+      return unreachable;
+    }
+  }
+}
+
+function copyPaths(paths: Readonly<Record<string, readonly string[]>>): Record<string, string[]> {
+  const copy: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(paths)) copy[key] = [...value];
+  return copy;
 }
 
 function readManifest(input: SyncProjectWorkspaceInput): string | undefined {
@@ -123,7 +200,7 @@ function readManifest(input: SyncProjectWorkspaceInput): string | undefined {
 }
 
 function workspaceDeclarations(manifestText: string | undefined): string {
-  const moduleNames = packageNames(manifestText);
+  const moduleNames = packageNamesFromManifest(manifestText);
   const declarations = [
     "declare namespace JSX {",
     "  interface IntrinsicElements { [elementName: string]: any; }",
@@ -135,24 +212,6 @@ function workspaceDeclarations(manifestText: string | undefined): string {
     declarations.push(`declare module ${JSON.stringify(`${moduleName}/*`)};`);
   }
   return `${declarations.join("\n")}\n`;
-}
-
-function packageNames(manifestText: string | undefined): readonly string[] {
-  if (manifestText === undefined) return [];
-  try {
-    const manifest = JSON.parse(manifestText) as Record<string, unknown>;
-    const names = new Set<string>();
-    for (const field of ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] as const) {
-      const dependencies = manifest[field];
-      if (dependencies === null || typeof dependencies !== "object" || Array.isArray(dependencies)) continue;
-      for (const name of Object.keys(dependencies)) {
-        if (!name.startsWith("@types/")) names.add(name);
-      }
-    }
-    return [...names].toSorted();
-  } catch {
-    return [];
-  }
 }
 
 function monacoModelUri(projectKey: string, path: string): monaco.Uri {
@@ -167,21 +226,4 @@ function isModelAttachedToEditor(model: monaco.editor.ITextModel): boolean {
   return monaco.editor.getEditors().some((editor) => editor.getModel() === model);
 }
 
-function languageForPath(path: string): string {
-  const extension = path.split(".").at(-1)?.toLocaleLowerCase();
-  const languages: Readonly<Record<string, string>> = {
-    cjs: "javascript",
-    css: "css",
-    html: "html",
-    js: "javascript",
-    json: "json",
-    jsx: "javascript",
-    less: "less",
-    md: "markdown",
-    mjs: "javascript",
-    scss: "scss",
-    ts: "typescript",
-    tsx: "typescript"
-  };
-  return extension === undefined ? "plaintext" : languages[extension] ?? "plaintext";
-}
+

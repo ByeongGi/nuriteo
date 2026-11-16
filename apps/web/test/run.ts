@@ -53,6 +53,7 @@ await import("./runtime/retryable-lazy-feature.test.ts");
 await import("./studio/studio-explorer-files.test.ts");
 await import("./studio/studio-content-replace.test.ts");
 await import("./studio/studio-editor-tabs.test.ts");
+await import("./studio/studio-editor-language.test.ts");
 await import("./runtime/runtime-adapter.test.ts");
 await import("./runtime/workspace-start.test.ts");
 await import("./runtime/runtime-assets.test.ts");

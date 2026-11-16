@@ -7,6 +7,8 @@ import "./modules/modules.test.ts";
 import "./modules/workspace-modules.test.ts";
 import "./process/scheduler.test.ts";
 import "./modules/typescript.test.ts";
+import "./modules/vite-preview-module.test.ts";
+import "./modules/inline-module-worker.test.ts";
 import "./builtins/cli-smoke.test.ts";
 import "./process/io-process.test.ts";
 import "./process/shell.test.ts";

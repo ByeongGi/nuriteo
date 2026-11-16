@@ -47,6 +47,8 @@
   --color-info-subtle: var(--n-color-status-info-subtle);
   --font-sans: var(--n-font-family-sans);
   --font-mono: var(--n-font-family-mono);
+  --text-2xs: var(--n-font-size-2xs);
+  --text-2xs--line-height: var(--n-line-height-default);
   --text-xs: var(--n-font-size-xs);
   --text-xs--line-height: var(--n-line-height-default);
   --text-sm: var(--n-font-size-sm);

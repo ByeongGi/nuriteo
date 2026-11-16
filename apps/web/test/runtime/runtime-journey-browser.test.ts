@@ -55,7 +55,11 @@ const server = http.createServer((request, response) => {
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 const address = server.address();
 assert(address && typeof address !== "string");
-const browser = await chromium.launch({ headless: true });
+const chromeExecutable = process.env.NURITEO_CHROME_PATH;
+const browser = await chromium.launch({
+  headless: true,
+  ...(chromeExecutable === undefined ? {} : { executablePath: chromeExecutable })
+});
 try {
   const page = await browser.newPage();
   const registryArchive = new Uint8Array(gzipSync(tar({
@@ -99,7 +103,7 @@ try {
   assert.equal(await page.evaluate(() => globalThis.crossOriginIsolated), true);
 
   try {
-    await page.getByRole("button", { name: "미리보기 실행" }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "미리보기 실행" }).or(page.locator(".monaco-editor")).waitFor({ timeout: 20_000 });
   } catch (error) {
     throw new Error(`Studio fixture did not render:\n${await page.locator("body").innerText()}\n${errors.join("\n")}`, { cause: error });
   }
@@ -113,6 +117,18 @@ try {
     throw new Error(`Studio did not reach the ready state:\n${await page.locator("body").innerText()}`, { cause: error });
   }
   assert.equal(await page.evaluate(() => window.__nuriteoRuntimeProbe.runtimeCreatedWorkers), 2);
+  await page.getByRole("button", { name: "App.tsx", exact: true }).click();
+  await page.locator(".monaco-editor .view-lines").waitFor({ timeout: 20_000 });
+  await page.getByText(/TypeScript ·/u).waitFor({ timeout: 20_000 });
+  await page.getByRole("button", { name: "편집기 작업 더 보기" }).click();
+  await page.getByText("글자 크기", { exact: true }).waitFor();
+  await page.getByText("줄바꿈", { exact: true }).waitFor();
+  await page.getByText("미니맵", { exact: true }).waitFor();
+  await page.getByRole("menuitemradio", { name: "16", exact: true }).click();
+  await page.waitForFunction(() => {
+    const line = document.querySelector(".monaco-editor .view-lines");
+    return line instanceof HTMLElement && getComputedStyle(line).fontSize === "16px";
+  });
   const previewUrl = await page.getByRole("region", { name: "미리보기", exact: true }).getAttribute("data-preview-url");
   assert(previewUrl && previewUrl.includes("/__preview/"));
   const initialPreview = await page.evaluate(async (url) => (await fetch(url)).text(), previewUrl);
