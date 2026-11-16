@@ -5,17 +5,17 @@ import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { basicSetup } from "codemirror";
 import { useEffect, useRef, useState } from "react";
-
-import { Badge } from "@/components/ui/badge.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Card } from "@/components/ui/card.tsx";
-import { useDocsPreferences } from "../preferences.tsx";
 import { createHighlighterCoreSync } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import bash from "shiki/langs/bash.mjs";
 import javascriptGrammar from "shiki/langs/javascript.mjs";
 import githubDark from "shiki/themes/github-dark.mjs";
 import githubLight from "shiki/themes/github-light.mjs";
+
+import { Button } from "@/components/ui/button.tsx";
+import { cn } from "@/lib/utils.ts";
+import type { Lang } from "../content/types.ts";
+import { useDocsPreferences } from "../preferences.tsx";
 
 const docsHighlight = HighlightStyle.define([
   { tag: tags.keyword, color: "var(--n-color-action-primary)" },
@@ -27,11 +27,36 @@ const docsHighlight = HighlightStyle.define([
   { tag: [tags.propertyName, tags.attributeName], color: "var(--n-color-fg-default)" }
 ]);
 
-function codeLanguage(text: string): "javascript" | "bash" {
-  const start = text.trimStart();
-  if (/^(const|let|var|await|import|export|return|function|class|async)\b/.test(start)) return "javascript";
-  if (start.includes("container.") || start.includes("createContainer") || start.includes("createNuriteo")) return "javascript";
+type CodeLanguage = "javascript" | "bash" | "text";
+
+function codeLanguage(text: string): CodeLanguage {
+  if (isJavaScript(text)) return "javascript";
+  if (isEnvNameList(text)) return "text";
   return "bash";
+}
+
+function isJavaScript(text: string): boolean {
+  const start = text.trimStart();
+  const startsWithKeyword = /^(const|let|var|await|import|export|return|function|class|async)\b/.test(start);
+  const callsRuntime = start.includes("container.") || start.includes("createContainer") || start.includes("createNuriteo") || start.includes("new NuriteoServices");
+  return startsWithKeyword || callsRuntime;
+}
+
+function isEnvNameList(text: string): boolean {
+  const lines = text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  return lines.length > 0 && lines.every((line) => /^[A-Z0-9_]+$/.test(line));
+}
+
+function highlightLanguage(language: CodeLanguage): "javascript" | "bash" {
+  if (language === "text") return "bash";
+  return language;
+}
+
+function codeLabel(language: CodeLanguage, lang: Lang): string {
+  if (language === "javascript") return "JavaScript";
+  if (language === "bash") return "Shell";
+  if (lang === "ko") return "이름";
+  return "Names";
 }
 
 const highlighter = createHighlighterCoreSync({
@@ -72,25 +97,26 @@ const surfaceTheme = EditorView.theme({
   ".cm-line": { padding: "0 1rem" }
 });
 
-export function CodeBlock({ text }: { text: string }) {
+export function CodeBlock({ text, embedded = false }: { text: string; embedded?: boolean }) {
   const { lang } = useDocsPreferences();
   const language = codeLanguage(text);
   const html = highlighter.codeToHtml(text, {
-    lang: language,
+    lang: highlightLanguage(language),
     themes: { light: "github-light", dark: "github-dark" },
     defaultColor: false
   });
-  const label = language === "javascript" ? "JavaScript" : "Shell";
   return (
-    <Card className="shiki-block mb-6 gap-0 overflow-hidden py-0 shadow-none">
+    <div className={cn("shiki-block overflow-hidden", embedded ? "border-0" : "mb-6 rounded-lg border border-border bg-surface")}>
       <div className="flex items-center justify-between gap-3 border-b px-3 py-1.5">
-        <Badge className="font-mono" variant="secondary">{label}</Badge>
+        <span className="font-mono text-xs text-muted-foreground">{codeLabel(language, lang)}</span>
         <CopyButton text={text} copied={lang === "ko" ? "복사됨" : "Copied"} idle={lang === "ko" ? "복사" : "Copy"} />
       </div>
       <div dangerouslySetInnerHTML={{ __html: html }} />
-    </Card>
+    </div>
   );
 }
+
+const COPY_ACK_MS = 1500;
 
 function CopyButton({ text, copied, idle }: { text: string; copied: string; idle: string }) {
   const [done, setDone] = useState(false);
@@ -99,7 +125,7 @@ function CopyButton({ text, copied, idle }: { text: string; copied: string; idle
     try {
       await navigator.clipboard.writeText(text);
       setDone(true);
-      window.setTimeout(() => setDone(false), 1500);
+      window.setTimeout(() => setDone(false), COPY_ACK_MS);
     } catch {
       setDone(false);
     }
@@ -113,30 +139,30 @@ function CopyButton({ text, copied, idle }: { text: string; copied: string; idle
 }
 
 export function CodeEditor({
-  text,
+  initialText,
   label,
   onChange
 }: {
-  text: string;
+  initialText: string;
   label: string;
   onChange: (value: string) => void;
 }) {
   return (
     <div className="min-h-80 overflow-hidden bg-surface">
       <div className="border-b px-3 py-1.5">
-        <Badge className="font-mono" variant="secondary">{label}</Badge>
+        <span className="font-mono text-xs text-muted-foreground">{label}</span>
       </div>
-      <CodeSurface text={text} label={label} onChange={onChange} />
+      <CodeSurface initialText={initialText} label={label} onChange={onChange} />
     </div>
   );
 }
 
 function CodeSurface({
-  text,
+  initialText,
   label,
   onChange
 }: {
-  text: string;
+  initialText: string;
   label: string;
   onChange: (value: string) => void;
 }) {
@@ -145,7 +171,7 @@ function CodeSurface({
   const labelRef = useRef(label);
   onChangeRef.current = onChange;
   labelRef.current = label;
-  const initial = useRef(text);
+  const initial = useRef(initialText);
 
   useEffect(() => {
     const parent = host.current;

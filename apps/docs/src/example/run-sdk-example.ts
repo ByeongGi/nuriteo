@@ -17,16 +17,20 @@ const AsyncFunction = Object.getPrototypeOf(async function () {
   runtime: SdkRuntimeUrls
 ) => Promise<unknown>;
 
-export async function runSdkExample(source: string): Promise<unknown> {
+export async function loadSdkRuntime(): Promise<SdkRuntimeUrls> {
   const manifestResponse = await fetch(`${import.meta.env.BASE_URL}runtime/manifest.json`);
   if (!manifestResponse.ok) throw new Error("런타임 자산 매니페스트를 읽지 못했습니다.");
   const manifest = await manifestResponse.json() as RuntimeManifest;
   const base = new URL(`${import.meta.env.BASE_URL}runtime/${manifest.revision}/`, location.origin);
-  const runtime: SdkRuntimeUrls = {
+  return {
     systemWorkerUrl: new URL("system-worker.js", base),
     processWorkerUrl: new URL("process-worker.js", base),
     systemWasmUrl: new URL("system.wasm", base)
   };
+}
+
+export async function runSdkExample(source: string): Promise<unknown> {
+  const runtime = await loadSdkRuntime();
   const opened: Nuriteo[] = [];
   const openContainer = (options: Record<string, unknown> = {}) => {
     const container = createContainer({ ...runtime, ...options });

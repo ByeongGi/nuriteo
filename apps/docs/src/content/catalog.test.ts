@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 
 import { catalog } from "./catalog.ts";
-import type { Block, Copy } from "./types.ts";
+import { copyPlain } from "./plain.ts";
+import { searchDocs } from "./search.ts";
+
 
 const routes = [
   "/",
+  "/guide",
   "/install",
   "/install/source",
   "/install/compose",
@@ -37,7 +40,7 @@ const routes = [
 const byPath = new Map(catalog.map((entry) => [entry.path, entry]));
 assert.deepEqual(catalog.map((entry) => entry.path), routes);
 
-const corpus = catalog.map((entry) => `${plain(entry.ko)}\n${plain(entry.en)}`).join("\n");
+const corpus = catalog.map((entry) => `${copyPlain(entry.ko)}\n${copyPlain(entry.en)}`).join("\n");
 
 for (const route of routes) {
   const entry = byPath.get(route);
@@ -48,7 +51,7 @@ for (const route of routes) {
     assert.ok(copy.lead.trim(), `${route} ${lang} lead`);
     assert.ok(copy.nav.trim(), `${route} ${lang} nav`);
     assert.ok(copy.blocks.length > 0, `${route} ${lang} blocks`);
-    assert.ok(plain(copy).length > 80, `${route} ${lang} is too short to act on`);
+    assert.ok(copyPlain(copy).length > 80, `${route} ${lang} is too short to act on`);
   }
 }
 
@@ -85,25 +88,50 @@ assert.doesNotMatch(corpus, /AKIA[0-9A-Z]{16}/);
 assert.doesNotMatch(corpus, /postgres:\/\/[^:\s]+:[^@\s]+@/);
 
 const preview = byPath.get("/sdk/preview");
-assert.match(plain(preview!.ko), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
-assert.match(plain(preview!.en), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
-assert.match(plain(preview!.ko), /services\.preview\.ports\(\)/);
-assert.match(plain(preview!.en), /services\.preview\.ports\(\)/);
-assert.equal(plain(preview!.ko).includes("listPorts"), false);
-assert.equal(plain(preview!.en).includes("listPorts"), false);
+assert.match(copyPlain(preview!.ko), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
+assert.match(copyPlain(preview!.en), /registerNuriteoPreviewServiceWorker\(\{ scriptUrl/);
+assert.match(copyPlain(preview!.ko), /services\.preview\.ports\(\)/);
+assert.match(copyPlain(preview!.en), /services\.preview\.ports\(\)/);
+assert.equal(copyPlain(preview!.ko).includes("listPorts"), false);
+assert.equal(copyPlain(preview!.en).includes("listPorts"), false);
 const adapters = byPath.get("/sdk/adapters");
-assert.match(plain(adapters!.ko), /listPorts/);
-assert.match(plain(adapters!.en), /listPorts/);
+assert.match(copyPlain(adapters!.ko), /listPorts/);
+assert.match(copyPlain(adapters!.en), /listPorts/);
+
+const guide = byPath.get("/guide");
+assert.match(copyPlain(guide!.ko), /sandbox\.mjs/);
+assert.match(copyPlain(guide!.en), /sandbox\.mjs/);
+assert.match(copyPlain(guide!.ko), /fs-smoke/);
+assert.equal(searchDocs("   ", "ko").length, 0);
+assert.ok(searchDocs("createContainer", "ko").some((hit) => hit.path === "/sdk/container"));
+assert.ok(searchDocs("Report a vulnerability", "en").some((hit) => hit.path === "/security"));
+assert.equal(searchDocs("createContainer", "en").some((hit) => hit.path === "/sdk/preview"), false);
+
+for (const entry of catalog) {
+  for (const lang of ["ko", "en"] as const) {
+    for (const block of entry[lang].blocks) {
+      if (block.type !== "example") continue;
+      assert.ok(block.title.trim(), `${entry.path} ${lang} example title`);
+      assert.ok(block.text.trim(), `${entry.path} ${lang} example text`);
+      assert.ok(block.code.trim(), `${entry.path} ${lang} example code`);
+      assert.ok(block.result.trim(), `${entry.path} ${lang} example result`);
+    }
+  }
+}
+assert.ok(byPath.get("/sdk")!.ko.blocks.some((block) => block.type === "playground"));
+assert.ok(byPath.get("/sdk")!.en.blocks.some((block) => block.type === "playground"));
+const containerPage = byPath.get("/sdk/container");
+assert.ok(containerPage!.ko.blocks.some((block) => block.type === "cases"));
+assert.ok(containerPage!.en.blocks.some((block) => block.type === "cases"));
+assert.match(copyPlain(containerPage!.ko), /spa-ready/);
+assert.match(copyPlain(containerPage!.en), /next-ready/);
+assert.match(copyPlain(containerPage!.ko), /loadContainerCase/);
+for (const copy of [containerPage!.ko, containerPage!.en]) {
+  const plain = copyPlain(copy);
+  assert.match(plain, /replaced-entry/);
+  assert.match(plain, /missing\.txt/);
+  assert.match(plain, /examples\/spa\/src\/main\.js/);
+  assert.match(plain, /examples\/next\/app\/page\.tsx/);
+}
 
 console.log(`docs content ok: ${routes.length} routes, ${corpus.length} chars`);
-
-function plain(copy: Copy): string {
-  return [copy.nav, copy.eyebrow, copy.title, copy.lead, ...copy.blocks.map(blockText)].join("\n");
-}
-
-function blockText(block: Block): string {
-  if (block.type === "p" || block.type === "h2" || block.type === "code") return block.text;
-  if (block.type === "ul") return block.items.join("\n");
-  if (block.type === "links") return block.items.map((item) => `${item.label} ${item.to}`).join("\n");
-  return [block.columns.join(" "), ...block.rows.map((row) => row.join(" "))].join("\n");
-}

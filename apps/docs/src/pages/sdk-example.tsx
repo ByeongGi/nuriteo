@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-import { runSdkExample } from "../example/run-sdk-example.ts";
 import { Alert, AlertDescription } from "@/components/ui/alert.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Separator } from "@/components/ui/separator.tsx";
+import { runSdkExample } from "../example/run-sdk-example.ts";
 import { useDocsPreferences } from "../preferences.tsx";
 import { CodeEditor } from "./code-editor.tsx";
 
@@ -21,6 +21,8 @@ return {
   size: run.exports?.size,
   note
 };`;
+
+const SANDBOX_DEBOUNCE_MS = 500;
 
 const isolatedLimit = {
   ko: "이 호스트는 Cross-Origin-Embedder-Policy: require-corp 와 Cross-Origin-Opener-Policy: same-origin 을 보내지 않습니다. 예시는 복사할 수 있습니다. 부팅은 실행하지 않으며, 성공한 것으로 표시하지 않습니다.",
@@ -69,18 +71,18 @@ export function SdkPlayground() {
 
   useEffect(() => {
     if (!window.crossOriginIsolated) return;
-    schedule(source, 500);
+    schedule(source, SANDBOX_DEBOUNCE_MS);
     return () => window.clearTimeout(timer.current);
   }, [source]);
 
   const copy = playgroundCopy[lang];
 
   return (
-    <Card className="mt-2 gap-0 overflow-hidden py-0 shadow-none" aria-label="SDK playground">
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b py-3">
-        <div>
-          <CardTitle className="text-sm">{copy.title}</CardTitle>
-          <CardDescription className="mt-1 text-xs">{copy.note}</CardDescription>
+    <Card className="gap-0 overflow-hidden py-0 shadow-none" aria-label="SDK playground">
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 border-b py-4">
+        <div className="max-w-xl">
+          <CardTitle className="text-base font-medium">{copy.title}</CardTitle>
+          <CardDescription className="mt-2 text-sm leading-relaxed">{copy.note}</CardDescription>
         </div>
         <div className="flex gap-2">
           <Button
@@ -106,9 +108,9 @@ export function SdkPlayground() {
           </Button>
         </div>
       </CardHeader>
-      <div className="grid min-[801px]:grid-cols-2">
-        <div className="border-b min-[801px]:border-r min-[801px]:border-b-0">
-          <CodeEditor key={editorKey} text={sample} label={copy.editorLabel} onChange={setSource} />
+      <div className="grid docs-sidebar:grid-cols-2">
+        <div className="border-b docs-sidebar:border-r docs-sidebar:border-b-0">
+          <CodeEditor key={editorKey} initialText={sample} label={copy.editorLabel} onChange={setSource} />
         </div>
         <Workspace copy={copy} error={error} isolated={isolated} isolatedNote={isolatedLimit[lang]} pending={pending} ran={ran} result={result} />
       </div>
@@ -119,7 +121,7 @@ export function SdkPlayground() {
 const playgroundCopy = {
   ko: {
     title: "샌드박스",
-    note: "왼쪽 sandbox.mjs의 note를 고치면 오른쪽 샌드박스 결과가 그 값으로 바뀝니다. 런타임 파일은 fs-smoke가 쓴 hello로 남습니다.",
+    note: "왼쪽 sandbox.mjs의 note를 고치면 오른쪽 고친 값이 그 문자열이 됩니다. 런타임 파일 /workspace/result.txt는 fs-smoke가 쓴 hello, 5바이트로 남습니다.",
     run: "다시 실행",
     running: "갱신 중",
     reset: "처음 코드",
@@ -134,7 +136,7 @@ const playgroundCopy = {
   },
   en: {
     title: "Sandbox",
-    note: "Change note in sandbox.mjs and the sandbox result on the right becomes that value. The runtime file stays hello, written by fs-smoke.",
+    note: "Change note in sandbox.mjs and the edited value on the right becomes that string. The runtime file /workspace/result.txt stays hello, 5 bytes, written by fs-smoke.",
     run: "Run again",
     running: "Updating",
     reset: "Reset",

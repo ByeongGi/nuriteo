@@ -79,6 +79,10 @@
   --radius-2xl: var(--n-radius-2xl);
   --radius-full: var(--n-radius-full);
   --spacing-header: var(--n-layout-header-height);
+  --spacing-scroll-offset: calc(var(--n-layout-header-height) + 1.25rem);
+  --breakpoint-docs-sidebar: 801px;
+  --breakpoint-docs-sections: 1100px;
+  --breakpoint-docs-outline: 1180px;
 }
 
 @layer base {
@@ -89,7 +93,7 @@
   }
 
   html {
-    scroll-padding-top: calc(4rem + 1.25rem);
+    scroll-padding-top: var(--spacing-scroll-offset);
   }
 
   body {
@@ -132,6 +136,14 @@ html[data-theme-mode="dark"] .shiki-block .shiki span {
   html[data-theme-mode="system"] .shiki-block .shiki span {
     color: var(--shiki-dark);
   }
+}
+
+.docs-code {
+  border-radius: 0.25rem;
+  background: var(--n-color-bg-subtle);
+  padding: 0.1em 0.35em;
+  font-family: var(--n-font-family-mono);
+  font-size: 0.875em;
 }
 
 .shiki-block .shiki {
